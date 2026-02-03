@@ -1,0 +1,13 @@
+﻿<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Serve files/directories if they exist in root
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Otherwise, forward to public/ directory
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+DirectoryIndex public/index.php
