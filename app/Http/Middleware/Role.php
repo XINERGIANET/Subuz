@@ -17,7 +17,14 @@ class Role
     public function handle(Request $request, Closure $next, $role)
     {
 
-        if(!auth()->check() || !auth()->user()->hasRole($role)){
+        if(!auth()->check()){
+            return redirect()->route('auth.login');
+        }
+
+        $roles = preg_split('/[|,]/', $role);
+        $roles = array_filter(array_map('trim', $roles));
+
+        if(!in_array(auth()->user()->role, $roles, true)){
             return redirect()->route('auth.login');
         }
         

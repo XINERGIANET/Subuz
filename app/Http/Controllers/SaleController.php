@@ -13,6 +13,8 @@ use App\Models\Product;
 use App\Models\PaymentMethod;
 use App\Models\Week;
 use App\Models\Payment;
+use App\Models\Cashbox;
+use App\Models\CashboxMovement;
 
 class SaleController extends Controller
 {
@@ -42,15 +44,17 @@ class SaleController extends Controller
 
         $sales = $sales->paginate(10);
 
-        return view('sales.index', compact('sales', 'total_sales'));
+        $payment_methods = PaymentMethod::all();
+        $cashbox = Cashbox::currentOpen();
+
+        return view('sales.index', compact('sales', 'total_sales', 'payment_methods', 'cashbox'));
     }
 
     public function create(){
         $sale_count = DB::table('settings')->pluck('sale_count')->first();
         $order = 'V'.str_pad($sale_count + 1, 4, "0", STR_PAD_LEFT);
-        $payment_methods = PaymentMethod::all();
         $products = Product::all();
-        return view('sales.create', compact('order', 'payment_methods', 'products'));
+        return view('sales.create', compact('order', 'products'));
     }
 
     public function store(Request $request){
@@ -66,14 +70,10 @@ class SaleController extends Controller
 
         $validator = Validator::make($request->all(), [
             'guide' => 'required|unique:sales',
-            'type' => 'required',
+            'type' => 'required|in:Contado,Credito',
             'date' => 'required|date',
             'client_id' => 'required'
         ]);
-
-        $validator->sometimes('payment_method_id', 'required', function($input){
-            return $input->type == 'Contado';
-        });
 
         $validator->after(function($validator) use ($cart){
 
@@ -114,11 +114,11 @@ class SaleController extends Controller
             'week_id' => $week->id,
             'guide' => $request->guide,
             'type' => $request->type,
-            'payment_method_id' => $request->payment_method_id,
+            'payment_method_id' => null,
             'client_id' => $request->client_id,
             'total' => $cart['total'],
-            'debt' => $request->type == 'Contado' ? 0 : $cart['total'],
-            'paid' => $request->type == 'Contado' ? 1 : 0
+            'debt' => $request->type == 'Credito' ? $cart['total'] : 0,
+            'paid' => 0
         ]);
 
         foreach($cart['items'] as $item){
@@ -230,6 +230,97 @@ class SaleController extends Controller
     public function excel(Request $request){
         $name = "ReporteVentas_".now()->format('dm').".xlsx";
         return Excel::download(new SalesExport, $name);
+    }
+
+    public function markDispatch(Request $request, Sale $sale){
+
+        if(!auth()->user()->hasRole('admin') && !auth()->user()->hasRole('despachador')){
+            return response()->json([
+                'status' => false,
+                'error' => 'No autorizado'
+            ]);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'paid' => 'required|boolean'
+        ]);
+
+        $validator->sometimes('payment_method_id', 'required|integer', function($input){
+            return $input->paid == 1;
+        });
+
+        if($validator->fails()){
+            return response()->json([
+                'status' => false,
+                'error' => $validator->errors()->first()
+            ]);
+        }
+
+        if($sale->paid){
+            return response()->json([
+                'status' => false,
+                'error' => 'La venta ya esta marcada como pagada.'
+            ]);
+        }
+
+        if(!$request->paid && !auth()->user()->hasRole('despachador')){
+            return response()->json([
+                'status' => false,
+                'error' => 'Solo el despachador puede marcar pendiente de pago.'
+            ]);
+        }
+
+        $cashbox = Cashbox::currentOpen();
+
+        if(!$cashbox){
+            return response()->json([
+                'status' => false,
+                'error' => 'Debe aperturar caja antes de registrar el despacho.'
+            ]);
+        }
+
+        DB::transaction(function() use ($request, $sale, $cashbox){
+
+            if($request->paid){
+                $sale->update([
+                    'type' => 'Contado',
+                    'payment_method_id' => $request->payment_method_id,
+                    'debt' => 0,
+                    'paid' => 1
+                ]);
+
+                CashboxMovement::create([
+                    'cashbox_id' => $cashbox->id,
+                    'sale_id' => $sale->id,
+                    'user_id' => auth()->id(),
+                    'payment_method_id' => $request->payment_method_id,
+                    'type' => 'paid',
+                    'amount' => $sale->total,
+                    'date' => now()
+                ]);
+            }else{
+                $sale->update([
+                    'type' => 'Pago pendiente',
+                    'payment_method_id' => null,
+                    'debt' => $sale->total,
+                    'paid' => 0
+                ]);
+
+                CashboxMovement::create([
+                    'cashbox_id' => $cashbox->id,
+                    'sale_id' => $sale->id,
+                    'user_id' => auth()->id(),
+                    'payment_method_id' => null,
+                    'type' => 'debt',
+                    'amount' => $sale->total,
+                    'date' => now()
+                ]);
+            }
+        });
+
+        return response()->json([
+            'status' => true
+        ]);
     }
     
 }

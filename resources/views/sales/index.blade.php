@@ -1,4 +1,4 @@
-@extends('template.app')
+﻿@extends('template.app')
 
 @section('title', 'Ventas')
 
@@ -20,6 +20,16 @@
 				<i class="ti ti-download icon"></i> Excel
 			</a>
 			@endif
+			@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('despachador'))
+			<div class="mt-2">
+				@if($cashbox)
+				<span class="badge bg-success">Caja abierta</span>
+				@else
+				<span class="badge bg-danger">Caja cerrada</span>
+				@endif
+				<a class="btn btn-outline-secondary btn-sm" href="{{ route('cashbox.index') }}">Ir a caja</a>
+			</div>
+			@endif
 		</div>
 		<div class="text-center">
 			<span class="d-block small">
@@ -30,6 +40,7 @@
 				</span>
 		</div>
 	</div>
+	@if(!auth()->user()->hasRole('despachador'))
 	<div class="card-body border-bottom">
 		<form class="mb-3">
 			<div class="row">
@@ -47,7 +58,7 @@
 						<select class="form-select" name="type">
 							<option value="">Seleccionar</option>
 							<option value="Contado" {{ request()->type == 'Contado' ? 'selected' : '' }}>Contado</option>
-							<option value="Credito" {{ request()->type == 'Credito' ? 'selected' : '' }}>Crédito</option>
+							<option value="Credito" {{ request()->type == 'Credito' ? 'selected' : '' }}>CrÃ©dito</option>
 							<option value="Pago pendiente" {{ request()->type == 'Pago pendiente' ? 'selected' : '' }}>Pago pendiente</option>
 						</select>
 					</div>
@@ -68,6 +79,7 @@
 			<button type="submit" class="btn btn-primary"><i class="ti ti-filter icon"></i> Filtrar</button>
 		</form>
 	</div>
+	@endif
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
 			<thead>
@@ -108,6 +120,11 @@
 							<button class="btn btn-icon btn-show" data-id="{{ $sale->id }}">
 								<i class="ti ti-printer icon"></i>
 							</button>
+							@if(auth()->user()->hasRole('despachador') && !$sale->paid)
+							<button class="btn btn-icon btn-dispatch" data-id="{{ $sale->id }}" data-guide="{{ $sale->guide }}" data-total="{{ $sale->total }}">
+								<i class="ti ti-check icon"></i>
+							</button>
+							@endif
 							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
 							<button class="btn btn-icon btn-edit" data-id="{{ $sale->id }}">
 								<i class="ti ti-edit icon"></i>
@@ -188,13 +205,54 @@
     </div>
   </div>
 </div>
+
+<div class="modal modal-blur fade" id="dispatchModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+  	<div class="modal-content">
+  		<form id="dispatchForm" method="POST">
+  			<div class="modal-header">
+  			  <h5 class="modal-title">Confirmar pago</h5>
+  			  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+  			</div>
+  			<div class="modal-body">
+  				<div class="mb-2 text-muted">
+  					Venta: <span id="dispatch_guide"></span> | Total: S/<span id="dispatch_total"></span>
+  				</div>
+  				<div class="mb-3">
+  					<label class="form-label">Pago?</label>
+  					<div class="btn-group w-100" role="group">
+  						<input type="radio" class="btn-check" name="paid" id="dispatch_paid_yes" value="1">
+  						<label class="btn btn-outline-success" for="dispatch_paid_yes">Si, pago</label>
+  						<input type="radio" class="btn-check" name="paid" id="dispatch_paid_no" value="0">
+  						<label class="btn btn-outline-danger" for="dispatch_paid_no">No pago</label>
+  					</div>
+  				</div>
+  				<div class="mb-3" id="dispatchPaymentMethod" style="display:none">
+  					<label class="form-label">Metodo de pago</label>
+  					<select class="form-select" name="payment_method_id">
+  						<option value="">Seleccionar</option>
+  						@foreach($payment_methods as $payment_method)
+  						<option value="{{ $payment_method->id }}">{{ $payment_method->name }}</option>
+  						@endforeach
+  					</select>
+  				</div>
+  			</div>
+  			<div class="modal-footer">
+  				<input type="hidden" name="sale_id" id="dispatch_sale_id">
+  				<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
+  				<button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy icon"></i> Guardar</button>
+  			</div>
+  		</form>
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('scripts')
 <script>
 	$(document).ready(function () {
-
-		new TomSelect('.ts-clients', {
+		if($('.ts-clients').length){
+			new TomSelect('.ts-clients', {
 			valueField: 'id',
 			labelField: 'name',
 			searchField: ['name', 'document'],
@@ -225,7 +283,8 @@
 					return '<div class="no-results">No se encontraron resultados</div>'
 				}
 			}
-		});
+			});
+		}
 	});
 
 	$(document).on('click', '.btn-show', function(){
@@ -351,7 +410,7 @@
 
 		var id = $(this).data('id');
 
-		if(confirm('¿Estás seguro que deseas borrar el registro?')){
+		if(confirm('Â¿EstÃ¡s seguro que deseas borrar el registro?')){
 
 			$.ajax({
 				url: '{{ route('sales.index') }}' + '/' + id,
@@ -371,5 +430,52 @@
 		}
 
 	});
+
+	$(document).on('click', '.btn-dispatch', function(){
+		var id = $(this).data('id');
+		var guide = $(this).data('guide');
+		var total = $(this).data('total');
+
+		$('#dispatch_sale_id').val(id);
+		$('#dispatch_guide').text(guide);
+		$('#dispatch_total').text(total);
+		$('#dispatchForm')[0].reset();
+		$('#dispatchPaymentMethod').hide();
+
+		$('#dispatchModal').modal('show');
+	});
+
+	$(document).on('change', 'input[name="paid"]', function(){
+		if($(this).val() == '1'){
+			$('#dispatchPaymentMethod').show();
+		}else{
+			$('#dispatchPaymentMethod').hide();
+			$('select[name="payment_method_id"]').val('');
+		}
+	});
+
+	$('#dispatchForm').submit(function(e){
+		e.preventDefault();
+
+		var id = $('#dispatch_sale_id').val();
+
+		$.ajax({
+			url: '{{ route('sales.index') }}' + '/' + id + '/dispatch',
+			method: 'POST',
+			data: $(this).serialize(),
+			success: function(data){
+				if(data.status){
+					$('#dispatchModal').modal('hide');
+					location.reload();
+				}else{
+					ToastError.fire({ text: data.error ? data.error : 'Ocurrio un error' });
+				}
+			},
+			error: function(){
+				ToastError.fire({ text: 'Ocurrio un error' });
+			}
+		});
+	});
 </script>
 @endsection
+

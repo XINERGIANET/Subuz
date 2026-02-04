@@ -12,6 +12,9 @@ use App\Models\Expense;
 class WebController extends Controller
 {
     public function index(){
+        if(auth()->check() && auth()->user()->hasRole('despachador')){
+            return redirect()->route('sales.index');
+        }
         $products = Product::all();
         return view('index', compact('products'));
     }

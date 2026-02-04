@@ -13,6 +13,8 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\ChargeController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\SettingController;
+use App\Http\Controllers\CashboxController;
+use App\Http\Controllers\UserController;
 
 
 Route::get('login', [AuthController::class, 'login'])->name('auth.login');
@@ -24,46 +26,65 @@ Route::get('reports/pdf', [ReportController::class, 'pdf'])->name('reports.pdf')
 Route::middleware('auth')->group(function(){
 
 	Route::get('/',[WebController::class, 'index']);
-	
-	Route::get('dashboard/api', [WebController::class, 'dashboard'])->name('dashboard.api');
-	Route::get('dashboard/product/api', [WebController::class, 'dashboardProduct'])->name('dashboard.product.api');
-	Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
-	Route::get('reports/liquidation', [ReportController::class, 'liquidation'])->name('reports.liquidation');
 
-	Route::get('charges/credit', [ChargeController::class, 'credit'])->name('charges.credit');
-	Route::get('charges/pending', [ChargeController::class, 'pending'])->name('charges.pending');
-	Route::get('charges/history', [ChargeController::class, 'history'])->name('charges.history');
-
-	Route::post('payments', [PaymentController::class, 'store'])->name('payments.store');
-	Route::get('payments/excel', [PaymentController::class, 'excel'])->name('payments.excel');
-
-	Route::get('products/api', [ProductController::class, 'api'])->name('products.api');
-	Route::resource('products', ProductController::class);
-
-	Route::get('clients/api', [ClientController::class, 'api'])->name('clients.api');
-	Route::post('clients/store', [ClientController::class, 'storeInSale'])->name('clients.storeInSale');
-	Route::resource('clients', ClientController::class);
-
-	Route::resource('prices', PriceController::class);
-
-	Route::get('sales/excel', [SaleController::class, 'excel'])->name('sales.excel');
+	Route::get('sales', [SaleController::class, 'index'])->name('sales.index');
 	Route::get('sales/{sale}/details', [SaleController::class, 'details'])->name('sales.details');
-	Route::resource('sales', SaleController::class);
-
-	Route::get('expenses/excel', [ExpenseController::class, 'excel'])->name('expenses.excel');
-	Route::resource('expenses', ExpenseController::class);
-
-	Route::get('cart', [CartController::class, 'index'])->name('cart.index');
-	Route::post('cart', [CartController::class, 'store'])->name('cart.store');
-	Route::patch('cart', [CartController::class, 'update'])->name('cart.update');
-	Route::delete('destroy', [CartController::class, 'destroy'])->name('cart.destroy');
+	Route::post('sales/{sale}/dispatch', [SaleController::class, 'markDispatch'])->name('sales.dispatch');
 
 	Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
 	Route::post('settings', [SettingController::class, 'update'])->name('settings.update');
 
-});
+	Route::middleware('role:admin')->group(function(){
+		Route::get('dashboard/api', [WebController::class, 'dashboard'])->name('dashboard.api');
+		Route::get('dashboard/product/api', [WebController::class, 'dashboardProduct'])->name('dashboard.product.api');
+		Route::get('dispatchers', [UserController::class, 'indexDispatchers'])->name('users.dispatchers.index');
+		Route::get('dispatchers/create', [UserController::class, 'createDispatcher'])->name('users.dispatchers.create');
+		Route::post('dispatchers', [UserController::class, 'storeDispatcher'])->name('users.dispatchers.store');
+		Route::get('dispatchers/{dispatcher}/edit', [UserController::class, 'editDispatcher'])->name('users.dispatchers.edit');
+		Route::put('dispatchers/{dispatcher}', [UserController::class, 'updateDispatcher'])->name('users.dispatchers.update');
+		Route::delete('dispatchers/{dispatcher}', [UserController::class, 'destroyDispatcher'])->name('users.dispatchers.destroy');
+	});
 
-Route::middleware('role:admin')->group(function(){
+	Route::middleware('role:admin|seller')->group(function(){
+		Route::get('clients/api', [ClientController::class, 'api'])->name('clients.api');
+		Route::get('products/api', [ProductController::class, 'api'])->name('products.api');
+		Route::resource('products', ProductController::class);
 
-	
+		Route::post('clients/store', [ClientController::class, 'storeInSale'])->name('clients.storeInSale');
+		Route::resource('clients', ClientController::class)->where(['client' => '[0-9]+']);
+
+		Route::resource('prices', PriceController::class);
+
+		Route::get('sales/excel', [SaleController::class, 'excel'])->name('sales.excel');
+		Route::resource('sales', SaleController::class)->except(['index', 'show']);
+
+		Route::get('cart', [CartController::class, 'index'])->name('cart.index');
+		Route::post('cart', [CartController::class, 'store'])->name('cart.store');
+		Route::patch('cart', [CartController::class, 'update'])->name('cart.update');
+		Route::delete('destroy', [CartController::class, 'destroy'])->name('cart.destroy');
+	});
+
+	Route::middleware('role:admin|viewer')->group(function(){
+		Route::get('charges/credit', [ChargeController::class, 'credit'])->name('charges.credit');
+		Route::get('charges/pending', [ChargeController::class, 'pending'])->name('charges.pending');
+		Route::get('charges/history', [ChargeController::class, 'history'])->name('charges.history');
+
+		Route::post('payments', [PaymentController::class, 'store'])->name('payments.store');
+		Route::get('payments/excel', [PaymentController::class, 'excel'])->name('payments.excel');
+
+		Route::get('expenses/excel', [ExpenseController::class, 'excel'])->name('expenses.excel');
+		Route::resource('expenses', ExpenseController::class);
+	});
+
+	Route::middleware('role:admin|seller|viewer')->group(function(){
+		Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
+		Route::get('reports/liquidation', [ReportController::class, 'liquidation'])->name('reports.liquidation');
+	});
+
+	Route::middleware('role:admin|despachador')->group(function(){
+		Route::get('cashbox', [CashboxController::class, 'index'])->name('cashbox.index');
+		Route::post('cashbox/open', [CashboxController::class, 'open'])->name('cashbox.open');
+		Route::post('cashbox/close', [CashboxController::class, 'close'])->name('cashbox.close');
+	});
+
 });

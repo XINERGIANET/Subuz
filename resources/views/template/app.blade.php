@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 	<meta charset="UTF-8">
@@ -14,6 +14,15 @@
 	@yield('styles')
 </head>
 <body>
+	@php
+		$isDespachador = auth()->user()->hasRole('despachador');
+		$roleLabel = [
+			'admin' => 'Administrador',
+			'seller' => 'Vendedor',
+			'viewer' => 'Visualizador',
+			'despachador' => 'Despachador'
+		][auth()->user()->role] ?? auth()->user()->role;
+	@endphp
 	<div class="page">
 		<aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
 			<div class="container-fluid">
@@ -34,7 +43,7 @@
 							</span>
 							<div class="d-none d-xl-block ps-2">
 								<div>{{ auth()->user()->name }}</div>
-								<div class="mt-1 small text-muted">Administrador</div>
+								<div class="mt-1 small text-muted">{{ $roleLabel }}</div>
 							</div>
 						</a>
 						<div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
@@ -48,6 +57,28 @@
 				</div>
 				<div class="collapse navbar-collapse" id="sidebar-menu">
 					<ul class="navbar-nav pt-lg-3">
+						@if($isDespachador)
+						<li class="nav-item">
+							<a class="nav-link" href="{{ route('sales.index') }}" >
+								<span class="nav-link-icon d-md-none d-lg-inline-block">
+									<i class="ti ti-shopping-cart icon"></i>
+								</span>
+								<span class="nav-link-title">
+									Ventas
+								</span>
+							</a>
+						</li>
+						<li class="nav-item">
+							<a class="nav-link" href="{{ route('cashbox.index') }}" >
+								<span class="nav-link-icon d-md-none d-lg-inline-block">
+									<i class="ti ti-cash icon"></i>
+								</span>
+								<span class="nav-link-title">
+									Caja
+								</span>
+							</a>
+						</li>
+						@else
 						<li class="nav-item">
 							<a class="nav-link" href="{{ url('/') }}" >
 								<span class="nav-link-icon d-md-none d-lg-inline-block">
@@ -83,6 +114,9 @@
 										<a class="dropdown-item" href="{{ route('prices.index') }}">
 											Precios especiales
 										</a>
+										<a class="dropdown-item" href="{{ route('users.dispatchers.index') }}">
+											Despachadores
+										</a>
 										@endif
 									</div>
 								</div>
@@ -99,6 +133,18 @@
 								</span>
 							</a>
 						</li>
+						@if(auth()->user()->hasRole('admin'))
+						<li class="nav-item">
+							<a class="nav-link" href="{{ route('cashbox.index') }}" >
+								<span class="nav-link-icon d-md-none d-lg-inline-block">
+									<i class="ti ti-cash icon"></i>
+								</span>
+								<span class="nav-link-title">
+									Caja
+								</span>
+							</a>
+						</li>
+						@endif
 						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer'))
 						<li class="nav-item">
 							<a class="nav-link" href="{{ route('expenses.index') }}" >
@@ -111,6 +157,7 @@
 							</a>
 						</li>
 						@endif
+						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('viewer'))
 						<li class="nav-item dropdown">
 							<a class="nav-link dropdown-toggle" href="#navbar-reports" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button" aria-expanded="true" >
 								<span class="nav-link-icon d-md-none d-lg-inline-block">
@@ -124,12 +171,13 @@
 								<div class="dropdown-menu-columns">
 									<div class="dropdown-menu-column">
 										<a class="dropdown-item" href="{{ route('reports.liquidation') }}">
-											Liquidación
+											Liquidaci&oacute;n
 										</a>
 									</div>
 								</div>
 							</div>
 						</li>
+						@endif
 						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer'))
 						<li class="nav-item dropdown">
 							<a class="nav-link dropdown-toggle" href="#navbar-charges" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button" aria-expanded="true" >
@@ -144,7 +192,7 @@
 								<div class="dropdown-menu-columns">
 									<div class="dropdown-menu-column">
 										<a class="dropdown-item" href="{{ route('charges.credit') }}">
-											Crédito
+											Cr&eacute;dito
 										</a>
 										<a class="dropdown-item" href="{{ route('charges.pending') }}">
 											Pendiente de pago
@@ -167,6 +215,7 @@
 								</span>
 							</a>
 						</li>
+						@endif
 					</ul>
 				</div>
 			</div>
@@ -195,7 +244,7 @@
 					</span>
 					<div class="d-none d-xl-block ps-2">
 						<div>{{ auth()->user()->name }}</div>
-						<div class="mt-1 small text-muted">Administrador</div>
+						<div class="mt-1 small text-muted">{{ $roleLabel }}</div>
 					</div>
 				</a>
 				<div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
@@ -311,3 +360,5 @@
 @yield('scripts')
 </body>
 </html>
+
+

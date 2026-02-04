@@ -1,4 +1,4 @@
-@extends('template.app')
+﻿@extends('template.app')
 
 @section('title', 'Crear venta')
 
@@ -35,18 +35,6 @@
 						<option value="">Seleccionar</option>
 						<option value="Contado">Contado</option>
 						<option value="Credito">Crédito</option>
-						<option value="Pago pendiente">Pago pendiente</option>
-					</select>
-				</div>
-			</div>
-			<div class="col-lg-3" id="paymentMethod" style="display:none">
-				<div class="mb-3">
-					<label class="form-label">Forma de pago</label>
-					<select class="form-select" id="payment_method_id">
-						<option value="">Seleccionar</option>
-						@foreach($payment_methods as $payment_method)
-						<option value="{{ $payment_method->id }}">{{ $payment_method->name }}</option>
-						@endforeach
 					</select>
 				</div>
 			</div>
@@ -237,11 +225,11 @@
 					
 					ToastMessage.fire({ text: 'Registro guardado' });
 				}else{
-					ToastError.fire({ text: data.error ? data.error : 'Ocurrió un error' });
+					ToastError.fire({ text: data.error ? data.error : 'OcurriÃ³ un error' });
 				}
 			},
 			error: function(err){
-				ToastError.fire({ text: 'Ocurrió un error' });
+				ToastError.fire({ text: 'OcurriÃ³ un error' });
 			}
 		});
 
@@ -381,13 +369,12 @@
 
 		var guide = $('#guide').val();
 		var type = $('#type').val();
-		var payment_method_id = $('#payment_method_id').val();
 		var date = $('#date').val();
 		var client_id = $('#client_id').val();
 		$.ajax({
 			url: '{{ route('sales.store') }}',
 			method: 'POST',
-			data: { guide, type, payment_method_id, date, client_id },
+			data: { guide, type, date, client_id },
 			success: function(data){
 				if(data.status){
 					location.href = '{{ route('sales.index') }}';
@@ -402,17 +389,8 @@
 
 	});
 
-	$("#type").change(function(){
-
-		if($(this).val() == 'Contado'){
-			$('#paymentMethod').css('display', 'block');
-		}else{
-			$('#paymentMethod').css('display', 'none');
-			$('#payment_method_id').val('');
-		}
-
-	});
 
 
 </script>
 @endsection
+

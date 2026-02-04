@@ -10,6 +10,8 @@ use App\Exports\PaymentsExport;
 use App\Models\Week;
 use App\Models\Sale;
 use App\Models\Payment;
+use App\Models\Cashbox;
+use App\Models\CashboxMovement;
 
 class PaymentController extends Controller
 {
@@ -33,13 +35,18 @@ class PaymentController extends Controller
             ]);
         }
 
+        $cashbox = Cashbox::currentOpen();
+
+        if(!$cashbox){
+            return response()->json([
+                'status' => false,
+                'error' => 'Debe aperturar caja antes de registrar el pago.'
+            ]);
+        }
+
         if($request->type == 'Credito'){
 
-
-
             $sale = Sale::findOrFail($request->sale_id);
-
-            
 
             if($request->amount > $sale->debt){
 
@@ -50,35 +57,59 @@ class PaymentController extends Controller
 
             }
 
-            $debt = $sale->debt - $request->amount;
-            $paid = $debt == 0 ? 1 : 0;
+            DB::transaction(function() use ($request, $sale, $cashbox){
+                $debt = $sale->debt - $request->amount;
+                $paid = $debt == 0 ? 1 : 0;
 
-            $sale->update([
-                'debt' => $debt,
-                'paid' => $paid
-            ]);
+                $sale->update([
+                    'debt' => $debt,
+                    'paid' => $paid
+                ]);
 
-            Payment::create([
-                'sale_id' => $request->sale_id,
-                'payment_method_id' => $request->payment_method_id,
-                'amount' => $request->amount,
-                'date' => now()
-            ]);
+                Payment::create([
+                    'sale_id' => $request->sale_id,
+                    'payment_method_id' => $request->payment_method_id,
+                    'amount' => $request->amount,
+                    'date' => now()
+                ]);
+
+                CashboxMovement::create([
+                    'cashbox_id' => $cashbox->id,
+                    'sale_id' => $sale->id,
+                    'user_id' => auth()->id(),
+                    'payment_method_id' => $request->payment_method_id,
+                    'type' => 'paid',
+                    'amount' => $request->amount,
+                    'date' => now()
+                ]);
+            });
 
         }elseif($request->type == 'Pago pendiente'){
             $sale = Sale::find($request->sale_id);
-            
-            $sale->update([
-                'debt' => 0,
-                'paid' => 1
-            ]);
 
-            Payment::create([
-                'sale_id' => $request->sale_id,
-                'payment_method_id' => $request->payment_method_id,
-                'amount' => $sale->total,
-                'date' => now()
-            ]);
+            DB::transaction(function() use ($request, $sale, $cashbox){
+                $sale->update([
+                    'debt' => 0,
+                    'paid' => 1
+                ]);
+
+                Payment::create([
+                    'sale_id' => $request->sale_id,
+                    'payment_method_id' => $request->payment_method_id,
+                    'amount' => $sale->total,
+                    'date' => now()
+                ]);
+
+                CashboxMovement::create([
+                    'cashbox_id' => $cashbox->id,
+                    'sale_id' => $sale->id,
+                    'user_id' => auth()->id(),
+                    'payment_method_id' => $request->payment_method_id,
+                    'type' => 'paid',
+                    'amount' => $sale->total,
+                    'date' => now()
+                ]);
+            });
 
             $request->merge(['amount' => $sale->total]);
         }
