@@ -13,7 +13,7 @@
 	<div class="card-header d-flex justify-content-between flex-column flex-sm-row gap-2">
 		<div>
 			@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
-			<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal">
+			<button class="btn btn-brand" data-bs-toggle="modal" data-bs-target="#createModal">
 				<i class="ti ti-plus icon"></i> Crear nuevo
 			</button>
 			<a class="btn btn-success" href="{{ route('expenses.excel') }}">
@@ -65,12 +65,12 @@
 					</div>
 				</div>
 			</div>
-			<button type="submit" class="btn btn-primary"><i class="ti ti-filter icon"></i> Filtrar</button>
+			<button type="submit" class="btn btn-brand"><i class="ti ti-filter icon"></i> Filtrar</button>
 		</form>
 	</div>
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
-			<thead>
+			<thead class="table-corporate-header">
 				<tr>
 					<th>Descripción</th>
 					<th>Monto</th>
@@ -90,10 +90,10 @@
 						<td>
 							@if(auth()->user()->hasRole('admin'))
 								<div class="d-flex gap-2">
-									<button class="btn btn-icon btn-edit" data-id="{{ $expense->id }}">
+									<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $expense->id }}">
 										<i class="ti ti-pencil icon"></i>
 									</button>
-									<button class="btn btn-icon btn-delete" data-id="{{ $expense->id }}">
+									<button class="btn btn-icon btn-delete-corporate btn-delete" data-id="{{ $expense->id }}">
 										<i class="ti ti-x icon"></i>
 									</button>
 								</div>
@@ -152,7 +152,7 @@
   			</div>
   			<div class="modal-footer">
   			  <button type="button" class="btn me-auto" data-bs-dismiss="modal">Cerrar</button>
-  			  <button type="submit" class="btn btn-primary">Guardar</button>
+  			  <button type="submit" class="btn btn-brand">Guardar</button>
   			</div>
   		</form>
     </div>
@@ -197,7 +197,7 @@
   			<div class="modal-footer">
   				<input type="hidden" id="editId">
   			  <button type="button" class="btn me-auto" data-bs-dismiss="modal">Cerrar</button>
-  			  <button type="submit" class="btn btn-primary">Guardar</button>
+  			  <button type="submit" class="btn btn-brand">Guardar</button>
   			</div>
   		</form>
     </div>
@@ -307,6 +307,13 @@
 
 
 
+
+	$(document).ready(function(){
+		const urlParams = new URLSearchParams(window.location.search);
+		if (urlParams.has('create')) {
+			$('#createModal').modal('show');
+		}
+	});
 
 </script>
 @endsection

@@ -13,13 +13,13 @@
 <div class="card">
 	<div class="card-header d-flex justify-content-between">
 		<div></div>
-		<a class="btn btn-primary" href="{{ route('users.dispatchers.create') }}">
+		<a class="btn btn-brand" href="{{ route('users.dispatchers.create') }}">
 			<i class="ti ti-plus icon"></i> Crear nuevo
 		</a>
 	</div>
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
-			<thead>
+			<thead class="table-corporate-header">
 				<tr>
 					<th>#</th>
 					<th>Nombre</th>
@@ -36,13 +36,13 @@
 					<td>{{ $dispatcher->user }}</td>
 					<td>
 						<div class="d-flex gap-2">
-							<a class="btn btn-icon" href="{{ route('users.dispatchers.edit', $dispatcher) }}">
+							<a class="btn btn-icon btn-edit-corporate" href="{{ route('users.dispatchers.edit', $dispatcher) }}">
 								<i class="ti ti-edit icon"></i>
 							</a>
 							<form method="POST" action="{{ route('users.dispatchers.destroy', $dispatcher) }}" onsubmit="return confirm('Eliminar usuario?');">
 								@csrf
 								@method('DELETE')
-								<button class="btn btn-icon btn-danger" type="submit">
+								<button class="btn btn-icon btn-delete-corporate" type="submit">
 									<i class="ti ti-trash icon"></i>
 								</button>
 							</form>

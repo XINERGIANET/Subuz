@@ -21,11 +21,11 @@
 		</div>
 		<div>
 			@if(!$cashbox)
-			<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#openModal">
+			<button class="btn btn-brand" data-bs-toggle="modal" data-bs-target="#openModal">
 				<i class="ti ti-door-enter icon"></i> Aperturar caja
 			</button>
 			@else
-			<button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#closeModal">
+			<button class="btn btn-delete-corporate" data-bs-toggle="modal" data-bs-target="#closeModal">
 				<i class="ti ti-door-exit icon"></i> Cerrar caja
 			</button>
 			@endif
@@ -65,7 +65,7 @@
 <div class="card">
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
-			<thead>
+			<thead class="table-corporate-header">
 				<tr>
 					<th>Fecha</th>
 					<th>Venta</th>
@@ -123,7 +123,7 @@
   			</div>
   			<div class="modal-footer">
   				<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
-  				<button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy icon"></i> Guardar</button>
+  				<button type="submit" class="btn btn-brand"><i class="ti ti-device-floppy icon"></i> Guardar</button>
   			</div>
   		</form>
     </div>
@@ -152,7 +152,7 @@
   			</div>
   			<div class="modal-footer">
   				<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
-  				<button type="submit" class="btn btn-danger"><i class="ti ti-device-floppy icon"></i> Guardar</button>
+  				<button type="submit" class="btn btn-delete-corporate"><i class="ti ti-device-floppy icon"></i> Guardar</button>
   			</div>
   		</form>
     </div>

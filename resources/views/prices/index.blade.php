@@ -12,7 +12,7 @@
 <div class="card">
 	<div class="card-header d-flex justify-content-between flex-column flex-sm-row gap-2">
 		<div>
-			<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal">
+			<button class="btn btn-brand" data-bs-toggle="modal" data-bs-target="#createModal">
 				<i class="ti ti-plus icon"></i> Crear nuevo
 			</button>
 		</div>
@@ -29,7 +29,7 @@
 	</div>
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
-			<thead>
+			<thead class="table-corporate-header">
 				<tr>
 					<th>Cliente</th>
 					<th>Producto</th>
@@ -47,10 +47,10 @@
 					<td>
 						<div class="d-flex gap-2">
 							<div class="d-flex gap-2">
-								<button class="btn btn-icon btn-primary btn-edit" data-id="{{ $price->id }}">
+								<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $price->id }}">
 									<i class="ti ti-pencil icon"></i>
 								</button>
-								<button class="btn btn-icon btn-danger btn-delete" data-id="{{ $price->id }}">
+								<button class="btn btn-icon btn-delete-corporate btn-delete" data-id="{{ $price->id }}">
 									<i class="ti ti-x icon"></i>
 								</button>
 							</div>
@@ -112,7 +112,7 @@
 				</div>
 				<div class="modal-footer">
 					<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
-					<button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy icon"></i> Guardar</button>
+					<button type="submit" class="btn btn-brand"><i class="ti ti-device-floppy icon"></i> Guardar</button>
 				</div>
 			</form>
 		</div>

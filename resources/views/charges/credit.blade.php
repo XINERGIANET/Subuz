@@ -51,12 +51,12 @@
 					</div>
 				</div>
 			</div>
-			<button type="submit" class="btn btn-primary"><i class="ti ti-filter icon"></i> Filtrar</button>
+			<button type="submit" class="btn btn-brand"><i class="ti ti-filter icon"></i> Filtrar</button>
 		</form>
 	</div>
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
-			<thead>
+			<thead class="table-corporate-header">
 				<tr>
 					<th>Guía de remisión</th>
 					<th>Fecha</th>
@@ -80,7 +80,7 @@
 					<td>
 						<div class="d-flex gap-2">
 							@if(auth()->user()->hasRole('admin'))
-							<button class="btn btn-icon btn-payment" data-id="{{ $sale->id }}">
+							<button class="btn btn-icon btn-brand btn-payment" data-id="{{ $sale->id }}">
 								<i class="ti ti-cash icon"></i>
 							</button>
 							@endif
@@ -138,7 +138,7 @@
   				<input type="hidden" name="type" value="Credito">
   				<input type="hidden" name="sale_id" id="sale_id">
 				<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
-				<button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy icon"></i> Guardar</button>
+				<button type="submit" class="btn btn-brand"><i class="ti ti-device-floppy icon"></i> Guardar</button>
   			</div>
   		</form>
     </div>
