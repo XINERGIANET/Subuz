@@ -14,7 +14,7 @@ return [
     'orientation'       => 'P',
     'unit'              => 'mm',
     'size'              => 'A4',
-    'font_path'         => env('FPDF_FONTPATH', 'assets/fonts/'),
+    'font_path'         => env('FPDF_FONTPATH', public_path('assets/fonts/')),
 
     /*
     |--------------------------------------------------------------------------

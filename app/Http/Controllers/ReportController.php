@@ -22,24 +22,20 @@ class ReportController extends Controller
     }
 
     public function pdf(Request $request){
+        $data = $request->validate([
+            'client_id' => 'required|integer|exists:clients,id',
+            'date' => 'required|date',
+            'payment_date' => 'nullable|date',
+            'send_mail' => 'nullable|boolean',
+        ]);
 
         $fpdf = new Fpdf;
 
-        $client = Client::find($request->client_id);
+        $client = Client::find($data['client_id']);
         $week = Week::where([
-            ['number', date('W', strtotime($request->date))],
-            ['year', date('Y', strtotime($request->date))]
+            ['number', date('W', strtotime($data['date']))],
+            ['year', date('Y', strtotime($data['date']))]
         ])->first();
-
-        if($request->send_mail && $client->email){
-            $request_data = [
-                'client_id' => $request->client_id,
-                'date' => $request->date,
-                'payment_date' => $request->payment_date
-            ];
-            
-            Mail::to($client->email)->send(new ReportLiquidation($client, $week, $request_data));
-        }
 
         if(!$client){
             die('El cliente seleccionado no existe');
@@ -55,6 +51,17 @@ class ReportController extends Controller
         ])->get();
 
         $total = $sales->sum('total');
+        $paymentDate = $data['payment_date'] ?? $data['date'];
+
+        if(($data['send_mail'] ?? false) && $client->email){
+            $request_data = [
+                'client_id' => $data['client_id'],
+                'date' => $data['date'],
+                'payment_date' => $paymentDate
+            ];
+
+            Mail::to($client->email)->send(new ReportLiquidation($client, $week, $request_data));
+        }
 
         $fpdf->AddPage();
         $fpdf->AddFont('Montserrat', '');
@@ -63,7 +70,7 @@ class ReportController extends Controller
         $fpdf->SetDrawColor(2,93,166);
         $fpdf->SetLineWidth(0.4);
 
-        $fpdf->Image(asset('assets/images/logo.jpg'), 160,10,30); 
+        $fpdf->Image(public_path('assets/images/logo.jpg'), 160,10,30); 
         
         $fpdf->SetFont('Montserrat', '', 12);
         $fpdf->Cell(60, 5, utf8_decode('SUBUZ S.A.C.'),0,1);
@@ -114,7 +121,7 @@ class ReportController extends Controller
 
         $fpdf->SetXY($current_x + $cell_width, $current_y);
 
-        $fpdf->Cell(45, 5, date('d/m/Y', strtotime($request->payment_date)),0,0,'C');
+        $fpdf->Cell(45, 5, date('d/m/Y', strtotime($paymentDate)),0,0,'C');
 
         $fpdf->Cell(45, 5, 'S/'.number_format($total, 2),0,0,'C');
 
