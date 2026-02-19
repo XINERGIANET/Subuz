@@ -22,11 +22,21 @@ class ReportController extends Controller
     }
 
     public function pdf(Request $request){
+        $data = $request->validate([
+            'client_id' => 'required|integer|exists:clients,id',
+            'date' => 'required|date',
+            'payment_date' => 'nullable|date',
+            'send_mail' => 'nullable|boolean',
+        ]);
 
         $fpdf = new Fpdf;
 
-        $client = Client::find($request->client_id);
-        
+        $client = Client::find($data['client_id']);
+        $week = Week::where([
+            ['number', date('W', strtotime($data['date']))],
+            ['year', date('Y', strtotime($data['date']))]
+        ])->first();
+
         if(!$client){
             return redirect()->back()->with('error', 'El cliente seleccionado no existe');
         }
@@ -51,6 +61,17 @@ class ReportController extends Controller
         }
 
         $total = $sales->sum('total');
+        $paymentDate = $data['payment_date'] ?? $data['date'];
+
+        if(($data['send_mail'] ?? false) && $client->email){
+            $request_data = [
+                'client_id' => $data['client_id'],
+                'date' => $data['date'],
+                'payment_date' => $paymentDate
+            ];
+
+            Mail::to($client->email)->send(new ReportLiquidation($client, $week, $request_data));
+        }
 
         $fpdf->AddPage();
         $fpdf->AddFont('Montserrat', '');
@@ -59,7 +80,7 @@ class ReportController extends Controller
         $fpdf->SetDrawColor(2,93,166);
         $fpdf->SetLineWidth(0.4);
 
-        $fpdf->Image(asset('assets/images/logo.jpg'), 160,10,30); 
+        $fpdf->Image(public_path('assets/images/logo.jpg'), 160,10,30); 
         
         $fpdf->SetFont('Montserrat', '', 12);
         $fpdf->Cell(60, 5, utf8_decode('SUBUZ S.A.C.'),0,1);
