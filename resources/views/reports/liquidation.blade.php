@@ -24,8 +24,14 @@
 				</div>
 				<div class="col-lg-3">
 					<div class="mb-3">
-						<label class="form-label">Fecha</label>
-						<input type="date" class="form-control" name="date" value="{{ now()->format('Y-m-d') }}">
+						<label class="form-label">Fecha Inicio</label>
+						<input type="date" class="form-control" name="start_date" value="{{ now()->startOfWeek()->format('Y-m-d') }}">
+					</div>
+				</div>
+				<div class="col-lg-3">
+					<div class="mb-3">
+						<label class="form-label">Fecha Fin</label>
+						<input type="date" class="form-control" name="end_date" value="{{ now()->endOfWeek()->format('Y-m-d') }}">
 					</div>
 				</div>
 				<div class="col-lg-3">
@@ -50,6 +56,27 @@
 @section('scripts')
 <script>
 	$(document).ready(function(){
+
+		// Validate form submission
+		$('form').on('submit', function(e){
+			let client = $('[name="client_id"]').val();
+			if(!client){
+				e.preventDefault();
+				ToastError.fire({
+					title: 'Error',
+					text: 'Debe seleccionar un cliente'
+				});
+				return false;
+			}
+		});
+
+		// Display server-side errors as toasts
+		@if(session('error'))
+			ToastError.fire({
+				title: 'Error',
+				text: '{{ session('error') }}'
+			});
+		@endif
 
 		new TomSelect('.ts-clients', {
 			valueField: 'id',

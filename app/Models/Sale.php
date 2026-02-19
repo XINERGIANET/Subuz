@@ -45,4 +45,8 @@ class Sale extends Model
     public function movements(){
         return $this->hasMany(CashboxMovement::class);
     }
+
+    public function payments(){
+        return $this->hasMany(Payment::class);
+    }
 }

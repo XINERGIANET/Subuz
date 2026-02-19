@@ -56,6 +56,13 @@
 					</div>
 				</div>
 				<div class="collapse navbar-collapse" id="sidebar-menu">
+					<!-- Header for mobile view with close button -->
+					<div class="mobile-menu-header">
+						<img src="{{ asset('assets/images/logo.svg') }}" alt="Subuz" class="mobile-logo">
+						<button class="btn-close-mobile" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-label="Close menu">
+							<i class="ti ti-x"></i>
+						</button>
+					</div>
 					<ul class="navbar-nav pt-lg-3">
 						@if($isDespachador)
 						<li class="nav-item">

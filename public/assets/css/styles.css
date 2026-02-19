@@ -775,6 +775,51 @@ body.sidebar-mini .navbar-vertical:hover .navbar-brand-image {
 		border-radius: 8px !important;
 		margin-bottom: 0.25rem !important;
 	}
+
+	/* Mobile Menu Header & Close Button */
+	.mobile-menu-header {
+		display: flex !important;
+		justify-content: space-between;
+		align-items: center;
+		padding: 1rem 1.5rem !important;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+		margin: -1.5rem -1.5rem 1rem -1.5rem !important;
+		background-color: var(--brand-color) !important;
+		position: sticky !important;
+		top: 0 !important;
+		z-index: 1100 !important;
+	}
+
+	.mobile-logo {
+		height: 24px !important;
+		filter: brightness(0) invert(1) !important;
+	}
+
+	.btn-close-mobile {
+		background: transparent !important;
+		border: none !important;
+		color: #ffffff !important;
+		padding: 0.5rem !important;
+		cursor: pointer !important;
+		display: flex !important;
+		align-items: center !important;
+		justify-content: center !important;
+		transition: transform 0.2s ease !important;
+	}
+
+	.btn-close-mobile i {
+		font-size: 1.75rem !important;
+	}
+
+	.btn-close-mobile:active {
+		transform: scale(0.9) !important;
+	}
+}
+
+@media (min-width: 992px) {
+	.mobile-menu-header {
+		display: none !important;
+	}
 }
 
 .container-fluid {

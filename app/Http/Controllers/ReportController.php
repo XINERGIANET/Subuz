@@ -7,7 +7,7 @@ use Codedge\Fpdf\Fpdf\Fpdf;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\ReportLiquidation;
 use App\Models\Client;
-use App\Models\Week;
+use App\Models\Sale;
 
 class ReportController extends Controller
 {
@@ -26,33 +26,29 @@ class ReportController extends Controller
         $fpdf = new Fpdf;
 
         $client = Client::find($request->client_id);
-        $week = Week::where([
-            ['number', date('W', strtotime($request->date))],
-            ['year', date('Y', strtotime($request->date))]
-        ])->first();
-
-        if($request->send_mail && $client->email){
-            $request_data = [
-                'client_id' => $request->client_id,
-                'date' => $request->date,
-                'payment_date' => $request->payment_date
-            ];
-            
-            Mail::to($client->email)->send(new ReportLiquidation($client, $week, $request_data));
-        }
-
+        
         if(!$client){
-            die('El cliente seleccionado no existe');
+            return redirect()->back()->with('error', 'El cliente seleccionado no existe');
         }
 
-        if(!$week){
-            die('La semana seleccionada no existe');
+        $start_date = $request->start_date;
+        $end_date = $request->end_date;
+
+        if($start_date && $end_date){
+            $sales = Sale::where([
+                ['type', 'Credito'],
+                ['client_id', $client->id]
+            ])->whereBetween('date', [$start_date . ' 00:00:00', $end_date . ' 23:59:59'])->get();
+        }else{
+            $sales = Sale::where([
+                ['type', 'Credito'],
+                ['client_id', $client->id]
+            ])->get();
         }
 
-        $sales = $week->sales()->where([
-            ['type', 'Credito'],
-            ['client_id', $client->id]
-        ])->get();
+        if($sales->count() == 0){
+            return redirect()->back()->with('error', 'No existen registros de ventas');
+        }
 
         $total = $sales->sum('total');
 
@@ -81,7 +77,11 @@ class ReportController extends Controller
 
         $fpdf->Ln(15);
 
-        $fpdf->MultiCell(190, 5, utf8_decode('¡Hola '.$client->name.'! queremos entregarte el reporte de liquidación de las compras realizadas del '.$week->start_date->format('d/m/Y').' al cierre de la semana '.$week->end_date->format('d/m/Y').'.'));
+        if($start_date && $end_date){
+            $fpdf->MultiCell(190, 5, utf8_decode('¡Hola '.$client->name.'! queremos entregarte el reporte de liquidación de las compras realizadas del '.date('d/m/Y', strtotime($start_date)).' al '.date('d/m/Y', strtotime($end_date)).'.'));
+        }else{
+            $fpdf->MultiCell(190, 5, utf8_decode('¡Hola '.$client->name.'! queremos entregarte el reporte de liquidación de las compras realizadas.'));
+        }
 
         $fpdf->Ln(10);
         
@@ -114,7 +114,7 @@ class ReportController extends Controller
 
         $fpdf->SetXY($current_x + $cell_width, $current_y);
 
-        $fpdf->Cell(45, 5, date('d/m/Y', strtotime($request->payment_date)),0,0,'C');
+        $fpdf->Cell(45, 5, $request->payment_date ? date('d/m/Y', strtotime($request->payment_date)) : '',0,0,'C');
 
         $fpdf->Cell(45, 5, 'S/'.number_format($total, 2),0,0,'C');
 
@@ -144,7 +144,8 @@ class ReportController extends Controller
             foreach($sale->details as $detail){
 
                 $fpdf->Cell(20, 8);
-                $fpdf->Cell(80, 8, utf8_decode($detail->product->name));
+                $product_name = $detail->product ? $detail->product->name : 'Producto eliminado';
+                $fpdf->Cell(80, 8, utf8_decode($product_name));
                 $fpdf->Cell(30, 8, 'S/'.$detail->price,0,0,'C');
                 $fpdf->Cell(30, 8, $detail->quantity,0,0,'C');
                 $fpdf->Cell(30, 8, 'S/'.number_format($detail->price * $detail->quantity, 2),0,0,'C');
@@ -168,6 +169,19 @@ class ReportController extends Controller
         $fpdf->SetFont('Montserrat', '', 12);
         $fpdf->Cell(190, 10, 'Gracias por ser nuestro cliente');
 
+
+
+        
+        if($request->send_mail && $client->email){
+            $request_data = [
+                'client_id' => $request->client_id,
+                'start_date' => $request->start_date,
+                'end_date' => $request->end_date,
+                'payment_date' => $request->payment_date
+            ];
+            
+            Mail::to($client->email)->send(new ReportLiquidation($client, $request_data));
+        }
 
         $name = 'Liquidacion_'.str_replace(" ", "_", $client->name)."_".now()->format('dm').".pdf";
 
