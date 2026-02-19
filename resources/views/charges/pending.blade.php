@@ -26,7 +26,7 @@
 	</div>
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
-			<thead>
+			<thead class="table-corporate-header">
 				<tr>
 					<th>#</th>
 					<th>Guía de remisión</th>
@@ -59,7 +59,7 @@
 									<input type="hidden" name="sale_id" value="{{ $sale->id }}">
 									<input type="hidden" name="client_id" value="{{ $sale->client_id }}">
 									<input type="hidden" name="type" value="Pago pendiente">
-									<button class="btn btn-icon" data-id="{{ $sale->id }}">
+									<button class="btn btn-icon btn-brand" data-id="{{ $sale->id }}">
 										<i class="ti ti-cash icon"></i>
 									</button>
 								</div>

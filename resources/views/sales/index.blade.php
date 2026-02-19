@@ -13,7 +13,7 @@
 	<div class="card-header d-flex justify-content-between flex-column flex-sm-row gap-2">
 		<div>
 			@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
-			<a class="btn btn-primary" href="{{ route('sales.create') }}">
+			<a class="btn btn-brand" href="{{ route('sales.create') }}">
 				<i class="ti ti-plus icon"></i> Crear nuevo
 			</a>
 			<a class="btn btn-success" href="{{ route('sales.excel') }}">
@@ -76,13 +76,13 @@
 					</div>
 				</div>
 			</div>
-			<button type="submit" class="btn btn-primary"><i class="ti ti-filter icon"></i> Filtrar</button>
+			<button type="submit" class="btn btn-brand"><i class="ti ti-filter icon"></i> Filtrar</button>
 		</form>
 	</div>
 	@endif
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
-			<thead>
+			<thead class="table-corporate-header">
 				<tr>
 					<th>#</th>
 					<th>Guía de remisión</th>
@@ -126,10 +126,10 @@
 							</button>
 							@endif
 							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
-							<button class="btn btn-icon btn-edit" data-id="{{ $sale->id }}">
+							<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $sale->id }}">
 								<i class="ti ti-edit icon"></i>
 							</button>
-							<button class="btn btn-icon btn-delete" data-id="{{ $sale->id }}">
+							<button class="btn btn-icon btn-delete-corporate btn-delete" data-id="{{ $sale->id }}">
 								<i class="ti ti-trash icon"></i>
 							</button>
 							@endif
@@ -161,7 +161,7 @@
   		</div>
   		<div class="modal-body">
   		  <table class="table">
-  		  	<thead>
+  		  	<thead class="table-corporate-header">
   		  		<tr>
   		  			<th>Producto</th>
   		  			<th>Precio</th>
@@ -189,7 +189,7 @@
   				<input type="date" class="form-control" id="date">
   			</div>
   		  <table class="table mb-4">
-  		  	<thead>
+  		  	<thead class="table-corporate-header">
   		  		<tr>
   		  			<th>Producto</th>
   		  			<th>Precio</th>
@@ -200,7 +200,7 @@
   		  	<tbody id="tbl-edit-items"></tbody>
   		  </table>
   		  <input type="hidden" id="sale_id">
-  		  <button class="btn btn-primary" id="btn-save">Guardar</button>
+  		  <button class="btn btn-brand" id="btn-save">Guardar</button>
   		</div>
     </div>
   </div>
@@ -215,32 +215,53 @@
   			  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
   			</div>
   			<div class="modal-body">
-  				<div class="mb-2 text-muted">
-  					Venta: <span id="dispatch_guide"></span> | Total: S/<span id="dispatch_total"></span>
-  				</div>
-  				<div class="mb-3">
-  					<label class="form-label">Pago?</label>
-  					<div class="btn-group w-100" role="group">
-  						<input type="radio" class="btn-check" name="paid" id="dispatch_paid_yes" value="1">
-  						<label class="btn btn-outline-success" for="dispatch_paid_yes">Si, pago</label>
-  						<input type="radio" class="btn-check" name="paid" id="dispatch_paid_no" value="0">
-  						<label class="btn btn-outline-danger" for="dispatch_paid_no">No pago</label>
+  				<div class="mb-3 p-3 bg-light rounded border">
+  					<div class="small text-uppercase fw-bold text-muted mb-1">Detalle de Venta</div>
+  					<div class="h3 mb-0">
+  						Venta: <span id="dispatch_guide" class="text-primary"></span> | Total: <span class="text-dark">S/<span id="dispatch_total"></span></span>
   					</div>
   				</div>
-  				<div class="mb-3" id="dispatchPaymentMethod" style="display:none">
-  					<label class="form-label">Metodo de pago</label>
-  					<select class="form-select" name="payment_method_id">
-  						<option value="">Seleccionar</option>
-  						@foreach($payment_methods as $payment_method)
-  						<option value="{{ $payment_method->id }}">{{ $payment_method->name }}</option>
-  						@endforeach
-  					</select>
+  				<div class="mb-3">
+  					<label class="form-label fw-bold">¿Se registró el pago?</label>
+  					<div class="btn-group w-100" role="group">
+  						<input type="radio" class="btn-check" name="paid" id="dispatch_paid_yes" value="1">
+  						<label class="btn btn-outline-success py-2 d-flex align-items-center justify-content-center gap-2" for="dispatch_paid_yes">
+  							<i class="ti ti-check fs-2"></i> Si, pagado
+  						</label>
+  						<input type="radio" class="btn-check" name="paid" id="dispatch_paid_no" value="0">
+  						<label class="btn btn-outline-danger py-2 d-flex align-items-center justify-content-center gap-2" for="dispatch_paid_no">
+  							<i class="ti ti-clock fs-2"></i> Pendiente
+  						</label>
+  					</div>
+  				</div>
+
+  				<div id="dispatchPaymentContainer" style="display:none">
+  					<div class="d-flex justify-content-between align-items-center mb-2">
+  						<label class="form-label mb-0 fw-bold text-uppercase small">Métodos de Pago</label>
+  						<button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-payment">
+  							<i class="ti ti-plus me-1"></i> Agregar otro
+  						</button>
+  					</div>
+  					
+  					<div id="payment-rows-container">
+  						<!-- Payment rows will be injected here -->
+  					</div>
+
+  					<div class="mt-3 p-2 rounded bg-primary-lt border border-primary d-flex justify-content-between align-items-center">
+  						<span class="fw-bold">Total Distribuido:</span>
+  						<span class="h4 mb-0 fw-extrabold" id="total-distributed">S/0.00</span>
+  					</div>
+  					<div id="payment-warning" class="mt-2 small text-danger fw-bold" style="display:none">
+  						<i class="ti ti-alert-triangle me-1"></i> La suma de los montos no coincide con el total.
+  					</div>
   				</div>
   			</div>
-  			<div class="modal-footer">
+  			<div class="modal-footer bg-light-subtle">
   				<input type="hidden" name="sale_id" id="dispatch_sale_id">
-  				<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
-  				<button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy icon"></i> Guardar</button>
+  				<button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Cancelar</button>
+  				<button type="submit" class="btn btn-brand px-4 h3" id="btn-confirm-dispatch">
+  					<i class="ti ti-device-floppy me-2"></i> Confirmar Despacho
+  				</button>
   			</div>
   		</form>
     </div>
@@ -431,6 +452,12 @@
 
 	});
 
+	var paymentMethodsHtml = `
+		@foreach($payment_methods as $pm)
+			<option value="{{ $pm->id }}">{{ $pm->name }}</option>
+		@endforeach
+	`;
+
 	$(document).on('click', '.btn-dispatch', function(){
 		var id = $(this).data('id');
 		var guide = $(this).data('guide');
@@ -440,22 +467,109 @@
 		$('#dispatch_guide').text(guide);
 		$('#dispatch_total').text(total);
 		$('#dispatchForm')[0].reset();
-		$('#dispatchPaymentMethod').hide();
+		$('#dispatchPaymentContainer').hide();
+		$('#payment-rows-container').empty();
+		$('#total-distributed').text('S/0.00');
+		$('#payment-warning').hide();
 
 		$('#dispatchModal').modal('show');
 	});
 
+	function addPaymentRow(amount = '') {
+		var rowCount = $('#payment-rows-container .payment-row').length;
+		var html = `
+			<div class="payment-row mb-2 border-bottom pb-2">
+				<div class="row g-2 align-items-center">
+					<div class="col-7">
+						<select class="form-select" name="payments[${rowCount}][method_id]" required>
+							<option value="">Seleccionar cuenta</option>
+							${paymentMethodsHtml}
+						</select>
+					</div>
+					<div class="col-4">
+						<div class="input-group input-group-flat">
+							<span class="input-group-text ps-2 pe-0">S/</span>
+							<input type="number" step="0.01" class="form-control ps-1 txt-payment-amount" name="payments[${rowCount}][amount]" value="${amount}" placeholder="0.00" required>
+						</div>
+					</div>
+					<div class="col-1 text-end">
+						${rowCount > 0 ? '<button type="button" class="btn btn-ghost-danger btn-icon btn-sm btn-remove-payment"><i class="ti ti-trash fs-3"></i></button>' : ''}
+					</div>
+				</div>
+			</div>
+		`;
+		$('#payment-rows-container').append(html);
+		calculateDistributed();
+	}
+
+	$(document).on('click', '#btn-add-payment', function() {
+		var total = parseFloat($('#dispatch_total').text());
+		var distributed = 0;
+		$('.txt-payment-amount').each(function() {
+			distributed += parseFloat($(this).val()) || 0;
+		});
+		var remaining = (total - distributed).toFixed(2);
+		addPaymentRow(remaining > 0 ? remaining : '');
+	});
+
+	$(document).on('click', '.btn-remove-payment', function() {
+		$(this).closest('.payment-row').remove();
+		calculateDistributed();
+	});
+
+	$(document).on('input', '.txt-payment-amount', function() {
+		calculateDistributed();
+	});
+
+	function calculateDistributed() {
+		var total = parseFloat($('#dispatch_total').text());
+		var distributed = 0;
+		$('.txt-payment-amount').each(function() {
+			distributed += parseFloat($(this).val()) || 0;
+		});
+		
+		$('#total-distributed').text('S/' + distributed.toFixed(2));
+		
+		if (Math.abs(distributed - total) > 0.01) {
+			$('#total-distributed').addClass('text-danger').removeClass('text-success');
+			var diff = (total - distributed).toFixed(2);
+			var message = diff > 0 
+				? `<i class="ti ti-alert-triangle me-1"></i> Faltan S/${diff} para completar el total.`
+				: `<i class="ti ti-alert-triangle me-1"></i> El monto excede el total por S/${Math.abs(diff).toFixed(2)}.`;
+			$('#payment-warning').html(message).show();
+		} else {
+			$('#total-distributed').addClass('text-success').removeClass('text-danger');
+			$('#payment-warning').hide();
+		}
+	}
+
 	$(document).on('change', 'input[name="paid"]', function(){
 		if($(this).val() == '1'){
-			$('#dispatchPaymentMethod').show();
+			$('#dispatchPaymentContainer').fadeIn();
+			if($('#payment-rows-container').is(':empty')) {
+				addPaymentRow($('#dispatch_total').text());
+			}
 		}else{
-			$('#dispatchPaymentMethod').hide();
-			$('select[name="payment_method_id"]').val('');
+			$('#dispatchPaymentContainer').fadeOut();
 		}
 	});
 
 	$('#dispatchForm').submit(function(e){
 		e.preventDefault();
+		
+		var isPaid = $('input[name="paid"]:checked').val() == '1';
+		if(isPaid) {
+			var total = parseFloat($('#dispatch_total').text());
+			var distributed = 0;
+			$('.txt-payment-amount').each(function() {
+				distributed += parseFloat($(this).val()) || 0;
+			});
+
+			if(Math.abs(distributed - total) > 0.01) {
+				ToastError.fire({ text: 'El total distribuido debe coincidir con el total de la venta.' });
+				return;
+			}
+		}
 
 		var id = $('#dispatch_sale_id').val();
 
@@ -468,11 +582,13 @@
 					$('#dispatchModal').modal('hide');
 					location.reload();
 				}else{
-					ToastError.fire({ text: data.error ? data.error : 'Ocurrio un error' });
+					ToastError.fire({ text: data.error ? data.error : 'Ocurrió un error' });
 				}
 			},
-			error: function(){
-				ToastError.fire({ text: 'Ocurrio un error' });
+			error: function(xhr){
+				var error = 'Ocurrió un error';
+				if(xhr.responseJSON && xhr.responseJSON.error) error = xhr.responseJSON.error;
+				ToastError.fire({ text: error });
 			}
 		});
 	});

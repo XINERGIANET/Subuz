@@ -24,7 +24,7 @@
 		][auth()->user()->role] ?? auth()->user()->role;
 	@endphp
 	<div class="page">
-		<aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
+		<aside class="navbar navbar-vertical navbar-expand-lg navbar-dark border-end-0 shadow" style="background-color: var(--brand-color) !important;">
 			<div class="container-fluid">
 				<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation">
 					<span class="navbar-toggler-icon"></span>
@@ -79,19 +79,19 @@
 							</a>
 						</li>
 						@else
-						<li class="nav-item">
-							<a class="nav-link" href="{{ url('/') }}" >
+						<li class="nav-item {{ request()->is('/') ? 'active' : '' }}">
+							<a class="nav-link fw-bold" href="{{ url('/') }}" >
 								<span class="nav-link-icon d-md-none d-lg-inline-block">
-									<i class="ti ti-home icon"></i>
+									<i class="ti ti-dashboard icon"></i>
 								</span>
 								<span class="nav-link-title">
-									Inicio
+									Panel de Control
 								</span>
 							</a>
 						</li>
 						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
 						<li class="nav-item dropdown">
-							<a class="nav-link dropdown-toggle" href="#navbar-register" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button" aria-expanded="true" >
+							<a class="nav-link dropdown-toggle" href="#navbar-register" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button" aria-expanded="false" >
 								<span class="nav-link-icon d-md-none d-lg-inline-block">
 									<i class="ti ti-edit icon"></i>
 								</span>
@@ -104,18 +104,21 @@
 									<div class="dropdown-menu-column">
 										@if(auth()->user()->hasRole('admin'))
 										<a class="dropdown-item" href="{{ route('products.index') }}">
-											Productos
+											<i class="ti ti-package icon me-2"></i> Productos
 										</a>
 										@endif
 										<a class="dropdown-item" href="{{ route('clients.index') }}">
-											Clientes
+											<i class="ti ti-users icon me-2"></i> Clientes
 										</a>
 										@if(auth()->user()->hasRole('admin'))
 										<a class="dropdown-item" href="{{ route('prices.index') }}">
-											Precios especiales
+											<i class="ti ti-tag icon me-2"></i> Precios especiales
 										</a>
 										<a class="dropdown-item" href="{{ route('users.dispatchers.index') }}">
-											Despachadores
+											<i class="ti ti-truck-delivery icon me-2"></i> Despachadores
+										</a>
+										<a class="dropdown-item" href="{{ route('payment_methods.index') }}">
+											<i class="ti ti-credit-card icon me-2"></i> Cuentas
 										</a>
 										@endif
 									</div>
@@ -159,7 +162,7 @@
 						@endif
 						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('viewer'))
 						<li class="nav-item dropdown">
-							<a class="nav-link dropdown-toggle" href="#navbar-reports" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button" aria-expanded="true" >
+							<a class="nav-link dropdown-toggle" href="#navbar-reports" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button" aria-expanded="false" >
 								<span class="nav-link-icon d-md-none d-lg-inline-block">
 									<i class="ti ti-printer icon"></i>
 								</span>
@@ -171,7 +174,7 @@
 								<div class="dropdown-menu-columns">
 									<div class="dropdown-menu-column">
 										<a class="dropdown-item" href="{{ route('reports.liquidation') }}">
-											Liquidaci&oacute;n
+											<i class="ti ti-file-text icon me-2"></i> Liquidaci&oacute;n
 										</a>
 									</div>
 								</div>
@@ -180,7 +183,7 @@
 						@endif
 						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer'))
 						<li class="nav-item dropdown">
-							<a class="nav-link dropdown-toggle" href="#navbar-charges" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button" aria-expanded="true" >
+							<a class="nav-link dropdown-toggle" href="#navbar-charges" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button" aria-expanded="false" >
 								<span class="nav-link-icon d-md-none d-lg-inline-block">
 									<i class="ti ti-report-money icon"></i>
 								</span>
@@ -192,13 +195,13 @@
 								<div class="dropdown-menu-columns">
 									<div class="dropdown-menu-column">
 										<a class="dropdown-item" href="{{ route('charges.credit') }}">
-											Cr&eacute;dito
+											<i class="ti ti-credit-card icon me-2"></i> Cr&eacute;dito
 										</a>
 										<a class="dropdown-item" href="{{ route('charges.pending') }}">
-											Pendiente de pago
+											<i class="ti ti-clock icon me-2"></i> Pendiente de pago
 										</a>
 										<a class="dropdown-item" href="{{ route('charges.history') }}">
-											Historial
+											<i class="ti ti-history icon me-2"></i> Historial
 										</a>
 									</div>
 								</div>
@@ -221,7 +224,10 @@
 			</div>
 		</aside>
 		<header class="navbar navbar-expand-md d-none d-lg-flex d-print-none" >
-			<div class="container-xl">
+			<div class="container-fluid">
+                <button type="button" class="btn btn-icon btn-ghost-secondary me-3" id="sidebar-toggle" title="Contraer/Expandir menú">
+                    <i class="ti ti-menu-2 icon"></i>
+                </button>
 				<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu" aria-controls="navbar-menu" aria-expanded="false" aria-label="Toggle navigation">
 					<span class="navbar-toggler-icon"></span>
 				</button>
@@ -272,11 +278,14 @@
 </header>
 <div class="page-wrapper">
 	<!-- Page header -->
-	<div class="page-header d-print-none">
+	<div class="page-header d-print-none mb-0">
 		<div class="container-xl">
 			<div class="row g-2 align-items-center">
 				<div class="col">
-					<h2 class="page-title">
+					<div class="page-pretitle text-uppercase fw-bold text-muted small">
+						Sistema de Gestión
+					</div>
+					<h2 class="page-title fw-bold">
 						@yield('title')
 					</h2>
 				</div>
@@ -299,19 +308,10 @@
 			@yield('content')
 		</div>
 	</div>
-	<footer class="footer footer-transparent d-print-none">
+	<footer class="footer footer-transparent d-print-none mt-auto">
 		<div class="container-xl">
-			<div class="row text-center align-items-center flex-row-reverse">
-				<div class="col-lg-auto ms-lg-auto">
-				</div>
-				<div class="col-12 col-lg-auto mt-3 mt-lg-0">
-					<ul class="list-inline list-inline-dots mb-0">
-						<li class="list-inline-item">
-							Copyright &copy; 2023
-							<a href="/" class="link-secondary">Xinergia</a>
-						</li>
-					</ul>
-				</div>
+			<div class="text-center">
+				<span class="text-muted small">&copy; {{ date('Y') }} <span class="text-main fw-bold">xinergia</span>. Todos los derechos reservados.</span>
 			</div>
 		</div>
 	</footer>
@@ -358,6 +358,36 @@
 	});
 </script>
 @yield('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const toggleBtn = document.getElementById('sidebar-toggle');
+            const body = document.body;
+            const sidebar = document.querySelector('.navbar-vertical');
+            
+            if (toggleBtn) {
+                // Load state
+                if (localStorage.getItem('sidebar-mini') === 'true' || localStorage.getItem('sidebar-mini') === null) {
+                    body.classList.add('sidebar-mini');
+                    localStorage.setItem('sidebar-mini', 'true');
+                }
+                
+                toggleBtn.addEventListener('click', function() {
+                    body.classList.toggle('sidebar-mini');
+                    localStorage.setItem('sidebar-mini', body.classList.contains('sidebar-mini'));
+                });
+            }
+
+            // Sticky Hover logic: Open on hover and STAY open
+            if (sidebar) {
+                sidebar.addEventListener('mouseenter', function() {
+                    if (body.classList.contains('sidebar-mini')) {
+                        body.classList.remove('sidebar-mini');
+                        localStorage.setItem('sidebar-mini', 'false');
+                    }
+                });
+            }
+        });
+    </script>
 </body>
 </html>
 

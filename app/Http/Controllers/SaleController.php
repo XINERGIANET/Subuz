@@ -245,10 +245,6 @@ class SaleController extends Controller
             'paid' => 'required|boolean'
         ]);
 
-        $validator->sometimes('payment_method_id', 'required|integer', function($input){
-            return $input->paid == 1;
-        });
-
         if($validator->fails()){
             return response()->json([
                 'status' => false,
@@ -260,13 +256,6 @@ class SaleController extends Controller
             return response()->json([
                 'status' => false,
                 'error' => 'La venta ya esta marcada como pagada.'
-            ]);
-        }
-
-        if(!$request->paid && !auth()->user()->hasRole('despachador')){
-            return response()->json([
-                'status' => false,
-                'error' => 'Solo el despachador puede marcar pendiente de pago.'
             ]);
         }
 
@@ -282,23 +271,59 @@ class SaleController extends Controller
         DB::transaction(function() use ($request, $sale, $cashbox){
 
             if($request->paid){
+                
+                $payments = $request->payments;
+                $totalPaid = 0;
+                
+                if(!$payments || count($payments) == 0){
+                    throw new \Exception("Debe agregar por lo menos un método de pago.");
+                }
+
+                foreach($payments as $payment){
+                    if(!isset($payment['method_id']) || !isset($payment['amount'])){
+                        throw new \Exception("Datos de pago incompletos.");
+                    }
+                    $totalPaid += floatval($payment['amount']);
+                }
+
+                if(abs($totalPaid - floatval($sale->total)) > 0.01){
+                    throw new \Exception("La suma de los pagos (S/".number_format($totalPaid, 2).") debe ser igual al total de la venta (S/".number_format($sale->total, 2).").");
+                }
+
+                // Update sale as paid
                 $sale->update([
                     'type' => 'Contado',
-                    'payment_method_id' => $request->payment_method_id,
+                    'payment_method_id' => $payments[0]['method_id'], // Use first as primary reference
                     'debt' => 0,
                     'paid' => 1
                 ]);
 
-                CashboxMovement::create([
-                    'cashbox_id' => $cashbox->id,
-                    'sale_id' => $sale->id,
-                    'user_id' => auth()->id(),
-                    'payment_method_id' => $request->payment_method_id,
-                    'type' => 'paid',
-                    'amount' => $sale->total,
-                    'date' => now()
-                ]);
+                // Register all movements and payments
+                foreach($payments as $payment){
+                    Payment::create([
+                        'sale_id' => $sale->id,
+                        'payment_method_id' => $payment['method_id'],
+                        'amount' => $payment['amount'],
+                        'date' => now()
+                    ]);
+
+                    CashboxMovement::create([
+                        'cashbox_id' => $cashbox->id,
+                        'sale_id' => $sale->id,
+                        'user_id' => auth()->id(),
+                        'payment_method_id' => $payment['method_id'],
+                        'type' => 'paid',
+                        'amount' => $payment['amount'],
+                        'date' => now()
+                    ]);
+                }
+
             }else{
+
+                if(!auth()->user()->hasRole('despachador')){
+                    throw new \Exception("Solo el despachador puede marcar pendiente de pago.");
+                }
+
                 $sale->update([
                     'type' => 'Pago pendiente',
                     'payment_method_id' => null,

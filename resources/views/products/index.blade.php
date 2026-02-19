@@ -13,7 +13,7 @@
 <div class="card">
 	<div class="card-header d-flex justify-content-between flex-column flex-sm-row gap-2">
 		<div>
-			<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal">
+			<button class="btn btn-brand" data-bs-toggle="modal" data-bs-target="#createModal">
 				<i class="ti ti-plus icon"></i> Crear nuevo
 			</button>
 		</div>
@@ -30,7 +30,7 @@
 	</div>
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
-			<thead>
+			<thead class="table-corporate-header">
 				<tr>
 					<th>Nombre</th>
 					<th>Precio</th>
@@ -46,10 +46,10 @@
 					<td>
 						<div class="d-flex gap-2">
 							<div class="d-flex gap-2">
-								<button class="btn btn-icon btn-primary btn-edit " data-id="{{ $product->id }}">
+								<button class="btn btn-icon btn-edit-corporate btn-edit " data-id="{{ $product->id }}">
 									<i class="ti ti-pencil icon"></i>
 								</button>
-								<button class="btn btn-icon btn-danger btn-delete" data-id="{{ $product->id }}">
+								<button class="btn btn-icon btn-delete-corporate btn-delete" data-id="{{ $product->id }}">
 									<i class="ti ti-x icon"></i>
 								</button>
 							</div>
@@ -74,31 +74,50 @@
 
 <div class="modal modal-blur fade" id="createModal" tabindex="-1" role="dialog" aria-hidden="true">
 	<div class="modal-dialog modal-dialog-centered" role="document">
-		<div class="modal-content">
+		<div class="modal-content shadow-lg border-0">
 			<form id="storeForm" method="POST">
-				<div class="modal-header">
-					<h5 class="modal-title">Crear nuevo</h5>
+				<div class="modal-header border-0 pb-0">
+					<h5 class="modal-title d-flex align-items-center gap-2 fs-2 fw-bold text-main">
+                        <i class="ti ti-circle-plus text-primary fs-1"></i>
+                        Crear nuevo producto
+                    </h5>
 					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 				</div>
-				<div class="modal-body">
+                <div class="px-3">
+                    <p class="text-muted small mb-0 px-1">Completa los datos para registrar un nuevo producto en el catálogo.</p>
+                </div>
+				<div class="modal-body pt-3">
 					<div class="row">
-						<div class="col-lg-6">
+						<div class="col-lg-12">
 							<div class="mb-3">
-								<label class="form-label">Nombre <span class="text-danger">*</span></label>
-								<input type="text" class="form-control" name="name">
+								<label class="form-label fw-bold">Nombre del Producto <span class="text-danger">*</span></label>
+								<div class="input-icon">
+                                    <span class="input-icon-addon">
+                                        <i class="ti ti-package text-muted"></i>
+                                    </span>
+                                    <input type="text" class="form-control" name="name" placeholder="Ej. Filtro de aire Premium" required>
+                                </div>
 							</div>
 						</div>
-						<div class="col-lg-6">
+						<div class="col-lg-12">
 							<div class="mb-3">
-								<label class="form-label">Precio <span class="text-danger">*</span></label>
-								<input type="text" class="form-control" name="price">
+								<label class="form-label fw-bold">Precio de Venta <span class="text-danger">*</span></label>
+								<div class="input-group">
+                                    <span class="input-group-text bg-light text-muted border-end-0 fw-bold">S/</span>
+                                    <input type="number" step="0.01" class="form-control" name="price" placeholder="0.00" required>
+                                </div>
+                                <div class="form-hint mt-1 small">Ingresa el monto neto en Soles (S/).</div>
 							</div>
 						</div>
 					</div>
 				</div>
-				<div class="modal-footer">
-					<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
-					<button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy icon"></i> Guardar</button>
+				<div class="modal-footer border-0">
+					<button type="button" class="btn btn-ghost-secondary px-4 fw-bold" data-bs-dismiss="modal">
+                        <i class="ti ti-x icon me-1"></i> Cancelar
+                    </button>
+					<button type="submit" class="btn btn-brand px-4 shadow-sm fw-bold">
+                        <i class="ti ti-device-floppy icon me-1"></i> Guardar Producto
+                    </button>
 				</div>
 			</form>
 		</div>
@@ -107,32 +126,50 @@
 
 <div class="modal modal-blur fade" id="editModal" tabindex="-1" role="dialog" aria-hidden="true">
 	<div class="modal-dialog modal-dialog-centered" role="document">
-		<div class="modal-content">
+		<div class="modal-content shadow-lg border-0">
 			<form id="editForm" method="POST">
-				<div class="modal-header">
-					<h5 class="modal-title">Editar</h5>
+				<div class="modal-header border-0 pb-0">
+					<h5 class="modal-title d-flex align-items-center gap-2 fs-2 fw-bold text-main">
+                        <i class="ti ti-edit text-warning fs-1"></i>
+                        Editar producto
+                    </h5>
 					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 				</div>
-				<div class="modal-body">
+                <div class="px-3">
+                    <p class="text-muted small mb-0 px-1">Actualiza la información del producto seleccionado.</p>
+                </div>
+				<div class="modal-body pt-3">
 					<div class="row">
-						<div class="col-lg-6">
+						<div class="col-lg-12">
 							<div class="mb-3">
-								<label class="form-label">Nombre</label>
-								<input type="text" class="form-control" name="name" id="editName">
+								<label class="form-label fw-bold">Nombre del Producto</label>
+								<div class="input-icon">
+                                    <span class="input-icon-addon">
+                                        <i class="ti ti-package text-muted"></i>
+                                    </span>
+                                    <input type="text" class="form-control" name="name" id="editName" required>
+                                </div>
 							</div>
 						</div>
-						<div class="col-lg-6">
+						<div class="col-lg-12">
 							<div class="mb-3">
-								<label class="form-label">Precio</label>
-								<input type="text" class="form-control" name="price" id="editPrice">
+								<label class="form-label fw-bold">Precio de Venta</label>
+								<div class="input-group">
+                                    <span class="input-group-text bg-light text-muted border-end-0 fw-bold">S/</span>
+                                    <input type="number" step="0.01" class="form-control" name="price" id="editPrice" required>
+                                </div>
 							</div>
 						</div>
 					</div>
 				</div>
-				<div class="modal-footer">
+				<div class="modal-footer border-0">
 					<input type="hidden" id="editId">
-					<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
-					<button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy icon"></i> Guardar</button>
+					<button type="button" class="btn btn-ghost-secondary px-4 fw-bold" data-bs-dismiss="modal">
+                        <i class="ti ti-x icon me-1"></i> Cancelar
+                    </button>
+					<button type="submit" class="btn btn-brand px-4 shadow-sm fw-bold">
+                        <i class="ti ti-device-floppy icon me-1"></i> Actualizar Producto
+                    </button>
 				</div>
 			</form>
 		</div>

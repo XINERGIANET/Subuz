@@ -41,7 +41,7 @@
 					<span class="form-check-label">Enviar a correo</span>
 				</label>
 			</div>
-			<button type="submit" class="btn btn-primary"><i class="ti ti-search icon"></i> Generar reporte</button>
+			<button type="submit" class="btn btn-brand"><i class="ti ti-search icon"></i> Generar reporte</button>
 		</form>
 	</div>
 </div>

@@ -15,6 +15,7 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\CashboxController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\PaymentMethodController;
 
 
 Route::get('login', [AuthController::class, 'login'])->name('auth.login');
@@ -36,7 +37,9 @@ Route::middleware('auth')->group(function(){
 
 	Route::middleware('role:admin')->group(function(){
 		Route::get('dashboard/api', [WebController::class, 'dashboard'])->name('dashboard.api');
+		Route::get('dashboard/daily/api', [WebController::class, 'dashboardDaily'])->name('dashboard.daily.api');
 		Route::get('dashboard/product/api', [WebController::class, 'dashboardProduct'])->name('dashboard.product.api');
+		Route::get('dashboard/distribution/api', [WebController::class, 'dashboardDistribution'])->name('dashboard.distribution.api');
 		Route::get('dispatchers', [UserController::class, 'indexDispatchers'])->name('users.dispatchers.index');
 		Route::get('dispatchers/create', [UserController::class, 'createDispatcher'])->name('users.dispatchers.create');
 		Route::post('dispatchers', [UserController::class, 'storeDispatcher'])->name('users.dispatchers.store');
@@ -54,6 +57,8 @@ Route::middleware('auth')->group(function(){
 		Route::resource('clients', ClientController::class)->where(['client' => '[0-9]+']);
 
 		Route::resource('prices', PriceController::class);
+
+		Route::resource('payment_methods', PaymentMethodController::class);
 
 		Route::get('sales/excel', [SaleController::class, 'excel'])->name('sales.excel');
 		Route::resource('sales', SaleController::class)->except(['index', 'show']);

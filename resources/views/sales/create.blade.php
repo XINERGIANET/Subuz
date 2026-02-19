@@ -10,7 +10,7 @@
     <li class="breadcrumb-item active">Crear nuevo</li>
   </ol>
 </nav>
-<div class="card mb-4">
+<div class="card mb-4 card-filter-container">
 	<div class="card-body">
 		<div class="row">
 			<div class="col-lg-3">

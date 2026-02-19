@@ -50,12 +50,12 @@
 					</div>
 				</div>
 			</div>
-			<button type="submit" class="btn btn-primary"><i class="ti ti-filter icon"></i> Filtrar</button>
+			<button type="submit" class="btn btn-brand"><i class="ti ti-filter icon"></i> Filtrar</button>
 		</form>
 	</div>
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
-			<thead>
+			<thead class="table-corporate-header">
 				<tr>
 					<th>#</th>
 					<th>Cliente</th>
