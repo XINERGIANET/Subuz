@@ -17,7 +17,7 @@ class ExpenseController extends Controller
             return $query->whereMonth('date', $month);
         })->when($request->year, function($query, $year){
             return $query->whereYear('date', $year);
-        })->paginate(10);
+        })->latest('date')->paginate(10);
         $payment_methods = PaymentMethod::all();
         $total_expenses = $expenses->sum('amount');
         return view('expenses.index', compact('expenses', 'payment_methods', 'total_expenses'));
@@ -27,8 +27,9 @@ class ExpenseController extends Controller
 
         $validator = Validator::make($request->all(), [
             'description' => 'required',
-            'amount' => 'required|numeric',
-            'payment_method_id' => 'required|numeric'
+            'payments' => 'required|array',
+            'payments.*.method_id' => 'required|numeric',
+            'payments.*.amount' => 'required|numeric|min:0.01'
         ]);
 
         if($validator->fails()){
@@ -38,9 +39,18 @@ class ExpenseController extends Controller
             ]);
         }
 
-        $request->merge(['date' => now()->format('Y-m-d H:i:s')]);
+        $date = now()->format('Y-m-d H:i:s');
 
-        Expense::create($request->all());
+        DB::transaction(function() use ($request, $date){
+            foreach($request->payments as $payment){
+                Expense::create([
+                    'description' => $request->description,
+                    'amount' => $payment['amount'],
+                    'payment_method_id' => $payment['method_id'],
+                    'date' => $date
+                ]);
+            }
+        });
 
         return response()->json([
             'status' => true
@@ -48,14 +58,28 @@ class ExpenseController extends Controller
     }
 
     public function edit(Request $request, Expense $expense){
-        return response()->json($expense);
+        $payments = Expense::where('description', $expense->description)
+            ->where('date', $expense->date)
+            ->get();
+
+        return response()->json([
+            'id' => $expense->id,
+            'description' => $expense->description,
+            'payments' => $payments->map(function($p){
+                return [
+                    'method_id' => $p->payment_method_id,
+                    'amount' => $p->amount
+                ];
+            })
+        ]);
     }
 
     public function update(Request $request, Expense $expense){
         $validator = Validator::make($request->all(), [
             'description' => 'required',
-            'amount' => 'required|numeric',
-            'payment_method_id' => 'required|numeric'
+            'payments' => 'required|array',
+            'payments.*.method_id' => 'required|numeric',
+            'payments.*.amount' => 'required|numeric|min:0.01'
         ]);
 
         if($validator->fails()){
@@ -65,7 +89,21 @@ class ExpenseController extends Controller
             ]);
         }
 
-        $expense->update($request->all());
+        DB::transaction(function() use ($request, $expense){
+            // Group update: delete all existing parts of this expense
+            Expense::where('description', $expense->description)
+                ->where('date', $expense->date)
+                ->delete();
+
+            foreach($request->payments as $payment){
+                Expense::create([
+                    'description' => $request->description,
+                    'amount' => $payment['amount'],
+                    'payment_method_id' => $payment['method_id'],
+                    'date' => $expense->date // Keep original date
+                ]);
+            }
+        });
 
         return response()->json([
             'status' => true
@@ -73,7 +111,9 @@ class ExpenseController extends Controller
     }
 
     public function destroy(Request $request, Expense $expense){
-        $expense->delete();
+        Expense::where('description', $expense->description)
+            ->where('date', $expense->date)
+            ->delete();
 
         return response()->json([
             'status' => true

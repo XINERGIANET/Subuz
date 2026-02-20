@@ -49,6 +49,16 @@
 						<input type="date" class="form-control" name="end_date" value="{{ request()->end_date }}">
 					</div>
 				</div>
+				<div class="col-lg-3">
+					<div class="mb-3">
+						<label class="form-label">Tipo de venta</label>
+						<select class="form-select" name="type">
+							<option value="">Seleccionar</option>
+							<option value="Contado" {{ request()->type == 'Contado' ? 'selected' : '' }}>Contado</option>
+							<option value="Credito" {{ request()->type == 'Credito' ? 'selected' : '' }}>Crédito</option>
+						</select>
+					</div>
+				</div>
 			</div>
 			<button type="submit" class="btn btn-brand"><i class="ti ti-filter icon"></i> Filtrar</button>
 		</form>

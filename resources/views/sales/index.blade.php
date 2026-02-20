@@ -20,7 +20,7 @@
 				<i class="ti ti-download icon"></i> Excel
 			</a>
 			@endif
-			@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('despachador'))
+			@if(auth()->user()->hasRole('admin'))
 			<div class="mt-2">
 				@if($cashbox)
 				<span class="badge bg-success">Caja abierta</span>
@@ -58,7 +58,7 @@
 						<select class="form-select" name="type">
 							<option value="">Seleccionar</option>
 							<option value="Contado" {{ request()->type == 'Contado' ? 'selected' : '' }}>Contado</option>
-							<option value="Credito" {{ request()->type == 'Credito' ? 'selected' : '' }}>CrÃ©dito</option>
+							<option value="Credito" {{ request()->type == 'Credito' ? 'selected' : '' }}>Crédito</option>
 							<option value="Pago pendiente" {{ request()->type == 'Pago pendiente' ? 'selected' : '' }}>Pago pendiente</option>
 						</select>
 					</div>
@@ -90,7 +90,7 @@
 					<th>Tipo de venta</th>
 					<th>Método de pago</th>
 					<th>Cliente</th>
-					<th>Distrito</th>
+					<th>Estado</th>
 					<th>Total</th>
 					<th>Pagado</th>
 					<th>Acción</th>
@@ -106,7 +106,23 @@
 					<td>{{ $sale->type }}</td>
 					<td>{{ $sale->payment_method ? optional($sale->payment_method)->name : 'N/A' }}</td>
 					<td>{{ optional($sale->client)->name }}</td>
-					<td>{{ optional($sale->client)->district }}</td>
+					<td>
+						@php
+							$isDelivered = $sale->paid || $sale->type == 'Pago pendiente' || $sale->movements->where('type', 'debt')->isNotEmpty();
+						@endphp
+						@if(auth()->user()->hasRole('despachador') && ($sale->type == 'Credito' || $sale->type == 'Contado' || $sale->type == 'Pago pendiente') && !$sale->paid)
+							<select class="form-select form-select-sm select-delivery-status" data-id="{{ $sale->id }}">
+								<option value="0" {{ !$isDelivered ? 'selected' : '' }}>No entregado</option>
+								<option value="1" {{ $isDelivered ? 'selected' : '' }}>Entregado</option>
+							</select>
+						@else
+							@if($isDelivered)
+							<span class="badge bg-success-lt">Entregado</span>
+							@else
+							<span class="badge bg-warning-lt">No entregado</span>
+							@endif
+						@endif
+					</td>
 					<td>S/{{ $sale->total }}</td>
 					<td>
 						@if($sale->paid)
@@ -117,19 +133,19 @@
 					</td>
 					<td>
 						<div class="d-flex gap-2">
-							<button class="btn btn-icon btn-show" data-id="{{ $sale->id }}">
+							<button class="btn btn-icon btn-show" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Imprimir">
 								<i class="ti ti-printer icon"></i>
 							</button>
-							@if(auth()->user()->hasRole('despachador') && !$sale->paid)
-							<button class="btn btn-icon btn-dispatch" data-id="{{ $sale->id }}" data-guide="{{ $sale->guide }}" data-total="{{ $sale->total }}">
+							@if(auth()->user()->hasRole('despachador') && !$sale->paid && $sale->type != 'Credito' && $sale->type != 'Pago pendiente')
+							<button class="btn btn-icon btn-dispatch" data-id="{{ $sale->id }}" data-guide="{{ $sale->guide }}" data-total="{{ $sale->total }}" data-bs-toggle="tooltip" title="Despachar">
 								<i class="ti ti-check icon"></i>
 							</button>
 							@endif
 							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
-							<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $sale->id }}">
+							<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Editar">
 								<i class="ti ti-edit icon"></i>
 							</button>
-							<button class="btn btn-icon btn-delete-corporate btn-delete" data-id="{{ $sale->id }}">
+							<button class="btn btn-icon btn-delete-corporate btn-delete" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Eliminar">
 								<i class="ti ti-trash icon"></i>
 							</button>
 							@endif
@@ -592,6 +608,32 @@
 			}
 		});
 	});
+	$(document).on('change', '.select-delivery-status', function(){
+		var id = $(this).data('id');
+		var status = $(this).val();
+
+		$.ajax({
+			url: '{{ route('sales.index') }}' + '/' + id + '/delivery-status',
+			method: 'POST',
+			data: {
+				status: status
+			},
+			success: function(data){
+				if(data.status){
+					ToastMessage.fire({ text: 'Estado actualizado' })
+						.then(() => location.reload());
+				}else{
+					ToastError.fire({ text: data.error ? data.error : 'Ocurrió un error' });
+					location.reload();
+				}
+			},
+			error: function(err){
+				ToastError.fire({ text: 'Ocurrió un error al actualizar el estado' });
+				location.reload();
+			}
+		});
+	});
+
 </script>
 @endsection
 

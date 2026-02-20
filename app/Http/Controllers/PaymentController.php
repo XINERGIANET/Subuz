@@ -98,44 +98,38 @@ class PaymentController extends Controller
                         ]);
                     }
 
-                }elseif($request->type == 'Pago pendiente'){
+                }elseif($request->type == 'Pago pendiente' || $request->type == 'Contado'){
                     
-                    // For pending payment, we usually expect full payment. 
-                    // If multiple payments were sent (which shouldn't happen based on current UI for pending), handle it?
-                    // But legacy UI sends single payment_method_id. 
-                    // Let's assume we use the first payment method if multiple are sent, 
-                    // OR distribute the total if logic required, but for now specific logic for Pending:
-                    
-                    // The standard pending payment workflow pays the ENTIRE total.
-                    // The request->amount is usually ignored or overwritten by total.
-                    
-                    // However, if we want to allow split payment for Pending too later, 
-                    // we'd need to change this logic. But for now, user asked for "Cobranza de Crédito".
-                    // So let's keep Pending as "Pay Full Amount" using the first method provided.
+                    $totalAmount = floatval(collect($request->payments)->sum('amount'));
 
-                    $paymentMethodId = $request->payments[0]['payment_method_id']; // Use first method
+                    // For pending/cash, we expect the FULL amount to be paid to clear it.
+                    if(abs($totalAmount - floatval($sale->total)) > 0.01){
+                        throw new \Exception("La suma de los pagos (S/".number_format($totalAmount, 2).") debe ser igual al total de la venta (S/".number_format($sale->total, 2).").");
+                    }
 
                     $sale->update([
                         'debt' => 0,
                         'paid' => 1
                     ]);
 
-                    Payment::create([
-                        'sale_id' => $sale->id,
-                        'payment_method_id' => $paymentMethodId,
-                        'amount' => $sale->total,
-                        'date' => now()
-                    ]);
+                    foreach($request->payments as $paymentData){
+                        Payment::create([
+                            'sale_id' => $sale->id,
+                            'payment_method_id' => $paymentData['payment_method_id'],
+                            'amount' => $paymentData['amount'],
+                            'date' => now()
+                        ]);
 
-                    CashboxMovement::create([
-                        'cashbox_id' => $cashbox->id,
-                        'sale_id' => $sale->id,
-                        'user_id' => auth()->id(),
-                        'payment_method_id' => $paymentMethodId,
-                        'type' => 'paid',
-                        'amount' => $sale->total,
-                        'date' => now()
-                    ]);
+                        CashboxMovement::create([
+                            'cashbox_id' => $cashbox->id,
+                            'sale_id' => $sale->id,
+                            'user_id' => auth()->id(),
+                            'payment_method_id' => $paymentData['payment_method_id'],
+                            'type' => 'paid',
+                            'amount' => $paymentData['amount'],
+                            'date' => now()
+                        ]);
+                    }
                 }
             });
 

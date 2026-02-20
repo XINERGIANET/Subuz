@@ -40,12 +40,10 @@ class ChargeController extends Controller
 
     public function pending(Request $request){
         $payment_methods = PaymentMethod::all();
-        $total = Sale::where('type', 'Pago pendiente')->where('paid', 0)->sum('total');
+        $query = Sale::whereIn('type', ['Contado', 'Pago pendiente'])->where('paid', 0);
+        $total = $query->sum('total');
         
-        $sales = Sale::where([
-            ['type', 'Pago pendiente'],
-            ['paid', 0]
-        ])->latest('date')->paginate(10);
+        $sales = $query->latest('date')->paginate(10);
 
         return view('charges.pending', compact('sales', 'payment_methods', 'total'));
     }
@@ -60,6 +58,10 @@ class ChargeController extends Controller
             return $query->whereDate('date', '>=', $start_date);
         })->when($request->end_date, function($query, $end_date){
             return $query->whereDate('date', '<=', $end_date);
+        })->when($request->type, function($query, $type){
+            return $query->whereHas('sale', function($query) use ($type){
+                return $query->where('type', $type);
+            });
         })->latest('date');
         
         $total = $payments->sum('amount');

@@ -61,7 +61,7 @@
 					<th>Guía de remisión</th>
 					<th>Fecha</th>
 					<th>Cliente</th>
-					<th>Distrito</th>
+					<th>Estado</th>
 					<th>Pagos</th>
 					<th>Total</th>
 					<th>Deuda</th>
@@ -75,7 +75,13 @@
 					<td>{{ $sale->guide }}</td>
 					<td>{{ $sale->date->format('d/m/Y') }}</td>
 					<td>{{ optional($sale->client)->name }}</td>
-					<td>{{ optional($sale->client)->district }}</td>
+					<td>
+						@if($sale->paid || $sale->type == 'Pago pendiente')
+						<span class="badge bg-success-lt">Entregado</span>
+						@else
+						<span class="badge bg-warning-lt">No entregado</span>
+						@endif
+					</td>
 					<td>
 						<div class="d-flex flex-column gap-1 align-items-start">
 							@foreach($sale->payments as $payment)
@@ -91,7 +97,7 @@
 					<td>
 						<div class="d-flex gap-2">
 							@if(auth()->user()->hasRole('admin'))
-							<button class="btn btn-icon btn-brand btn-payment" data-id="{{ $sale->id }}" data-debt="{{ $sale->debt }}">
+							<button class="btn btn-icon btn-brand btn-payment" data-id="{{ $sale->id }}" data-debt="{{ $sale->debt }}" data-bs-toggle="tooltip" title="Registrar Pago">
 								<i class="ti ti-cash icon"></i>
 							</button>
 							@endif

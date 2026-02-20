@@ -20,7 +20,7 @@ class SaleController extends Controller
 {
     public function index(Request $request){
         if($request->start_date || $request->end_date){
-            $sales = Sale::with(['payment_method', 'client'])
+            $sales = Sale::with(['payment_method', 'client', 'movements'])
                 ->when($request->client_id, function($query, $client_id){
                     return $query->where('client_id', $client_id);
                 })
@@ -325,7 +325,7 @@ class SaleController extends Controller
                 }
 
                 $sale->update([
-                    'type' => 'Pago pendiente',
+                    'type' => $sale->type,
                     'payment_method_id' => null,
                     'debt' => $sale->total,
                     'paid' => 0
@@ -347,5 +347,31 @@ class SaleController extends Controller
             'status' => true
         ]);
     }
-    
+
+    public function updateDeliveryStatus(Request $request, Sale $sale)
+    {
+        $status = $request->status; // 1 = Entregado, 0 = No entregado
+
+        if ($status == 1) {
+            // Confirm delivery without payment (mark as Pago pendiente)
+            return $this->markDispatch($request->merge(['paid' => 0]), $sale);
+        } else {
+            // Revert delivery (return to Credito)
+            DB::transaction(function() use ($sale) {
+                // Delete debt movement if it exists
+                CashboxMovement::where('sale_id', $sale->id)
+                    ->where('type', 'debt')
+                    ->delete();
+                
+                $sale->update([
+                    'type' => $sale->type,
+                    'paid' => 0,
+                    'debt' => $sale->total,
+                    'payment_method_id' => null
+                ]);
+            });
+
+            return response()->json(['status' => true]);
+        }
+    }
 }

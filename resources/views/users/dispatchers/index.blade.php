@@ -36,13 +36,13 @@
 					<td>{{ $dispatcher->user }}</td>
 					<td>
 						<div class="d-flex gap-2">
-							<a class="btn btn-icon btn-edit-corporate" href="{{ route('users.dispatchers.edit', $dispatcher) }}">
+							<a class="btn btn-icon btn-edit-corporate" href="{{ route('users.dispatchers.edit', $dispatcher) }}" data-bs-toggle="tooltip" title="Editar">
 								<i class="ti ti-edit icon"></i>
 							</a>
 							<form method="POST" action="{{ route('users.dispatchers.destroy', $dispatcher) }}" onsubmit="return confirm('Eliminar usuario?');">
 								@csrf
 								@method('DELETE')
-								<button class="btn btn-icon btn-delete-corporate" type="submit">
+								<button class="btn btn-icon btn-delete-corporate" type="submit" data-bs-toggle="tooltip" title="Eliminar">
 									<i class="ti ti-trash icon"></i>
 								</button>
 							</form>

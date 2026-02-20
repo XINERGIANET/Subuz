@@ -57,10 +57,10 @@
 					<td>
 						<div class="d-flex gap-2">
 							<div class="d-flex gap-2">
-								<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $client->id }}">
+								<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $client->id }}" data-bs-toggle="tooltip" title="Editar">
 									<i class="ti ti-pencil icon"></i>
 								</button>
-								<button class="btn btn-icon btn-delete-corporate btn-delete" data-id="{{ $client->id }}">
+								<button class="btn btn-icon btn-delete-corporate btn-delete" data-id="{{ $client->id }}" data-bs-toggle="tooltip" title="Eliminar">
 									<i class="ti ti-x icon"></i>
 								</button>
 							</div>

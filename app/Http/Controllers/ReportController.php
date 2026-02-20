@@ -24,7 +24,8 @@ class ReportController extends Controller
     public function pdf(Request $request){
         $data = $request->validate([
             'client_id' => 'required|integer|exists:clients,id',
-            'date' => 'required|date',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
             'payment_date' => 'nullable|date',
             'send_mail' => 'nullable|boolean',
         ]);
@@ -32,10 +33,6 @@ class ReportController extends Controller
         $fpdf = new Fpdf;
 
         $client = Client::find($data['client_id']);
-        $week = Week::where([
-            ['number', date('W', strtotime($data['date']))],
-            ['year', date('Y', strtotime($data['date']))]
-        ])->first();
 
         if(!$client){
             return redirect()->back()->with('error', 'El cliente seleccionado no existe');
@@ -44,34 +41,17 @@ class ReportController extends Controller
         $start_date = $request->start_date;
         $end_date = $request->end_date;
 
-        if($start_date && $end_date){
-            $sales = Sale::where([
-                ['type', 'Credito'],
-                ['client_id', $client->id]
-            ])->whereBetween('date', [$start_date . ' 00:00:00', $end_date . ' 23:59:59'])->get();
-        }else{
-            $sales = Sale::where([
-                ['type', 'Credito'],
-                ['client_id', $client->id]
-            ])->get();
-        }
+        $sales = Sale::where([
+            ['type', 'Credito'],
+            ['client_id', $client->id]
+        ])->whereBetween('date', [$start_date . ' 00:00:00', $end_date . ' 23:59:59'])->get();
 
         if($sales->count() == 0){
             return redirect()->back()->with('error', 'No existen registros de ventas');
         }
 
         $total = $sales->sum('total');
-        $paymentDate = $data['payment_date'] ?? $data['date'];
-
-        if(($data['send_mail'] ?? false) && $client->email){
-            $request_data = [
-                'client_id' => $data['client_id'],
-                'date' => $data['date'],
-                'payment_date' => $paymentDate
-            ];
-
-            Mail::to($client->email)->send(new ReportLiquidation($client, $week, $request_data));
-        }
+        $paymentDate = $data['payment_date'] ?? $end_date;
 
         $fpdf->AddPage();
         $fpdf->AddFont('Montserrat', '');

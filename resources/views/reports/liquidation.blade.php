@@ -41,12 +41,7 @@
 					</div>
 				</div>
 			</div>
-			<div class="mb-3">
-				<label class="form-check form-switch">
-					<input class="form-check-input" type="checkbox" name="send_mail" value="1">
-					<span class="form-check-label">Enviar a correo</span>
-				</label>
-			</div>
+
 			<button type="submit" class="btn btn-brand"><i class="ti ti-search icon"></i> Generar reporte</button>
 		</form>
 	</div>
