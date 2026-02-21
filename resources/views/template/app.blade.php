@@ -197,9 +197,6 @@
 										<a class="dropdown-item" href="{{ route('charges.pending') }}">
 											<i class="ti ti-clock icon me-2"></i> Pendiente de pago
 										</a>
-										<a class="dropdown-item" href="{{ route('charges.history') }}">
-											<i class="ti ti-history icon me-2"></i> Historial
-										</a>
 									</div>
 								</div>
 							</div>

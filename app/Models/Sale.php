@@ -19,7 +19,8 @@ class Sale extends Model
         'client_id',
         'total',
         'debt',
-        'paid'
+        'paid',
+        'status'
     ];
 
     protected $dates = ['date'];

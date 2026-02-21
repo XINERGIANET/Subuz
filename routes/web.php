@@ -62,12 +62,15 @@ Route::middleware('auth')->group(function(){
 		Route::resource('payment_methods', PaymentMethodController::class);
 
 		Route::get('sales/excel', [SaleController::class, 'excel'])->name('sales.excel');
-		Route::resource('sales', SaleController::class)->except(['index', 'show']);
 
 		Route::get('cart', [CartController::class, 'index'])->name('cart.index');
 		Route::post('cart', [CartController::class, 'store'])->name('cart.store');
 		Route::patch('cart', [CartController::class, 'update'])->name('cart.update');
 		Route::delete('destroy', [CartController::class, 'destroy'])->name('cart.destroy');
+	});
+
+	Route::middleware('role:admin|seller|despachador')->group(function(){
+		Route::resource('sales', SaleController::class)->except(['index', 'show']);
 	});
 
 	Route::middleware('role:admin|viewer')->group(function(){
@@ -91,6 +94,7 @@ Route::middleware('auth')->group(function(){
 		Route::get('cashbox', [CashboxController::class, 'index'])->name('cashbox.index');
 		Route::post('cashbox/open', [CashboxController::class, 'open'])->name('cashbox.open');
 		Route::post('cashbox/close', [CashboxController::class, 'close'])->name('cashbox.close');
+		Route::post('cashbox/income', [CashboxController::class, 'storeIncome'])->name('cashbox.income');
 	});
 
 });

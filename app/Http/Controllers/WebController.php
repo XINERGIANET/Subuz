@@ -10,6 +10,7 @@ use App\Models\SaleDetail;
 use App\Models\Expense;
 use App\Models\Payment;
 use App\Models\PaymentMethod;
+use App\Models\CashboxMovement;
 
 class WebController extends Controller
 {
@@ -36,6 +37,13 @@ class WebController extends Controller
         })->when($request->end_date, function($query, $end_date){
             return $query->whereDate('date', '<=', $end_date);
         })->sum('amount');
+        $manual_income = CashboxMovement::where('type', 'income')
+            ->when($request->start_date, function($query, $start_date){
+                return $query->whereDate('date', '>=', $start_date);
+            })->when($request->end_date, function($query, $end_date){
+                return $query->whereDate('date', '<=', $end_date);
+            })->sum('amount');
+
         $revenues = $sales - $expenses;
         $pending = Sale::when($request->start_date, function($query, $start_date){
             return $query->whereDate('date', '>=', $start_date);
@@ -43,23 +51,19 @@ class WebController extends Controller
             return $query->whereDate('date', '<=', $end_date);
         })->where('paid', 0)->sum('total');
 
-        $payments_query = Payment::when($request->start_date, function($query, $start_date){
-            return $query->whereDate('date', '>=', $start_date);
-        })->when($request->end_date, function($query, $end_date){
-            return $query->whereDate('date', '<=', $end_date);
-        });
-
-        $global_income = Payment::sum('amount');
+        $global_payments = Payment::sum('amount');
+        $global_manual_income = CashboxMovement::where('type', 'income')->sum('amount');
         $global_expense = Expense::sum('amount');
-        $total_balance = $global_income - $global_expense;
+        $total_balance = ($global_payments + $global_manual_income) - $global_expense;
         
         $payment_methods_data = PaymentMethod::all();
         $methods_totals = [];
         
         foreach($payment_methods_data as $method) {
-            $income = Payment::where('payment_method_id', $method->id)->sum('amount');
+            $payments = Payment::where('payment_method_id', $method->id)->sum('amount');
+            $manual = CashboxMovement::where('type', 'income')->where('payment_method_id', $method->id)->sum('amount');
             $expense = Expense::where('payment_method_id', $method->id)->sum('amount');
-            $balance = $income - $expense;
+            $balance = ($payments + $manual) - $expense;
 
             $methods_totals[] = [
                 'name' => $method->name,
@@ -98,6 +102,7 @@ class WebController extends Controller
         return response()->json([
             'sales' => number_format($sales, 2),
             'expenses' => number_format($expenses, 2),
+            'manual_income' => number_format($manual_income, 2),
             'revenues' => number_format($revenues, 2),
             'pending' => number_format($pending, 2),
             'total_balance' => number_format($total_balance, 2),

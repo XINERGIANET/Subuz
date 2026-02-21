@@ -3,166 +3,204 @@
 @section('title', 'Ventas')
 
 @section('content')
-<nav class="mb-2">
+<nav class="mb-3">
   <ol class="breadcrumb">
     <li class="breadcrumb-item"><a href="{{ url('/') }}">Inicio</a></li>
     <li class="breadcrumb-item active">Ventas</li>
   </ol>
 </nav>
-<div class="card">
-	<div class="card-header d-flex justify-content-between flex-column flex-sm-row gap-2">
-		<div>
-			@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
-			<a class="btn btn-brand" href="{{ route('sales.create') }}">
-				<i class="ti ti-plus icon"></i> Crear nuevo
-			</a>
-			<a class="btn btn-success" href="{{ route('sales.excel') }}">
-				<i class="ti ti-download icon"></i> Excel
-			</a>
-			@endif
-			@if(auth()->user()->hasRole('admin'))
-			<div class="mt-2">
-				@if($cashbox)
-				<span class="badge bg-success">Caja abierta</span>
-				@else
-				<span class="badge bg-danger">Caja cerrada</span>
-				@endif
-				<a class="btn btn-outline-secondary btn-sm" href="{{ route('cashbox.index') }}">Ir a caja</a>
-			</div>
-			@endif
-		</div>
-		<div class="text-center">
-			<span class="d-block small">
-				Tienes un total de
-			</span>
-			<span class="fs-2 fw-bold text-primary">
-					S/{{ number_format($total_sales, 2) }}
-				</span>
-		</div>
-	</div>
+
+<div class="row row-cards mb-4">
+    <div class="col-md-4">
+        <div class="card metric-card border-0 shadow-sm overflow-hidden">
+            <div class="card-status-start bg-primary"></div>
+            <div class="card-body p-3">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <div class="bg-primary-lt text-primary avatar avatar-md">
+                            <i class="ti ti-shopping-cart fs-2"></i>
+                        </div>
+                    </div>
+                    <div class="col text-truncate">
+                        <div class="text-uppercase text-muted small fw-bold">Total Ventas del Periodo</div>
+                        <div class="h2 mb-0 fw-bold text-primary">S/{{ number_format($total_sales, 2) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    @if(auth()->user()->hasRole('admin'))
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-uppercase text-muted small fw-bold">Estado de Caja</div>
+                    <div class="mt-1">
+                        @if($cashbox)
+                        <span class="badge bg-success-lt fw-bold px-2 py-1"><i class="ti ti-circle-check me-1"></i> ABIERTA</span>
+                        @else
+                        <span class="badge bg-danger-lt fw-bold px-2 py-1"><i class="ti ti-circle-x me-1"></i> CERRADA</span>
+                        @endif
+                    </div>
+                </div>
+                <div class="d-flex flex-column align-items-end">
+                    <a class="btn btn-primary btn-sm px-3 py-2 fw-bold shadow-sm" href="{{ route('cashbox.index') }}">
+                        <i class="ti ti-external-link me-2 fs-3"></i> Gestionar Caja
+                    </a>
+                    <span class="extra-small text-muted mt-1 italic">Click para ver movimientos y cierres</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endif
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header border-0 py-3 d-flex justify-content-between align-items-center">
+        <h3 class="card-title fw-bold"><i class="ti ti-filter me-2"></i>Filtros de Búsqueda</h3>
+        <div class="d-flex gap-2">
+            @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
+            <a class="btn btn-brand btn-pill px-4 shadow-sm" href="{{ route('sales.create') }}">
+                <i class="ti ti-plus me-1 fs-3"></i> Nueva Venta
+            </a>
+            <a class="btn btn-success btn-pill px-4 shadow-sm" href="{{ route('sales.excel') }}">
+                <i class="ti ti-file-spreadsheet me-1 fs-3"></i> Exportar
+            </a>
+            @endif
+        </div>
+    </div>
 	@if(!auth()->user()->hasRole('despachador'))
-	<div class="card-body border-bottom">
-		<form class="mb-3">
-			<div class="row">
-				<div class="col-lg-3">
-					<div class="mb-3">
-						<label class="form-label">Cliente</label>
-						<select class="form-select ts-clients" name="client_id">
-							<option value="">Seleccionar</option>
-						</select>
-					</div>
+	<div class="card-body bg-white py-3 border-bottom border-top">
+		<form>
+			<div class="row g-3 align-items-end">
+				<div class="col-md-3">
+					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Cliente</label>
+					<select class="form-select ts-clients" name="client_id">
+						<option value="">Seleccionar cliente</option>
+					</select>
 				</div>
-				<div class="col-lg-3">
-					<div class="mb-3">
-						<label class="form-label">Tipo de venta</label>
-						<select class="form-select" name="type">
-							<option value="">Seleccionar</option>
-							<option value="Contado" {{ request()->type == 'Contado' ? 'selected' : '' }}>Contado</option>
-							<option value="Credito" {{ request()->type == 'Credito' ? 'selected' : '' }}>Crédito</option>
-							<option value="Pago pendiente" {{ request()->type == 'Pago pendiente' ? 'selected' : '' }}>Pago pendiente</option>
-						</select>
-					</div>
+				<div class="col-md-2">
+					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Tipo de venta</label>
+					<select class="form-select text-dark" name="type">
+						<option value="">Todos</option>
+						<option value="Contado" {{ request()->type == 'Contado' ? 'selected' : '' }}>Contado</option>
+						<option value="Credito" {{ request()->type == 'Credito' ? 'selected' : '' }}>Crédito</option>
+						<option value="Pago pendiente" {{ request()->type == 'Pago pendiente' ? 'selected' : '' }}>Pago pendiente</option>
+					</select>
 				</div>
-				<div class="col-lg-3">
-					<div class="mb-3">
-						<label class="form-label">Fecha desde</label>
-						<input type="date" class="form-control" name="start_date" value="{{ request()->start_date ? request()->start_date : now()->format('Y-m-d') }}">
-					</div>
+				<div class="col-md-2">
+					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Desde</label>
+					<input type="date" class="form-control" name="start_date" value="{{ request()->start_date ? request()->start_date : now()->format('Y-m-d') }}">
 				</div>
-				<div class="col-lg-3">
-					<div class="mb-3">
-						<label class="form-label">Fecha hasta</label>
-						<input type="date" class="form-control" name="end_date" value="{{ request()->end_date ? request()->end_date : now()->format('Y-m-d') }}">
-					</div>
+				<div class="col-md-2">
+					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Hasta</label>
+					<input type="date" class="form-control" name="end_date" value="{{ request()->end_date ? request()->end_date : now()->format('Y-m-d') }}">
 				</div>
+                <div class="col-md-1">
+			        <button type="submit" class="btn btn-brand w-100 py-2 fw-bold"><i class="ti ti-search fs-3"></i></button>
+                </div>
+                <div class="col-md-2 text-md-end">
+                    <a href="{{ route('sales.index') }}" class="btn btn-outline-secondary w-100 py-2 fw-medium">
+                        <i class="ti ti-refresh icon me-1"></i> Limpiar
+                    </a>
+                </div>
 			</div>
-			<button type="submit" class="btn btn-brand"><i class="ti ti-filter icon"></i> Filtrar</button>
 		</form>
 	</div>
 	@endif
+</div>
+
+<div class="card border-0 shadow-sm overflow-hidden">
+    <div class="card-header border-0 py-3">
+        <h3 class="card-title fw-bold"><i class="ti ti-list me-2"></i>Historial de Ventas</h3>
+    </div>
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
 			<thead class="table-corporate-header">
 				<tr>
-					<th>#</th>
-					<th>Guía de remisión</th>
+					<th width="50">#</th>
+					<th>Guía</th>
 					<th>Fecha</th>
-					<th>Tipo de venta</th>
-					<th>Método de pago</th>
+					<th class="text-center">Tipo</th>
 					<th>Cliente</th>
-					<th>Estado</th>
-					<th>Total</th>
-					<th>Pagado</th>
-					<th>Acción</th>
+					<th class="text-center">Despacho</th>
+					<th class="text-center">Pago</th>
+					<th class="text-center">Total</th>
+					<th class="text-end">Acciones</th>
 				</tr>
 			</thead>
 			<tbody>
-				@if($sales->count() > 0)
-				@foreach($sales as $sale)
+				@forelse($sales as $sale)
 				<tr>
-					<td>{{ $loop->iteration }}</td>
-					<td>{{ $sale->guide }}</td>
-					<td>{{ $sale->date->format('d/m/Y') }}</td>
-					<td>{{ $sale->type }}</td>
-					<td>{{ $sale->payment_method ? optional($sale->payment_method)->name : 'N/A' }}</td>
-					<td>{{ optional($sale->client)->name }}</td>
-					<td>
+					<td class="text-muted">{{ $loop->iteration }}</td>
+					<td class="fw-bold text-dark">{{ $sale->guide }}</td>
+					<td class="small">{{ $sale->date->format('d/m/Y') }}</td>
+					<td class="text-center">
+                        <span class="badge @if($sale->type=='Contado') bg-azure-lt @elseif($sale->type=='Credito') bg-purple-lt @else bg-orange-lt @endif px-2">
+                            {{ $sale->type }}
+                        </span>
+                    </td>
+					<td class="fw-medium text-dark">{{ optional($sale->client)->name ?? 'Consumidor Final' }}</td>
+					<td class="text-center">
 						@php
 							$isDelivered = $sale->paid || $sale->type == 'Pago pendiente' || $sale->movements->where('type', 'debt')->isNotEmpty();
 						@endphp
-						@if(auth()->user()->hasRole('despachador') && ($sale->type == 'Credito' || $sale->type == 'Contado' || $sale->type == 'Pago pendiente') && !$sale->paid)
-							<select class="form-select form-select-sm select-delivery-status" data-id="{{ $sale->id }}">
-								<option value="0" {{ !$isDelivered ? 'selected' : '' }}>No entregado</option>
-								<option value="1" {{ $isDelivered ? 'selected' : '' }}>Entregado</option>
-							</select>
-						@else
-							@if($isDelivered)
+						@if($sale->status == 'Anulado')
+							<span class="badge bg-danger-lt">Anulado</span>
+						@elseif($isDelivered)
 							<span class="badge bg-success-lt">Entregado</span>
-							@else
-							<span class="badge bg-warning-lt">No entregado</span>
-							@endif
-						@endif
-					</td>
-					<td>S/{{ $sale->total }}</td>
-					<td>
-						@if($sale->paid)
-						<span class="badge bg-success"><i class="ti ti-check"></i></span>
 						@else
-						<span class="badge bg-danger"><i class="ti ti-x"></i></span>
+							<span class="badge bg-warning-lt">No entregado</span>
 						@endif
 					</td>
-					<td>
-						<div class="d-flex gap-2">
-							<button class="btn btn-icon btn-show" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Imprimir">
-								<i class="ti ti-printer icon"></i>
+					<td class="text-center">
+						@if($sale->status == 'Anulado')
+							<span class="text-muted"><i class="ti ti-minus"></i></span>
+						@elseif($sale->paid)
+							<span class="text-success"><i class="ti ti-circle-check fs-2"></i></span>
+						@else
+							<span class="text-danger"><i class="ti ti-circle-x fs-2"></i></span>
+						@endif
+					</td>
+					<td class="text-center fw-extrabold text-primary">S/{{ number_format($sale->total, 2) }}</td>
+					<td class="text-end">
+						<div class="d-flex justify-content-end gap-1">
+							<button class="btn btn-icon btn-outline-primary btn-sm btn-show" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Imprimir">
+								<i class="ti ti-printer fs-2"></i>
 							</button>
-							@if(auth()->user()->hasRole('despachador') && !$sale->paid && $sale->type != 'Credito' && $sale->type != 'Pago pendiente')
-							<button class="btn btn-icon btn-dispatch" data-id="{{ $sale->id }}" data-guide="{{ $sale->guide }}" data-total="{{ $sale->total }}" data-bs-toggle="tooltip" title="Despachar">
-								<i class="ti ti-check icon"></i>
-							</button>
-							@endif
-							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
-							<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Editar">
-								<i class="ti ti-edit icon"></i>
-							</button>
-							<button class="btn btn-icon btn-delete-corporate btn-delete" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Eliminar">
-								<i class="ti ti-trash icon"></i>
-							</button>
+							@if($sale->status != 'Anulado')
+								@if(auth()->user()->hasRole('despachador') && !$isDelivered)
+								<button class="btn btn-icon btn-brand btn-sm btn-dispatch" data-id="{{ $sale->id }}" data-guide="{{ $sale->guide }}" data-total="{{ $sale->total }}" data-type="{{ $sale->type }}" data-bs-toggle="tooltip" title="Despachar/Entregar">
+									<i class="ti ti-check text-white fs-2"></i>
+								</button>
+								@endif
+								@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('despachador'))
+									@if(!$isDelivered)
+									<button class="btn btn-icon btn-outline-info btn-sm btn-edit" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Editar">
+										<i class="ti ti-edit fs-2"></i>
+									</button>
+									<button class="btn btn-icon btn-outline-danger btn-sm btn-delete" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Anular">
+										<i class="ti ti-ban fs-2"></i>
+									</button>
+									@endif
+								@endif
 							@endif
 						</div>
 					</td>		
 				</tr>
-				@endforeach
-				@else
+                @empty
 				<tr>
-					<td colspan="10" align="center">No se han encontrado resultados</td>
+					<td colspan="9" align="center" class="py-5 text-muted">
+                        <i class="ti ti-mood-neutral fs-1 mb-2 d-block"></i>
+                        No se han encontrado registros de ventas para este filtro
+                    </td>
 				</tr>
-				@endif
+				@endforelse
 			</tbody>
 		</table>
 	</div>
 	@if($sales->hasPages())
-	<div class="card-footer d-flex align-items-center">
+	<div class="card-footer d-flex align-items-center justify-content-center border-0">
 		{{ $sales->withQueryString()->links() }}
 	</div>
 	@endif
@@ -237,19 +275,19 @@
   						Venta: <span id="dispatch_guide" class="text-primary"></span> | Total: <span class="text-dark">S/<span id="dispatch_total"></span></span>
   					</div>
   				</div>
-  				<div class="mb-3">
-  					<label class="form-label fw-bold">¿Se registró el pago?</label>
-  					<div class="btn-group w-100" role="group">
-  						<input type="radio" class="btn-check" name="paid" id="dispatch_paid_yes" value="1">
-  						<label class="btn btn-outline-success py-2 d-flex align-items-center justify-content-center gap-2" for="dispatch_paid_yes">
-  							<i class="ti ti-check fs-2"></i> Si, pagado
-  						</label>
-  						<input type="radio" class="btn-check" name="paid" id="dispatch_paid_no" value="0">
-  						<label class="btn btn-outline-danger py-2 d-flex align-items-center justify-content-center gap-2" for="dispatch_paid_no">
-  							<i class="ti ti-clock fs-2"></i> Pendiente
-  						</label>
-  					</div>
-  				</div>
+   				<div class="mb-3" id="payment-status-wrapper">
+   					<label class="form-label fw-bold">¿Se registró el pago?</label>
+   					<div class="btn-group w-100" role="group">
+   						<input type="radio" class="btn-check" name="paid" id="dispatch_paid_yes" value="1">
+   						<label class="btn btn-outline-success py-2 d-flex align-items-center justify-content-center gap-2" for="dispatch_paid_yes">
+   							<i class="ti ti-check fs-2"></i> Si, pagado
+   						</label>
+   						<input type="radio" class="btn-check" name="paid" id="dispatch_paid_no" value="0">
+   						<label class="btn btn-outline-danger py-2 d-flex align-items-center justify-content-center gap-2" for="dispatch_paid_no">
+   							<i class="ti ti-clock fs-2"></i> Pendiente
+   						</label>
+   					</div>
+   				</div>
 
   				<div id="dispatchPaymentContainer" style="display:none">
   					<div class="d-flex justify-content-between align-items-center mb-2">
@@ -447,7 +485,7 @@
 
 		var id = $(this).data('id');
 
-		if(confirm('Â¿EstÃ¡s seguro que deseas borrar el registro?')){
+		if(confirm('¿Estás seguro que deseas anular esta venta?')){
 
 			$.ajax({
 				url: '{{ route('sales.index') }}' + '/' + id,
@@ -456,7 +494,7 @@
 					if(data.status){
 						location.reload();
 					}else{
-						alert('El registro no se pudo eliminar por que tiene pagos relacionados.')
+						alert('La venta no se pudo anular.')
 					}
 				},
 				error: function(err){
@@ -478,6 +516,7 @@
 		var id = $(this).data('id');
 		var guide = $(this).data('guide');
 		var total = $(this).data('total');
+		var type = $(this).data('type');
 
 		$('#dispatch_sale_id').val(id);
 		$('#dispatch_guide').text(guide);
@@ -487,6 +526,13 @@
 		$('#payment-rows-container').empty();
 		$('#total-distributed').text('S/0.00');
 		$('#payment-warning').hide();
+
+		if(type === 'Credito'){
+			$('#payment-status-wrapper').hide();
+			$('#dispatch_paid_no').prop('checked', true); // Default to unpaid for Credit
+		} else {
+			$('#payment-status-wrapper').show();
+		}
 
 		$('#dispatchModal').modal('show');
 	});
@@ -608,31 +654,7 @@
 			}
 		});
 	});
-	$(document).on('change', '.select-delivery-status', function(){
-		var id = $(this).data('id');
-		var status = $(this).val();
 
-		$.ajax({
-			url: '{{ route('sales.index') }}' + '/' + id + '/delivery-status',
-			method: 'POST',
-			data: {
-				status: status
-			},
-			success: function(data){
-				if(data.status){
-					ToastMessage.fire({ text: 'Estado actualizado' })
-						.then(() => location.reload());
-				}else{
-					ToastError.fire({ text: data.error ? data.error : 'Ocurrió un error' });
-					location.reload();
-				}
-			},
-			error: function(err){
-				ToastError.fire({ text: 'Ocurrió un error al actualizar el estado' });
-				location.reload();
-			}
-		});
-	});
 
 </script>
 @endsection

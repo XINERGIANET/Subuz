@@ -3,64 +3,99 @@
 @section('title', 'Cobranza de Pendiente de pago')
 
 @section('content')
-<nav class="mb-2">
+<nav class="mb-3">
   <ol class="breadcrumb">
     <li class="breadcrumb-item"><a href="{{ url('/') }}">Inicio</a></li>
     <li class="breadcrumb-item">Cobranzas</li>
     <li class="breadcrumb-item active">Pendiente de pago</li>
   </ol>
 </nav>
-<div class="card">
-	<div class="card-header d-flex justify-content-between flex-column flex-sm-row gap-2">
-		<div>
-			
-		</div>
-		<div class="text-center">
-			<span class="d-block small">
-				Tienes un total de
-			</span>
-			<span class="fs-2 fw-bold text-primary">
-					S/{{ number_format($total, 2) }}
-				</span>
-		</div>
+
+<div class="row row-cards mb-4">
+    <div class="col-md-4">
+        <div class="card metric-card border-0 shadow-sm overflow-hidden">
+            <div class="card-status-start bg-warning"></div>
+            <div class="card-body p-3">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <div class="bg-warning-lt text-warning avatar avatar-md">
+                            <i class="ti ti-clock fs-2"></i>
+                        </div>
+                    </div>
+                    <div class="col text-truncate">
+                        <div class="text-uppercase text-muted small fw-bold">Total Pendiente</div>
+                        <div class="h2 mb-0 fw-bold text-warning">S/{{ number_format($total, 2) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header border-0 py-3 d-flex justify-content-between align-items-center">
+        <h3 class="card-title fw-bold"><i class="ti ti-history me-2"></i>Acciones</h3>
+        <a href="{{ route('charges.history', ['type' => 'Contado']) }}" class="btn btn-outline-primary btn-pill px-4">
+            <i class="ti ti-history icon me-1"></i> Ver historial de contado
+        </a>
+    </div>
+	<div class="card-body bg-light-lt py-3">
+		<form>
+			<div class="row g-3 align-items-end">
+				<div class="col-md-4">
+					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Cliente</label>
+					<select class="form-select ts-clients" name="client_id">
+						<option value="">Seleccionar cliente</option>
+					</select>
+				</div>
+                <div class="col-md-2">
+			        <button type="submit" class="btn btn-brand w-100 py-2 fw-bold"><i class="ti ti-filter icon me-1"></i> Filtrar</button>
+                </div>
+			</div>
+		</form>
 	</div>
+</div>
+
+<div class="card border-0 shadow-sm overflow-hidden">
+    <div class="card-header border-0 py-3">
+        <h3 class="card-title fw-bold"><i class="ti ti-hourglass me-2"></i>Ventas por Cobrar</h3>
+    </div>
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
 			<thead class="table-corporate-header">
 				<tr>
-					<th>#</th>
+					<th width="50">#</th>
 					<th>Guía de remisión</th>
 					<th>Fecha</th>
 					<th>Cliente</th>
-					<th>Total</th>
-					<th>Pagar</th>
+					<th class="text-center">Total</th>
+					<th class="text-end">Acciones</th>
 				</tr>
 			</thead>
 			<tbody>
-				@if($sales->count() > 0)
-				@foreach($sales as $sale)
+				@forelse($sales as $sale)
 				<tr>
-					<td>{{ $loop->iteration }}</td>
-					<td>{{ $sale->guide }}</td>
+					<td class="text-muted">{{ $loop->iteration }}</td>
+					<td class="fw-bold">{{ $sale->guide }}</td>
 					<td>{{ $sale->date->format('d/m/Y') }}</td>
-					<td>{{ optional($sale->client)->name }}</td>
-					<td>{{ $sale->total }}</td>
-					<td>
+					<td>{{ optional($sale->client)->name ?? 'Consumidor Final' }}</td>
+					<td class="text-center fw-bold text-primary">S/{{ number_format($sale->total, 2) }}</td>
+					<td class="text-end">
 						@if(auth()->user()->hasRole('admin'))
-						<div class="d-flex gap-2">
 							<button class="btn btn-icon btn-brand btn-payment" data-id="{{ $sale->id }}" data-total="{{ $sale->total }}" data-type="{{ $sale->type }}" data-bs-toggle="tooltip" title="Registrar Pago">
-								<i class="ti ti-cash icon"></i>
+								<i class="ti ti-cash icon text-white fs-2"></i>
 							</button>
-						</div>
 						@endif
 					</td>		
 				</tr>
-				@endforeach
-				@else
+                @empty
 				<tr>
-					<td colspan="6" align="center">No se han encontrado registros</td>
+					<td colspan="6" align="center" class="py-5 text-muted">
+                        <i class="ti ti-mood-smile fs-1 mb-2 d-block"></i>
+                        No se han encontrado registros pendientes
+                    </td>
 				</tr>
-				@endif
+				@endforelse
 			</tbody>
 		</table>
 	</div>

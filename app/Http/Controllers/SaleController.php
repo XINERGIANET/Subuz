@@ -206,24 +206,19 @@ class SaleController extends Controller
     }
 
     public function destroy(Request $request, Sale $sale){
+        $isDelivered = $sale->paid || $sale->type == 'Pago pendiente' || $sale->movements->where('type', 'debt')->isNotEmpty();
 
-        $status = true;
-
-        if($sale->type == 'Credito'){
-            $payments = Payment::where('week_id', $sale->week_id)
-                ->where('client_id', $sale->client_id)->get();
-
-            if($payments->count() > 0){
-                $status = false;
-            }else{
-                $sale->delete();
-            }
-        }else{
-            $sale->delete();
+        if($isDelivered){
+            return response()->json([
+                'status' => false,
+                'error' => 'No se puede anular una venta que ya ha sido entregada.'
+            ]);
         }
 
+        $sale->update(['status' => 'Anulado']);
+
         return response()->json([
-            'status' => $status
+            'status' => true
         ]);
     }
 

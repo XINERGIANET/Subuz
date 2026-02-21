@@ -103,7 +103,7 @@
     </div>
 </div>
 <div class="row row-cards mb-4">
-	<div class="col-sm-6 col-lg-3">
+	<div class="col-sm-6 col-md-4 col-lg">
 		<div class="card metric-card border-0 shadow-sm h-100">
             <div class="card-status-start bg-primary"></div>
 			<div class="card-body p-3">
@@ -121,7 +121,7 @@
 			</div>
 		</div>
 	</div>
-	<div class="col-sm-6 col-lg-3">
+	<div class="col-sm-6 col-md-4 col-lg">
 		<div class="card metric-card border-0 shadow-sm h-100">
             <div class="card-status-start bg-danger"></div>
 			<div class="card-body p-3">
@@ -139,7 +139,25 @@
 			</div>
 		</div>
 	</div>
-	<div class="col-sm-6 col-lg-3">
+	<div class="col-sm-6 col-md-4 col-lg">
+		<div class="card metric-card border-0 shadow-sm h-100">
+            <div class="card-status-start bg-azure"></div>
+			<div class="card-body p-3">
+				<div class="row g-3 align-items-center">
+					<div class="col-auto">
+						<div class="bg-azure-lt text-azure avatar avatar-md shadow-none">
+							<i class="ti ti-cash fs-2"></i>
+						</div>
+					</div>
+					<div class="col">
+						<div class="text-uppercase mb-1">Ingreso Caja</div>
+						<div class="h1 mb-0 fw-extrabold text-azure" id="manual_income">...</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="col-sm-6 col-md-4 col-lg">
 		<div class="card metric-card border-0 shadow-sm h-100">
             <div class="card-status-start bg-success"></div>
 			<div class="card-body p-3">
@@ -157,7 +175,7 @@
 			</div>
 		</div>
 	</div>
-	<div class="col-sm-6 col-lg-3">
+	<div class="col-sm-6 col-md-4 col-lg">
 		<div class="card metric-card border-0 shadow-sm h-100">
             <div class="card-status-start bg-warning"></div>
 			<div class="card-body p-3">
@@ -586,6 +604,7 @@
 			success: function(res){
 				$('#sales').text('S/'+res.sales);
 				$('#expenses').text('S/'+res.expenses);
+				$('#manual_income').text('S/'+res.manual_income);
 				$('#revenues').text('S/'+res.revenues);
 				$('#pending').text('S/'+res.pending);
 

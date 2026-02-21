@@ -3,124 +3,143 @@
 @section('title', 'Gastos')
 
 @section('content')
-<nav class="mb-2">
+<nav class="mb-3">
   <ol class="breadcrumb">
     <li class="breadcrumb-item"><a href="{{ url('/') }}">Inicio</a></li>
     <li class="breadcrumb-item active">Gastos</li>
   </ol>
 </nav>
-<div class="card">
-	<div class="card-header d-flex justify-content-between flex-column flex-sm-row gap-2">
-		<div>
-			@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
-			<button class="btn btn-brand" data-bs-toggle="modal" data-bs-target="#createModal">
-				<i class="ti ti-plus icon"></i> Crear nuevo
-			</button>
-			<a class="btn btn-success" href="{{ route('expenses.excel') }}">
-				<i class="ti ti-download icon"></i> Excel
-			</a>
-			@endif
-		</div>
-		<div class="text-center">
-			<span class="d-block small">
-				Tienes un total de
-			</span>
-			<span class="fs-2 fw-bold text-primary">
-					S/{{ number_format($total_expenses, 2) }}
-				</span>
-		</div>
-	</div>
-	<div class="card-body border-bottom">
-		<form class="mb-3">
-			<div class="row">
-				<div class="col-lg-3">
-					<div class="mb-3">
-						<label class="form-label">Mes</label>
-						<select class="form-select" name="month">
-							<option value="">Seleccionar</option>
-							<option value="1" @if(request()->month == 1) selected @endif>Enero</option>
-							<option value="2" @if(request()->month == 2) selected @endif>Febrero</option>
-							<option value="3" @if(request()->month == 3) selected @endif>Marzo</option>
-							<option value="4" @if(request()->month == 4) selected @endif>Abril</option>
-							<option value="5" @if(request()->month == 5) selected @endif>Mayo</option>
-							<option value="6" @if(request()->month == 6) selected @endif>Junio</option>
-							<option value="7" @if(request()->month == 7) selected @endif>Julio</option>
-							<option value="8" @if(request()->month == 8) selected @endif>Agosto</option>
-							<option value="9" @if(request()->month == 9) selected @endif>Septiembre</option>
-							<option value="10" @if(request()->month == 10) selected @endif>Octubre</option>
-							<option value="11" @if(request()->month == 11) selected @endif>Noviembre</option>
-							<option value="12" @if(request()->month == 12) selected @endif>Diciembre</option>
-						</select>
-					</div>
+
+<div class="row row-cards mb-4">
+    <div class="col-md-4">
+        <div class="card metric-card border-0 shadow-sm overflow-hidden">
+            <div class="card-status-start bg-danger"></div>
+            <div class="card-body p-3">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <div class="bg-danger-lt text-danger avatar avatar-md">
+                            <i class="ti ti-receipt fs-2"></i>
+                        </div>
+                    </div>
+                    <div class="col text-truncate">
+                        <div class="text-uppercase text-muted small fw-bold">Total Gastos del Periodo</div>
+                        <div class="h2 mb-0 fw-bold text-danger">S/{{ number_format($total_expenses, 2) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header border-0 py-3 d-flex justify-content-between align-items-center">
+        <h3 class="card-title fw-bold"><i class="ti ti-filter me-2"></i>Filtros de Búsqueda</h3>
+        <div class="d-flex gap-2">
+            @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
+            <button class="btn btn-brand btn-pill px-4 shadow-sm" data-bs-toggle="modal" data-bs-target="#createModal">
+                <i class="ti ti-plus me-1 fs-3"></i> Crear nuevo gasto
+            </button>
+            <a class="btn btn-success btn-pill px-4 shadow-sm" href="{{ route('expenses.excel') }}">
+                <i class="ti ti-file-spreadsheet me-1 fs-3"></i> Excel
+            </a>
+            @endif
+        </div>
+    </div>
+	<div class="card-body py-3 border-bottom">
+		<form>
+			<div class="row g-3 align-items-end">
+				<div class="col-md-4">
+					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Mes</label>
+					<select class="form-select text-dark" name="month">
+						<option value="">Seleccionar mes</option>
+						@php
+                            $names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                        @endphp
+                        @foreach($names as $index => $name)
+						    <option value="{{ $index + 1 }}" @if(request()->month == ($index + 1)) selected @endif>{{ $name }}</option>
+                        @endforeach
+					</select>
 				</div>
-				<div class="col-lg-3">
-					<div class="mb-3">
-						<label class="form-label">Año</label>
-						<select class="form-select" name="year">
-							<option value="">Seleccionar</option>
-							@for($i = 2023; $i<=2030; $i++)
-							<option value="{{ $i }}" @if(request()->year == $i) selected @endif>{{ $i }}</option>
-							@endfor
-						</select>
-					</div>
+				<div class="col-md-2">
+					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Año</label>
+					<select class="form-select text-dark" name="year">
+						<option value="">Seleccionar año</option>
+						@for($i = 2023; $i<=2030; $i++)
+						<option value="{{ $i }}" @if(request()->year == $i) selected @endif>{{ $i }}</option>
+						@endfor
+					</select>
 				</div>
+                <div class="col-md-2">
+			        <button type="submit" class="btn btn-brand w-100 py-2 fw-bold"><i class="ti ti-search me-1 fs-3"></i> Buscar</button>
+                </div>
+                <div class="col-md-2">
+                    <a href="{{ route('expenses.index') }}" class="btn btn-outline-secondary w-100 py-2 fw-medium">
+                        <i class="ti ti-refresh icon me-1"></i> Limpiar
+                    </a>
+                </div>
 			</div>
-			<button type="submit" class="btn btn-brand"><i class="ti ti-filter icon"></i> Filtrar</button>
 		</form>
 	</div>
+</div>
+
+<div class="card border-0 shadow-sm overflow-hidden">
+    <div class="card-header border-0 py-3">
+        <h3 class="card-title fw-bold"><i class="ti ti-list me-2"></i>Detalle de Egresos</h3>
+    </div>
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
 			<thead class="table-corporate-header">
 				<tr>
 					<th>Descripción</th>
-					<th>Monto</th>
-					<th>Forma de pago</th>
-					<th>Fecha</th>
-					<th>Acción</th>
+					<th class="text-center">Monto Total</th>
+					<th>Desglose de Pago</th>
+					<th class="text-center">Fecha</th>
+					<th class="text-end">Acciones</th>
 				</tr>
 			</thead>
 			<tbody>
-				@if($expenses->count() > 0)
-					@foreach($expenses->groupBy(function($item){ return $item->description.$item->date->format('Y-m-d H:i:s'); }) as $group)
+				@forelse($expenses->groupBy(function($item){ return $item->description.$item->date->format('Y-m-d H:i:s'); }) as $group)
 					@php $first = $group->first(); @endphp
 					<tr>
-						<td>{{ $first->description }}</td>
-						<td class="fw-bold text-dark">S/{{ number_format($group->sum('amount'), 2) }}</td>
+						<td class="fw-bold">{{ $first->description }}</td>
+						<td class="text-center fw-extrabold text-danger" style="font-size: 1.1rem;">S/{{ number_format($group->sum('amount'), 2) }}</td>
 						<td>
-							<div class="d-flex flex-column gap-1">
+							<div class="d-flex flex-wrap gap-1 align-items-center">
 								@foreach($group as $item)
-								<span class="badge bg-blue-lt fw-normal" style="text-transform: none;">
+								<span class="badge bg-red-lt fw-normal" style="text-transform: none; border: 1px solid rgba(214, 51, 108, 0.1);">
 									<span class="fw-bold">S/{{ number_format($item->amount, 2) }}</span>
 									<span class="ms-1 opacity-75">({{ optional($item->payment_method)->name }})</span>
 								</span>
 								@endforeach
 							</div>
 						</td>
-						<td>{{ $first->date->format('d/m/Y') }}</td>
-						<td>
+						<td class="text-center text-muted">{{ $first->date->format('d/m/Y') }}</td>
+						<td class="text-end">
 							@if(auth()->user()->hasRole('admin'))
-								<div class="d-flex gap-2">
+								<div class="d-flex justify-content-end gap-2">
 									<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $first->id }}" data-bs-toggle="tooltip" title="Editar">
-										<i class="ti ti-pencil icon"></i>
+										<i class="ti ti-pencil fs-2"></i>
 									</button>
 									<button class="btn btn-icon btn-delete-corporate btn-delete" data-id="{{ $first->id }}" data-bs-toggle="tooltip" title="Eliminar">
-										<i class="ti ti-x icon"></i>
+										<i class="ti ti-trash fs-2"></i>
 									</button>
 								</div>
 							@endif
 						</td>		
 					</tr>
-					@endforeach
-				@else
+                @empty
 				<tr>
-					<td colspan="5" align="center">No se han encontrado resultados</td>
+					<td colspan="5" align="center" class="py-5 text-muted">
+                        <i class="ti ti-mood-empty fs-1 mb-2 d-block"></i>
+                        No se han encontrado registros de gastos en este periodo
+                    </td>
 				</tr>
-				@endif
+				@endforelse
 			</tbody>
 		</table>
 	</div>
 	@if($expenses->hasPages())
-	<div class="card-footer d-flex align-items-center">
+	<div class="card-footer d-flex align-items-center justify-content-center">
 		{{ $expenses->withQueryString()->links() }}
 	</div>
 	@endif
@@ -221,7 +240,7 @@
 				<div class="row g-2 align-items-center">
 					<div class="col-7">
 						<select class="form-select" name="payments[${rowCount}][method_id]" required>
-							<option value="">Cuenta</option>
+							<option value="">Seleccionar</option>
 							${paymentMethodsHtml}
 						</select>
 					</div>
@@ -301,7 +320,7 @@
 				<div class="row g-2 align-items-center">
 					<div class="col-7">
 						<select class="form-select" name="payments[${rowCount}][method_id]" required>
-							<option value="">Cuenta</option>
+							<option value="">Seleccionar</option>
 							${paymentMethodsHtml}
 						</select>
 					</div>
