@@ -29,6 +29,31 @@
             </div>
         </div>
     </div>
+    <div class="col-md-3">
+        <div class="card metric-card border-0 shadow-sm overflow-hidden">
+            <div class="card-status-start bg-danger"></div>
+            <div class="card-body p-3">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <div class="bg-danger-lt text-danger avatar avatar-md">
+                            <i class="ti ti-ban fs-2"></i>
+                        </div>
+                    </div>
+                    <div class="col text-truncate">
+                        <div class="text-uppercase text-muted small fw-bold">Pedidos Anulados</div>
+                        <div class="h2 mb-0 fw-bold text-danger">{{ $annulled_count }}</div>
+                    </div>
+                    @if($annulled_count > 0)
+                    <div class="col-auto">
+                        <button class="btn btn-sm btn-outline-danger px-3 py-1 fw-bold" data-bs-toggle="modal" data-bs-target="#annulledModal">
+                            Detallar
+                        </button>
+                    </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
     @if(auth()->user()->hasRole('admin'))
     <div class="col-md-3">
         <div class="card border-0 shadow-sm h-100">
@@ -53,6 +78,45 @@
         </div>
     </div>
     @endif
+</div>
+
+<!-- Modal Pedidos Anulados -->
+<div class="modal modal-blur fade" id="annulledModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+  	<div class="modal-content shadow-lg border-0">
+  		<div class="modal-header bg-danger text-white">
+  		  <h5 class="modal-title fw-bold"><i class="ti ti-ban me-2"></i>Pedidos Anulados Detallados</h5>
+  		  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+  		</div>
+  		<div class="modal-body p-0">
+  		  <div class="table-responsive">
+              <table class="table table-vcenter card-table">
+                  <thead class="bg-light">
+                      <tr>
+                          <th>Guía</th>
+                          <th>Fecha</th>
+                          <th>Cliente</th>
+                          <th class="text-end">Total</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      @foreach($annulled_sales as $annulled)
+                      <tr>
+                          <td class="fw-bold">{{ $annulled->guide }}</td>
+                          <td class="small">{{ $annulled->date->format('d/m/Y H:i') }}</td>
+                          <td>{{ optional($annulled->client)->name ?? 'N/A' }}</td>
+                          <td class="text-end fw-bold text-danger">S/{{ number_format($annulled->total, 2) }}</td>
+                      </tr>
+                      @endforeach
+                  </tbody>
+              </table>
+          </div>
+  		</div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary px-4" data-bs-target="#annulledModal" data-bs-toggle="modal">Cerrar</button>
+        </div>
+    </div>
+  </div>
 </div>
 
 <div class="card border-0 shadow-sm mb-4">
@@ -321,6 +385,37 @@
     </div>
   </div>
 </div>
+
+<div class="modal modal-blur fade" id="confirmAnnulModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+    <div class="modal-content shadow-lg border-0">
+      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div class="modal-status bg-danger"></div>
+      <div class="modal-body text-center py-4">
+        <i class="ti ti-alert-triangle fs-1 text-danger mb-3"></i>
+        <h3>¿Estás seguro?</h3>
+        <div class="text-muted">¿Realmente deseas anular esta venta? Esta acción no se puede deshacer de forma sencilla.</div>
+      </div>
+      <div class="modal-footer">
+        <div class="w-100">
+          <div class="row">
+            <div class="col">
+                <a href="#" class="btn w-100" data-bs-dismiss="modal">
+                    Cancelar
+                </a>
+            </div>
+            <div class="col">
+                <input type="hidden" id="annul_sale_id">
+                <button type="button" class="btn btn-danger w-100" id="btn-confirm-annul">
+                    Sí, anular
+                </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('scripts')
@@ -482,29 +577,34 @@
 	});
 
 	$(document).on('click', '.btn-delete', function(){
-
 		var id = $(this).data('id');
-
-		if(confirm('¿Estás seguro que deseas anular esta venta?')){
-
-			$.ajax({
-				url: '{{ route('sales.index') }}' + '/' + id,
-				method: 'DELETE',
-				success: function(data){
-					if(data.status){
-						location.reload();
-					}else{
-						alert('La venta no se pudo anular.')
-					}
-				},
-				error: function(err){
-					console.log(err);
-				}
-			});
-
-		}
-
+        $('#annul_sale_id').val(id);
+        $('#confirmAnnulModal').modal('show');
 	});
+
+    $('#btn-confirm-annul').click(function(){
+        var id = $('#annul_sale_id').val();
+        var btn = $(this);
+        btn.prop('disabled', true).addClass('btn-loading');
+
+        $.ajax({
+            url: '{{ route('sales.index') }}' + '/' + id,
+            method: 'DELETE',
+            success: function(data){
+                if(data.status){
+                    location.reload();
+                }else{
+                    btn.prop('disabled', false).removeClass('btn-loading');
+                    $('#confirmAnnulModal').modal('hide');
+                    alert(data.error ? data.error : 'La venta no se pudo anular.');
+                }
+            },
+            error: function(err){
+                btn.prop('disabled', false).removeClass('btn-loading');
+                console.log(err);
+            }
+        });
+    });
 
 	var paymentMethodsHtml = `
 		@foreach($payment_methods as $pm)

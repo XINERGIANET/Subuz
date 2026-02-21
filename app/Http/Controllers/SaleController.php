@@ -19,35 +19,39 @@ use App\Models\CashboxMovement;
 class SaleController extends Controller
 {
     public function index(Request $request){
-        if($request->start_date || $request->end_date){
-            $sales = Sale::with(['payment_method', 'client', 'movements'])
-                ->when($request->client_id, function($query, $client_id){
-                    return $query->where('client_id', $client_id);
-                })
-                ->when($request->type, function($query, $type){
-                    return $query->where('type', $type);
-                })
-                ->when($request->start_date, function($query, $start_date){
-                    return $query->whereDate('date', '>=', $start_date);
-                })
-                ->when($request->end_date, function($query, $end_date){
-                    return $query->whereDate('date', '<=', $end_date);
-                })
-                ->latest('date');
-        }else{
-            $sales = Sale::with(['payment_method', 'client'])
-                ->whereDate('date', now())
-                ->latest('date');
-        }
-        
-        $total_sales = $sales->sum('total');
+        $query = Sale::with(['payment_method', 'client', 'movements']);
 
-        $sales = $sales->paginate(10);
+        if($request->start_date || $request->end_date){
+            $query->when($request->client_id, function($q, $client_id){
+                    return $q->where('client_id', $client_id);
+                })
+                ->when($request->type, function($q, $type){
+                    return $q->where('type', $type);
+                })
+                ->when($request->start_date, function($q, $start_date){
+                    return $q->whereDate('date', '>=', $start_date);
+                })
+                ->when($request->end_date, function($q, $end_date){
+                    return $q->whereDate('date', '<=', $end_date);
+                });
+        }else{
+            $query->whereDate('date', now());
+        }
+
+        // Totals excluding annulled
+        $total_sales = (clone $query)->where('status', '!=', 'Anulado')->sum('total');
+        
+        // Annulled sales for metrics and modal
+        $annulled_sales_query = (clone $query)->where('status', 'Anulado');
+        $annulled_count = $annulled_sales_query->count();
+        $annulled_sales = $annulled_sales_query->get();
+
+        $sales = $query->latest('date')->paginate(10);
 
         $payment_methods = PaymentMethod::all();
         $cashbox = Cashbox::currentOpen();
 
-        return view('sales.index', compact('sales', 'total_sales', 'payment_methods', 'cashbox'));
+        return view('sales.index', compact('sales', 'total_sales', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox'));
     }
 
     public function create(){
