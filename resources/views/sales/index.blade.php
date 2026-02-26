@@ -120,7 +120,7 @@
 							<button class="btn btn-icon btn-show" data-id="{{ $sale->id }}">
 								<i class="ti ti-printer icon"></i>
 							</button>
-							@if(auth()->user()->hasRole('despachador') && !$sale->paid)
+							@if(auth()->user()->hasRole('despachador') || auth()->user()->hasRole('admin')  && !$sale->paid)
 							<button class="btn btn-icon btn-dispatch" data-id="{{ $sale->id }}" data-guide="{{ $sale->guide }}" data-total="{{ $sale->total }}">
 								<i class="ti ti-check icon"></i>
 							</button>
