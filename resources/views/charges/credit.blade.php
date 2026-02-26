@@ -61,7 +61,8 @@
 					<th>Guía de remisión</th>
 					<th>Fecha</th>
 					<th>Cliente</th>
-					<th>Distrito</th>
+					<th>Estado</th>
+					<th>Pagos</th>
 					<th>Total</th>
 					<th>Deuda</th>
 					<th>Acción</th>
@@ -74,13 +75,29 @@
 					<td>{{ $sale->guide }}</td>
 					<td>{{ $sale->date->format('d/m/Y') }}</td>
 					<td>{{ optional($sale->client)->name }}</td>
-					<td>{{ optional($sale->client)->district }}</td>
+					<td>
+						@if($sale->paid || $sale->type == 'Pago pendiente')
+						<span class="badge bg-success-lt">Entregado</span>
+						@else
+						<span class="badge bg-warning-lt">No entregado</span>
+						@endif
+					</td>
+					<td>
+						<div class="d-flex flex-column gap-1 align-items-start">
+							@foreach($sale->payments as $payment)
+							<span class="badge bg-blue-lt fw-normal" style="text-transform: none;">
+								<span class="fw-bold">S/{{ number_format($payment->amount, 2) }}</span>
+								<span class="ms-1 opacity-75">({{ optional($payment->payment_method)->name }})</span>
+							</span>
+							@endforeach
+						</div>
+					</td>
 					<td>S/{{ $sale->total }}</td>
 					<td>S/{{ $sale->debt }}</td>
 					<td>
 						<div class="d-flex gap-2">
 							@if(auth()->user()->hasRole('admin'))
-							<button class="btn btn-icon btn-brand btn-payment" data-id="{{ $sale->id }}">
+							<button class="btn btn-icon btn-brand btn-payment" data-id="{{ $sale->id }}" data-debt="{{ $sale->debt }}" data-bs-toggle="tooltip" title="Registrar Pago">
 								<i class="ti ti-cash icon"></i>
 							</button>
 							@endif
@@ -114,31 +131,25 @@
   			  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
   			</div>
   			<div class="modal-body">
-  			  <div class="row">
-  			  	<div class="col-lg-6">
-  			  		<div class="mb-3">
-  			  			<label class="form-label">Forma de pago</label>
-  			  			<select class="form-select" name="payment_method_id">
-  			  				<option value="">Seleccionar</option>
-  			  				@foreach($payment_methods as $payment_method)
-  			  				<option value="{{ $payment_method->id }}">{{ $payment_method->name }}</option>
-  			  				@endforeach
-  			  			</select>
-  			  		</div>
-  			  	</div>
-  			  	<div class="col-lg-6">
-  			  		<div class="mb-3">
-  			  			<label class="form-label">Monto</label>
-  			  			<input type="text" class="form-control" name="amount">
-  			  		</div>
-  			  	</div>
+  			  <div id="payment-lines">
+  			  	<!-- Dynamic content -->
   			  </div>
+  			  <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="add-payment-line">
+  			  	<i class="ti ti-plus icon"></i> Agregar método de pago
+  			  </button>
   			</div>
-  			<div class="modal-footer">
-  				<input type="hidden" name="type" value="Credito">
-  				<input type="hidden" name="sale_id" id="sale_id">
-				<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
-				<button type="submit" class="btn btn-brand"><i class="ti ti-device-floppy icon"></i> Guardar</button>
+  			<div class="modal-footer d-flex justify-content-between align-items-center">
+  				<div>
+  					<div class="small text-muted">Total Deuda: <span class="fw-bold" id="total-debt-display">S/0.00</span></div>
+  					<div class="small text-muted">Saldo Restante: <span class="fw-bold text-danger" id="remaining-balance-display">S/0.00</span></div>
+  				</div>
+  				<div>
+	  				<input type="hidden" name="type" value="Credito">
+	  				<input type="hidden" name="sale_id" id="sale_id">
+	  				<input type="hidden" id="total_debt_value">
+					<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
+					<button type="submit" class="btn btn-brand"><i class="ti ti-device-floppy icon"></i> Guardar</button>
+  				</div>
   			</div>
   		</form>
     </div>
@@ -148,6 +159,13 @@
 
 @section('scripts')
 <script>
+	var paymentMethodOptions = `
+		<option value="">Seleccionar</option>
+		@foreach($payment_methods as $payment_method)
+		<option value="{{ $payment_method->id }}">{{ $payment_method->name }}</option>
+		@endforeach
+	`;
+
 	$(document).ready(function(){
 
 		new TomSelect('.ts-clients', {
@@ -181,9 +199,87 @@
 	$(document).on('click', '.btn-payment', function(){
 
 		var sale_id = $(this).data('id');
+		var debt = parseFloat($(this).data('debt'));
 
 		$('#sale_id').val(sale_id);
+		$('#total_debt_value').val(debt);
+		$('#total-debt-display').text('S/' + debt.toFixed(2));
+		
+		// Reset to one line
+		$('#payment-lines').html('');
+		addPaymentLine();
+		calculateBalance(); // Initial calculate
 		$('#paymentModal').modal('show');
+	});
+
+	function addPaymentLine() {
+		var index = $('.payment-line').length;
+		var html = `
+			<div class="row payment-line mb-2">
+				<div class="col-lg-6">
+					<div class="mb-1">
+						<label class="form-label">Forma de pago</label>
+						<select class="form-select" name="payments[${index}][payment_method_id]" required>
+							${paymentMethodOptions}
+						</select>
+					</div>
+				</div>
+				<div class="col-lg-5">
+					<div class="mb-1">
+						<label class="form-label">Monto</label>
+						<input type="number" step="0.01" class="form-control payment-amount" name="payments[${index}][amount]" required>
+					</div>
+				</div>
+				<div class="col-lg-1 d-flex align-items-end mb-1">
+					${index > 0 ? '<button type="button" class="btn btn-icon btn-danger remove-line"><i class="ti ti-x icon"></i></button>' : ''}
+				</div>
+			</div>
+		`;
+		$('#payment-lines').append(html);
+	}
+	
+	function calculateBalance() {
+		var totalDebt = parseFloat($('#total_debt_value').val()) || 0;
+		var currentPayment = 0;
+		
+		$('.payment-amount').each(function() {
+			currentPayment += parseFloat($(this).val()) || 0;
+		});
+		
+		var remaining = totalDebt - currentPayment;
+		
+		// Prevent negative zero or small float errors
+		if (Math.abs(remaining) < 0.001) remaining = 0;
+		
+		var remainingText = 'S/' + remaining.toFixed(2);
+		var $display = $('#remaining-balance-display');
+		
+		$display.text(remainingText);
+		
+		if (remaining < 0) {
+			$display.removeClass('text-danger').addClass('text-success'); // Overpaid? Or warn? Usually warn if negative debt.
+			// Let's keep it simple: if negative, it means paying more than debt -> usually bad.
+			// But user asked to "subtract balance". 
+			// If remaining > 0 (still owe), text-danger is fine (debt exists). 
+			// If remaining == 0 (fully paid), maybe text-success.
+		} else if (remaining === 0) {
+			$display.removeClass('text-danger').addClass('text-success');
+		} else {
+			$display.removeClass('text-success').addClass('text-danger');
+		}
+	}
+
+	$(document).on('click', '#add-payment-line', function() {
+		addPaymentLine();
+	});
+
+	$(document).on('click', '.remove-line', function() {
+		$(this).closest('.payment-line').remove();
+		calculateBalance();
+	});
+	
+	$(document).on('input', '.payment-amount', function() {
+		calculateBalance();
 	});
 
 	$('#paymentForm').submit(function(e){

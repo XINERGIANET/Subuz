@@ -9,7 +9,7 @@
 	<link rel="stylesheet" href="{{ asset('assets/css/tabler.min.css') }}">
 	<link rel="stylesheet" href="{{ asset('assets/css/tabler-vendors.min.css') }}">
 	<link rel="stylesheet" href="{{ asset('assets/css/tabler-icons.min.css') }}">
-	<link rel="stylesheet" href="{{ asset('assets/css/styles.css') }}">
+	<link rel="stylesheet" href="{{ asset('assets/css/styles.css') }}?v={{ time() }}">
 	<link rel="stylesheet" href="{{ asset('assets/css/sweetalert2-theme-material-ui.css') }}">
 	@yield('styles')
 </head>
@@ -56,6 +56,13 @@
 					</div>
 				</div>
 				<div class="collapse navbar-collapse" id="sidebar-menu">
+					<!-- Header for mobile view with close button -->
+					<div class="mobile-menu-header d-lg-none">
+						<img src="{{ asset('assets/images/logo.svg') }}" alt="Subuz" class="mobile-logo">
+						<button class="btn-close-mobile" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-label="Close menu">
+							<i class="ti ti-x"></i>
+						</button>
+					</div>
 					<ul class="navbar-nav pt-lg-3">
 						@if($isDespachador)
 						<li class="nav-item">
@@ -65,16 +72,6 @@
 								</span>
 								<span class="nav-link-title">
 									Ventas
-								</span>
-							</a>
-						</li>
-						<li class="nav-item">
-							<a class="nav-link" href="{{ route('cashbox.index') }}" >
-								<span class="nav-link-icon d-md-none d-lg-inline-block">
-									<i class="ti ti-cash icon"></i>
-								</span>
-								<span class="nav-link-title">
-									Caja
 								</span>
 							</a>
 						</li>
@@ -356,6 +353,14 @@
 		toast: true,
 		position: 'bottom-end'
 	});
+
+    // Initialize Tooltips
+    document.addEventListener('DOMContentLoaded', function () {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        })
+    });
 </script>
 @yield('scripts')
     <script>

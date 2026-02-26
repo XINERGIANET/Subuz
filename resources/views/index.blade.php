@@ -567,7 +567,7 @@
 				month: $('#dist_month').val()
 			},
 			success: function(data){
-				chart3.data.labels = data.distribution.map(item => item.name);
+				chart3.data.labels = data.distribution.map(item => `${item.name} - S/${parseFloat(item.total).toFixed(2)}`);
 				chart3.data.datasets[0].data = data.distribution.map(item => item.total);
 				chart3.update();
 			}

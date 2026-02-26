@@ -7,18 +7,17 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Client;
-use App\Models\Week;
+
 
 class ReportLiquidation extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public $client, $week, $request;
+    public $client, $request;
 
-    public function __construct(Client $client, Week $week, $request)
+    public function __construct(Client $client, $request)
     {
         $this->client = $client;
-        $this->week = $week;
         $this->request = $request;
     }
 
@@ -33,7 +32,8 @@ class ReportLiquidation extends Mailable
                     ->view('mails.reports.liquidation')
                     ->attach(route('reports.pdf', [
                         'client_id' => $this->request['client_id'],
-                        'date' => $this->request['date'],
+                        'start_date' => $this->request['start_date'],
+                        'end_date' => $this->request['end_date'],
                         'payment_date' => $this->request['payment_date']
                     ]),[
                         'as' => 'ReporteLiquidacion.pdf',

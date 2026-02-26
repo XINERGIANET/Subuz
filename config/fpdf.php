@@ -1,5 +1,13 @@
 <?php
 
+$fontPath = env('FPDF_FONTPATH', public_path('assets/fonts/'));
+
+if (!preg_match('/^(?:[A-Za-z]:[\\\\\\/]|[\\\\\\/])/', $fontPath)) {
+    $fontPath = public_path(trim($fontPath, '/\\'));
+}
+
+$fontPath = rtrim($fontPath, '/\\').DIRECTORY_SEPARATOR;
+
 return [
 
     /*
@@ -14,7 +22,7 @@ return [
     'orientation'       => 'P',
     'unit'              => 'mm',
     'size'              => 'A4',
-    'font_path'         => env('FPDF_FONTPATH', 'assets/fonts/'),
+    'font_path'         => $fontPath,
 
     /*
     |--------------------------------------------------------------------------

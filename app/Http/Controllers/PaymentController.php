@@ -18,13 +18,26 @@ class PaymentController extends Controller
 
     public function store(Request $request){
 
+        // Transform single payment to array structure if necessary (backward compatibility)
+        if (!$request->has('payments') && $request->has('payment_method_id')) {
+            $request->merge([
+                'payments' => [
+                    [
+                        'payment_method_id' => $request->payment_method_id,
+                        'amount' => $request->amount
+                    ]
+                ]
+            ]);
+        }
+
         $validator = Validator::make($request->all(), [
             'sale_id' => 'required',
-            'payment_method_id' => 'required',
+            'payments' => 'required|array',
+            'payments.*.payment_method_id' => 'required',
             'type' => 'required'
         ]);
 
-        $validator->sometimes('amount', 'required', function($input){
+        $validator->sometimes('payments.*.amount', 'required|numeric|min:0', function($input){
             return $input->type == 'Credito';
         });
 
@@ -44,79 +57,92 @@ class PaymentController extends Controller
             ]);
         }
 
-        if($request->type == 'Credito'){
+        $sale = Sale::findOrFail($request->sale_id);
 
-            $sale = Sale::findOrFail($request->sale_id);
-
-            if($request->amount > $sale->debt){
-
-                return response()->json([
-                    'status' => false,
-                    'error' => 'El monto a pagar debe ser menor o igual a la deuda.'
-                ]);
-
-            }
-
+        try {
             DB::transaction(function() use ($request, $sale, $cashbox){
-                $debt = $sale->debt - $request->amount;
-                $paid = $debt == 0 ? 1 : 0;
+                
+                if($request->type == 'Credito'){
 
-                $sale->update([
-                    'debt' => $debt,
-                    'paid' => $paid
-                ]);
+                    $totalAmount = floatval(collect($request->payments)->sum('amount'));
 
-                Payment::create([
-                    'sale_id' => $request->sale_id,
-                    'payment_method_id' => $request->payment_method_id,
-                    'amount' => $request->amount,
-                    'date' => now()
-                ]);
+                    // Check if total amount exceeds debt (with small tolerance for float issues)
+                    if(round($totalAmount, 2) > round($sale->debt, 2)){
+                        throw new \Exception('El monto total a pagar supera la deuda actual.');
+                    }
 
-                CashboxMovement::create([
-                    'cashbox_id' => $cashbox->id,
-                    'sale_id' => $sale->id,
-                    'user_id' => auth()->id(),
-                    'payment_method_id' => $request->payment_method_id,
-                    'type' => 'paid',
-                    'amount' => $request->amount,
-                    'date' => now()
-                ]);
+                    $debt = $sale->debt - $totalAmount;
+                    $paid = $debt <= 0 ? 1 : 0;
+
+                    $sale->update([
+                        'debt' => $debt,
+                        'paid' => $paid
+                    ]);
+
+                    foreach($request->payments as $paymentData){
+                        Payment::create([
+                            'sale_id' => $sale->id,
+                            'payment_method_id' => $paymentData['payment_method_id'],
+                            'amount' => $paymentData['amount'],
+                            'date' => now()
+                        ]);
+
+                        CashboxMovement::create([
+                            'cashbox_id' => $cashbox->id,
+                            'sale_id' => $sale->id,
+                            'user_id' => auth()->id(),
+                            'payment_method_id' => $paymentData['payment_method_id'],
+                            'type' => 'paid',
+                            'amount' => $paymentData['amount'],
+                            'date' => now()
+                        ]);
+                    }
+
+                }elseif($request->type == 'Pago pendiente' || $request->type == 'Contado'){
+                    
+                    $totalAmount = floatval(collect($request->payments)->sum('amount'));
+
+                    // For pending/cash, we expect the FULL amount to be paid to clear it.
+                    if(abs($totalAmount - floatval($sale->total)) > 0.01){
+                        throw new \Exception("La suma de los pagos (S/".number_format($totalAmount, 2).") debe ser igual al total de la venta (S/".number_format($sale->total, 2).").");
+                    }
+
+                    $sale->update([
+                        'debt' => 0,
+                        'paid' => 1
+                    ]);
+
+                    foreach($request->payments as $paymentData){
+                        Payment::create([
+                            'sale_id' => $sale->id,
+                            'payment_method_id' => $paymentData['payment_method_id'],
+                            'amount' => $paymentData['amount'],
+                            'date' => now()
+                        ]);
+
+                        CashboxMovement::create([
+                            'cashbox_id' => $cashbox->id,
+                            'sale_id' => $sale->id,
+                            'user_id' => auth()->id(),
+                            'payment_method_id' => $paymentData['payment_method_id'],
+                            'type' => 'paid',
+                            'amount' => $paymentData['amount'],
+                            'date' => now()
+                        ]);
+                    }
+                }
             });
 
-        }elseif($request->type == 'Pago pendiente'){
-            $sale = Sale::find($request->sale_id);
+            return response()->json([
+                'status' => true
+            ]);
 
-            DB::transaction(function() use ($request, $sale, $cashbox){
-                $sale->update([
-                    'debt' => 0,
-                    'paid' => 1
-                ]);
-
-                Payment::create([
-                    'sale_id' => $request->sale_id,
-                    'payment_method_id' => $request->payment_method_id,
-                    'amount' => $sale->total,
-                    'date' => now()
-                ]);
-
-                CashboxMovement::create([
-                    'cashbox_id' => $cashbox->id,
-                    'sale_id' => $sale->id,
-                    'user_id' => auth()->id(),
-                    'payment_method_id' => $request->payment_method_id,
-                    'type' => 'paid',
-                    'amount' => $sale->total,
-                    'date' => now()
-                ]);
-            });
-
-            $request->merge(['amount' => $sale->total]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error' => $e->getMessage()
+            ]);
         }
-
-        return response()->json([
-            'status' => true
-        ]);
     }
 
     public function excel(Request $request){
