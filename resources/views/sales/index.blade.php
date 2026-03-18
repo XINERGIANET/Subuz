@@ -220,6 +220,7 @@
 							<span class="badge bg-warning-lt">No entregado</span>
 						@endif
 					</td>
+<<<<<<< HEAD
 					<td class="text-center">
 						@if($sale->status == 'Anulado')
 							<span class="text-muted"><i class="ti ti-minus"></i></span>
@@ -234,6 +235,24 @@
 						<div class="d-flex justify-content-end gap-1">
 							<button class="btn btn-icon btn-outline-primary btn-sm btn-show" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Imprimir">
 								<i class="ti ti-printer fs-2"></i>
+=======
+					<td>
+						<div class="d-flex gap-2">
+							<button class="btn btn-icon btn-show" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Imprimir">
+								<i class="ti ti-printer icon"></i>
+							</button>
+							@if(auth()->user()->hasRole('despachador') || auth()->user()->hasRole('admin')  && !$sale->paid && $sale->type != 'Credito' && $sale->type != 'Pago pendiente')
+							<button class="btn btn-icon btn-dispatch" data-id="{{ $sale->id }}" data-guide="{{ $sale->guide }}" data-total="{{ $sale->total }}" data-bs-toggle="tooltip" title="Despachar">
+								<i class="ti ti-check icon"></i>
+							</button>
+							@endif
+							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
+							<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Editar">
+								<i class="ti ti-edit icon"></i>
+							</button>
+							<button class="btn btn-icon btn-delete-corporate btn-delete" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Eliminar">
+								<i class="ti ti-trash icon"></i>
+>>>>>>> c01a42d11b459d79c55f7c13545dac715eec06ed
 							</button>
 							@if($sale->status != 'Anulado')
 								@if(auth()->user()->hasRole('despachador') && !$isDelivered)
