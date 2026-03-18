@@ -13,21 +13,42 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class PaymentsExport implements FromCollection, WithHeadings, WithMapping, WithStyles, ShouldAutoSize
 {
+    protected $request;
+
+    public function __construct($request)
+    {
+        $this->request = $request;
+    }
+
     /**
     * @return \Illuminate\Support\Collection
     */
     public function collection()
     {
-        return Payment::latest('date')->get();
+        return Payment::with(['sale.client', 'payment_method'])
+        ->when($this->request->client_id, function($query, $client_id){
+            return $query->whereHas('sale', function($query) use ($client_id){
+                return $query->where('client_id', $client_id);
+            });
+        })->when($this->request->start_date, function($query, $start_date){
+            return $query->whereDate('date', '>=', $start_date);
+        })->when($this->request->end_date, function($query, $end_date){
+            return $query->whereDate('date', '<=', $end_date);
+        })->when($this->request->type, function($query, $type){
+            return $query->whereHas('sale', function($query) use ($type){
+                return $query->where('type', $type);
+            });
+        })->latest('date')->get();
     }
 
     public function map($payment): array
     {
         return [
-            optional($payment->client)->name,
+            optional(optional($payment->sale)->client)->name ?? 'Consumidor Final',
+            optional($payment->sale)->guide ?? 'Venta Manual',
             $payment->amount,
-            $payment->date->format('d/m/Y'),
-            $payment->type
+            optional($payment->payment_method)->name ?? 'N/A',
+            optional($payment->date)->format('d/m/Y')
         ];
     }
 
@@ -35,9 +56,10 @@ class PaymentsExport implements FromCollection, WithHeadings, WithMapping, WithS
     {
         return [
             'Cliente',
+            'Guía/Venta',
             'Monto',
-            'Fecha',
-            'Tipo'
+            'Forma de pago',
+            'Fecha'
         ];
     }
 

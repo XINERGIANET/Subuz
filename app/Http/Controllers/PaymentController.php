@@ -12,6 +12,7 @@ use App\Models\Sale;
 use App\Models\Payment;
 use App\Models\Cashbox;
 use App\Models\CashboxMovement;
+use Codedge\Fpdf\Fpdf\Fpdf;
 
 class PaymentController extends Controller
 {
@@ -146,7 +147,90 @@ class PaymentController extends Controller
     }
 
     public function excel(Request $request){
+        if (ob_get_level() > 0) {
+            ob_end_clean();
+        }
         $name = "ReportePagos_".now()->format('dm').".xlsx";
-        return Excel::download(new PaymentsExport, $name);
+        return Excel::download(new PaymentsExport($request), $name);
+    }
+
+    public function pdf(Request $request){
+        $payments = Payment::with(['sale.client', 'payment_method'])
+        ->when($request->client_id, function($query, $client_id){
+            return $query->whereHas('sale', function($query) use ($client_id){
+                return $query->where('client_id', $client_id);
+            });
+        })->when($request->start_date, function($query, $start_date){
+            return $query->whereDate('date', '>=', $start_date);
+        })->when($request->end_date, function($query, $end_date){
+            return $query->whereDate('date', '<=', $end_date);
+        })->when($request->type, function($query, $type){
+            return $query->whereHas('sale', function($query) use ($type){
+                return $query->where('type', $type);
+            });
+        })->latest('date')->get();
+
+        $fpdf = new Fpdf;
+        $fpdf->AddPage();
+        
+        $fpdf->AddFont('Montserrat', '');
+        $fpdf->AddFont('Montserrat', 'B');
+        
+        if(file_exists(public_path('assets/images/logo.jpg'))){
+            $fpdf->Image(public_path('assets/images/logo.jpg'), 10, 10, 30);
+        }
+        
+        $fpdf->SetFont('Montserrat', 'B', 16);
+        $fpdf->SetTextColor(2, 93, 166);
+        $title = 'REPORTE DE MOVIMIENTOS';
+        if($request->type == 'Credito') $title = 'REPORTE DE CRÉDITOS';
+        if($request->type == 'Contado') $title = 'REPORTE DE CONTADO';
+        $fpdf->Cell(190, 10, utf8_decode($title), 0, 1, 'C');
+        
+        $period = "Filtro: ";
+        if($request->start_date) $period .= "Desde " . date('d/m/Y', strtotime($request->start_date)) . " ";
+        if($request->end_date) $period .= "Hasta " . date('d/m/Y', strtotime($request->end_date));
+        if(!$request->start_date && !$request->end_date) $period .= "Todos los registros";
+        
+        $fpdf->SetFont('Montserrat', '', 10);
+        $fpdf->SetTextColor(80, 80, 80);
+        $fpdf->Cell(190, 8, utf8_decode($period), 0, 1, 'C');
+        $fpdf->Ln(10);
+
+        $fpdf->SetFillColor(2, 93, 166);
+        $fpdf->SetTextColor(255, 255, 255);
+        $fpdf->SetFont('Montserrat', 'B', 10);
+        
+        $fpdf->Cell(70, 10, utf8_decode('CLIENTE'), 1, 0, 'C', true);
+        $fpdf->Cell(30, 10, utf8_decode('GUÍA/VENTA'), 1, 0, 'C', true);
+        $fpdf->Cell(30, 10, utf8_decode('MONTO'), 1, 0, 'C', true);
+        $fpdf->Cell(30, 10, utf8_decode('FORMA PAGO'), 1, 0, 'C', true);
+        $fpdf->Cell(30, 10, utf8_decode('FECHA'), 1, 1, 'C', true);
+
+        $fpdf->SetTextColor(0, 0, 0);
+        $fpdf->SetFont('Montserrat', '', 9);
+        $total = 0;
+        
+        foreach($payments as $payment){
+            $fpdf->Cell(70, 8, utf8_decode(optional(optional($payment->sale)->client)->name ?? 'Consumidor Final'), 1);
+            $fpdf->Cell(30, 8, utf8_decode(optional($payment->sale)->guide ?? 'Manual'), 1, 0, 'C');
+            $fpdf->Cell(30, 8, 'S/'.number_format($payment->amount, 2), 1, 0, 'R');
+            $fpdf->Cell(30, 8, utf8_decode(optional($payment->payment_method)->name ?? 'N/A'), 1, 0, 'C');
+            $fpdf->Cell(30, 8, $payment->date->format('d/m/Y'), 1, 1, 'C');
+            $total += $payment->amount;
+        }
+
+        $fpdf->SetFont('Montserrat', 'B', 10);
+        $fpdf->Cell(100, 10, 'TOTAL RECAUDADO', 1, 0, 'R');
+        $fpdf->Cell(30, 10, 'S/'.number_format($total, 2), 1, 0, 'R');
+        $fpdf->Cell(60, 10, '', 1, 1);
+
+        $fpdf->Ln(10);
+        $fpdf->SetFont('Montserrat', '', 8);
+        $fpdf->Cell(190, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i')), 0, 1, 'R');
+
+        $name = "ReportePagos_".now()->format('dm').".pdf";
+        if (ob_get_level() > 0) ob_end_clean();
+        $fpdf->Output('D', $name);
     }
 }

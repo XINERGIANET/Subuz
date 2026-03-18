@@ -13,23 +13,49 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class SalesExport implements FromCollection, WithHeadings, WithMapping, WithStyles, ShouldAutoSize
 {
+    protected $request;
+
+    public function __construct($request)
+    {
+        $this->request = $request;
+    }
+
     /**
     * @return \Illuminate\Support\Collection
     */
     public function collection()
     {
-        return Sale::latest('date')->get();
+        return Sale::with(['payment_method', 'client'])
+            ->when($this->request->client_id, function($q, $client_id){
+                return $q->where('client_id', $client_id);
+            })
+            ->when($this->request->type, function($q, $type){
+                return $q->where('type', $type);
+            })
+            ->when($this->request->start_date, function($q, $start_date){
+                return $q->whereDate('date', '>=', $start_date);
+            })
+            ->when($this->request->end_date, function($q, $end_date){
+                return $q->whereDate('date', '<=', $end_date);
+            })
+            ->when($this->request->is_pending, function($q){
+                return $q->whereIn('type', ['Contado', 'Pago pendiente'])->where('paid', 0);
+            })
+            ->when($this->request->is_credit, function($q){
+                return $q->where('type', 'Credito')->where('paid', 0);
+            })
+            ->latest('date')->get();
     }
 
     public function map($sale): array
     {
         return [
             $sale->guide,
-            $sale->date->format('d/m/Y'),
+            optional($sale->date)->format('d/m/Y'),
             $sale->type,
-            optional($sale->payment_method)->name,
-            optional($sale->client)->name,
-            optional($sale->client)->district,
+            optional($sale->payment_method)->name ?? 'S/M',
+            optional($sale->client)->name ?? 'Consumidor Final',
+            optional($sale->client)->district ?? 'N/A',
             $sale->total
         ];
     }

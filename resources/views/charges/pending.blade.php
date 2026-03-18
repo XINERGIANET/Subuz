@@ -35,9 +35,17 @@
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header border-0 py-3 d-flex justify-content-between align-items-center">
         <h3 class="card-title fw-bold"><i class="ti ti-history me-2"></i>Acciones</h3>
-        <a href="{{ route('charges.history', ['type' => 'Contado']) }}" class="btn btn-outline-primary btn-pill px-4">
-            <i class="ti ti-history icon me-1"></i> Ver historial de contado
-        </a>
+        <div class="d-flex gap-2">
+            <a href="{{ route('charges.history', ['type' => 'Contado']) }}" class="btn btn-outline-primary btn-pill px-4">
+                <i class="ti ti-history icon me-1"></i> Ver historial de contado
+            </a>
+            <a href="{{ route('sales.excel', ['is_pending' => 1] + request()->all()) }}" class="btn btn-success btn-pill px-4 shadow-sm">
+                <i class="ti ti-file-spreadsheet icon me-1"></i> Excel
+            </a>
+            <a href="{{ route('sales.pdf', ['is_pending' => 1] + request()->all()) }}" class="btn btn-danger btn-pill px-4 shadow-sm">
+                <i class="ti ti-file-type-pdf icon me-1"></i> PDF
+            </a>
+        </div>
     </div>
 	<div class="card-body bg-light-lt py-3">
 		<form>

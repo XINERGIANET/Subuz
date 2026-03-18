@@ -15,6 +15,7 @@ use App\Models\Week;
 use App\Models\Payment;
 use App\Models\Cashbox;
 use App\Models\CashboxMovement;
+use Codedge\Fpdf\Fpdf\Fpdf;
 
 class SaleController extends Controller
 {
@@ -227,8 +228,106 @@ class SaleController extends Controller
     }
 
     public function excel(Request $request){
+        if (ob_get_level() > 0) {
+            ob_end_clean();
+        }
         $name = "ReporteVentas_".now()->format('dm').".xlsx";
-        return Excel::download(new SalesExport, $name);
+        return Excel::download(new SalesExport($request), $name);
+    }
+
+    public function pdf(Request $request){
+        $query = Sale::with(['payment_method', 'client'])
+            ->when($request->client_id, function($q, $client_id){
+                return $q->where('client_id', $client_id);
+            })
+            ->when($request->type, function($q, $type){
+                return $q->where('type', $type);
+            })
+            ->when($request->start_date, function($q, $start_date){
+                return $q->whereDate('date', '>=', $start_date);
+            })
+            ->when($request->end_date, function($q, $end_date){
+                return $q->whereDate('date', '<=', $end_date);
+            })
+            ->when($request->is_pending, function($q){
+                return $q->whereIn('type', ['Contado', 'Pago pendiente'])->where('paid', 0);
+            })
+            ->when($request->is_credit, function($q){
+                return $q->where('type', 'Credito')->where('paid', 0);
+            });
+
+        if(!$request->start_date && !$request->end_date && !$request->is_pending && !$request->is_credit && !$request->client_id){
+            $query->whereDate('date', now());
+        }
+
+        $sales = $query->latest('date')->get();
+
+        $fpdf = new Fpdf;
+        $fpdf->AddPage();
+        
+        $fpdf->AddFont('Montserrat', '');
+        $fpdf->AddFont('Montserrat', 'B');
+        
+        if(file_exists(public_path('assets/images/logo.jpg'))){
+            $fpdf->Image(public_path('assets/images/logo.jpg'), 10, 10, 30);
+        }
+        
+        $fpdf->SetFont('Montserrat', 'B', 16);
+        $fpdf->SetTextColor(2, 93, 166);
+        $fpdf->Cell(190, 10, utf8_decode('REPORTE DE VENTAS'), 0, 1, 'C');
+        
+        $period = "Filtro: ";
+        if($request->is_pending) $period = "REPORTE DE VENTAS PENDIENTES DE PAGO";
+        elseif($request->is_credit) $period = "REPORTE DE CRÉDITOS PENDIENTES";
+        else {
+            if($request->start_date) $period .= "Desde " . date('d/m/Y', strtotime($request->start_date)) . " ";
+            if($request->end_date) $period .= "Hasta " . date('d/m/Y', strtotime($request->end_date));
+            if(!$request->start_date && !$request->end_date) $period .= "Ventas de hoy (".now()->format('d/m/Y').")";
+        }
+        
+        $fpdf->SetFont('Montserrat', '', 10);
+        $fpdf->SetTextColor(80, 80, 80);
+        $fpdf->Cell(190, 8, utf8_decode($period), 0, 1, 'C');
+        $fpdf->Ln(10);
+
+        $fpdf->SetFillColor(2, 93, 166);
+        $fpdf->SetTextColor(255, 255, 255);
+        $fpdf->SetFont('Montserrat', 'B', 10);
+        
+        $fpdf->Cell(25, 10, utf8_decode('GUÍA'), 1, 0, 'C', true);
+        $fpdf->Cell(25, 10, utf8_decode('FECHA'), 1, 0, 'C', true);
+        $fpdf->Cell(60, 10, utf8_decode('CLIENTE'), 1, 0, 'C', true);
+        $fpdf->Cell(30, 10, utf8_decode('TIPO'), 1, 0, 'C', true);
+        $fpdf->Cell(25, 10, utf8_decode('PAGO'), 1, 0, 'C', true);
+        $fpdf->Cell(25, 10, utf8_decode('TOTAL'), 1, 1, 'C', true);
+
+        $fpdf->SetTextColor(0, 0, 0);
+        $fpdf->SetFont('Montserrat', '', 9);
+        $total = 0;
+        
+        foreach($sales as $sale){
+            if($sale->status == 'Anulado') continue;
+
+            $fpdf->Cell(25, 8, utf8_decode($sale->guide), 1, 0, 'C');
+            $fpdf->Cell(25, 8, $sale->date->format('d/m/Y'), 1, 0, 'C');
+            $fpdf->Cell(60, 8, utf8_decode(optional($sale->client)->name ?? 'Consumidor Final'), 1, 0, 'L');
+            $fpdf->Cell(30, 8, utf8_decode($sale->type), 1, 0, 'C');
+            $fpdf->Cell(25, 8, $sale->paid ? 'SI' : 'NO', 1, 0, 'C');
+            $fpdf->Cell(25, 8, 'S/'.number_format($sale->total, 2), 1, 1, 'R');
+            $total += $sale->total;
+        }
+
+        $fpdf->SetFont('Montserrat', 'B', 10);
+        $fpdf->Cell(165, 10, 'TOTAL EN VENTAS', 1, 0, 'R');
+        $fpdf->Cell(25, 10, 'S/'.number_format($total, 2), 1, 1, 'R');
+
+        $fpdf->Ln(10);
+        $fpdf->SetFont('Montserrat', '', 8);
+        $fpdf->Cell(190, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i')), 0, 1, 'R');
+
+        $name = "ReporteVentas_".now()->format('dm').".pdf";
+        if (ob_get_level() > 0) ob_end_clean();
+        $fpdf->Output('D', $name);
     }
 
     public function markDispatch(Request $request, Sale $sale){

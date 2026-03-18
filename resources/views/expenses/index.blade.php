@@ -39,8 +39,11 @@
             <button class="btn btn-brand btn-pill px-4 shadow-sm" data-bs-toggle="modal" data-bs-target="#createModal">
                 <i class="ti ti-plus me-1 fs-3"></i> Crear nuevo gasto
             </button>
-            <a class="btn btn-success btn-pill px-4 shadow-sm" href="{{ route('expenses.excel') }}">
+            <a class="btn btn-success btn-pill px-4 shadow-sm" href="{{ route('expenses.excel', request()->all()) }}">
                 <i class="ti ti-file-spreadsheet me-1 fs-3"></i> Excel
+            </a>
+            <a class="btn btn-danger btn-pill px-4 shadow-sm" href="{{ route('expenses.pdf', request()->all()) }}">
+                <i class="ti ti-file-type-pdf me-1 fs-3"></i> PDF
             </a>
             @endif
         </div>

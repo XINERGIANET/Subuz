@@ -47,8 +47,11 @@
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header border-0 py-3 d-flex justify-content-between align-items-center">
         <h3 class="card-title fw-bold"><i class="ti ti-filter me-2"></i>Filtros de Búsqueda</h3>
-        <a class="btn btn-success btn-pill px-4 shadow-sm" href="{{ route('payments.excel') }}">
-            <i class="ti ti-file-spreadsheet icon me-1"></i> Exportar a Excel
+        <a class="btn btn-success btn-pill px-4 shadow-sm" href="{{ route('payments.excel', request()->all()) }}">
+            <i class="ti ti-file-spreadsheet icon me-1"></i> Excel
+        </a>
+        <a class="btn btn-danger btn-pill px-4 shadow-sm" href="{{ route('payments.pdf', request()->all()) }}">
+            <i class="ti ti-file-type-pdf icon me-1"></i> PDF
         </a>
     </div>
 	<div class="card-body bg-light-lt py-3">

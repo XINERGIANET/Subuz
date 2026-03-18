@@ -80,12 +80,15 @@ Route::middleware('auth')->group(function(){
 
 		Route::post('payments', [PaymentController::class, 'store'])->name('payments.store');
 		Route::get('payments/excel', [PaymentController::class, 'excel'])->name('payments.excel');
+		Route::get('payments/pdf', [PaymentController::class, 'pdf'])->name('payments.pdf');
 
 		Route::get('expenses/excel', [ExpenseController::class, 'excel'])->name('expenses.excel');
+		Route::get('expenses/pdf', [ExpenseController::class, 'pdf'])->name('expenses.pdf');
 		Route::resource('expenses', ExpenseController::class);
 	});
 
 	Route::middleware('role:admin|seller|viewer')->group(function(){
+		Route::get('sales/pdf', [SaleController::class, 'pdf'])->name('sales.pdf');
 		Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
 		Route::get('reports/liquidation', [ReportController::class, 'liquidation'])->name('reports.liquidation');
 	});

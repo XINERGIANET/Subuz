@@ -127,8 +127,11 @@
             <a class="btn btn-brand btn-pill px-4 shadow-sm" href="{{ route('sales.create') }}">
                 <i class="ti ti-plus me-1 fs-3"></i> Nueva Venta
             </a>
-            <a class="btn btn-success btn-pill px-4 shadow-sm" href="{{ route('sales.excel') }}">
-                <i class="ti ti-file-spreadsheet me-1 fs-3"></i> Exportar
+            <a class="btn btn-success btn-pill px-4 shadow-sm" href="{{ route('sales.excel', request()->all()) }}">
+                <i class="ti ti-file-spreadsheet me-1 fs-3"></i> Excel
+            </a>
+            <a class="btn btn-danger btn-pill px-4 shadow-sm" href="{{ route('sales.pdf', request()->all()) }}">
+                <i class="ti ti-file-type-pdf me-1 fs-3"></i> PDF
             </a>
             @endif
         </div>
