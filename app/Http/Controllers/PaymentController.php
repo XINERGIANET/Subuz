@@ -35,7 +35,8 @@ class PaymentController extends Controller
             'sale_id' => 'required',
             'payments' => 'required|array',
             'payments.*.payment_method_id' => 'required',
-            'type' => 'required'
+            'type' => 'required',
+            'photo' => 'nullable|image|mimes:jpeg,png,jpg|max:51200'
         ]);
 
         $validator->sometimes('payments.*.amount', 'required|numeric|min:0', function($input){
@@ -60,8 +61,16 @@ class PaymentController extends Controller
 
         $sale = Sale::findOrFail($request->sale_id);
 
+        // Handle Photo Upload
+        $photoPath = null;
+        if ($request->hasFile('photo')) {
+            $file = $request->file('photo');
+            $filename = 'payment_' . $sale->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+            $photoPath = $file->storeAs('dispatches', $filename, 'public');
+        }
+
         try {
-            DB::transaction(function() use ($request, $sale, $cashbox){
+            DB::transaction(function() use ($request, $sale, $cashbox, $photoPath){
                 
                 if($request->type == 'Credito'){
 
@@ -75,10 +84,13 @@ class PaymentController extends Controller
                     $debt = $sale->debt - $totalAmount;
                     $paid = $debt <= 0 ? 1 : 0;
 
-                    $sale->update([
+                    $updateData = [
                         'debt' => $debt,
                         'paid' => $paid
-                    ]);
+                    ];
+                    if ($photoPath) $updateData['photo'] = $photoPath;
+
+                    $sale->update($updateData);
 
                     foreach($request->payments as $paymentData){
                         Payment::create([
@@ -108,10 +120,13 @@ class PaymentController extends Controller
                         throw new \Exception("La suma de los pagos (S/".number_format($totalAmount, 2).") debe ser igual al total de la venta (S/".number_format($sale->total, 2).").");
                     }
 
-                    $sale->update([
+                    $updateData = [
                         'debt' => 0,
                         'paid' => 1
-                    ]);
+                    ];
+                    if ($photoPath) $updateData['photo'] = $photoPath;
+
+                    $sale->update($updateData);
 
                     foreach($request->payments as $paymentData){
                         Payment::create([

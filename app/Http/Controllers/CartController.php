@@ -33,6 +33,18 @@ class CartController extends Controller
 
         if($product){
 
+            $price_applied = $product->price;
+            $is_special = false;
+            if($request->client_id){
+                $special_price = \App\Models\Price::where('client_id', $request->client_id)
+                    ->where('product_id', $product->id)
+                    ->first();
+                if($special_price){
+                    $price_applied = $special_price->price;
+                    $is_special = true;
+                }
+            }
+
             $exists = false;
             $itemKey = null;
 
@@ -45,15 +57,17 @@ class CartController extends Controller
 
             if($exists){
                 $cart['items'][$itemKey]['quantity']++;
+                $cart['items'][$itemKey]['price'] = number_format($price_applied, 2, '.', ''); // Update price in case it changed
                 $cart['items'][$itemKey]['amount'] = number_format($cart['items'][$itemKey]['price'] * $cart['items'][$itemKey]['quantity'], 2, '.', '');
+                $cart['items'][$itemKey]['special'] = $is_special;
             }else{
                 $cart['items'][] = [
                     'id' => $product->id,
                     'name' => $product->name,
-                    'price' => $product->price,
+                    'price' => number_format($price_applied, 2, '.', ''),
                     'quantity' => 1,
-                    'amount' => $product->price,
-                    'special' => false
+                    'amount' => number_format($price_applied, 2, '.', ''),
+                    'special' => $is_special
                 ];
             }
 
@@ -162,5 +176,39 @@ class CartController extends Controller
         $cart['igv'] = number_format($igv, 2);
 
         session()->put('cart', $cart);
+    }
+
+    public function updatePricesByClient(Request $request){
+        $cart = session()->get('cart') ? session()->get('cart') : [
+            'items' => [],
+            'subtotal' => '0.00',
+            'igv' => '0.00',
+            'total' => '0.00'
+        ];
+
+        foreach($cart['items'] as $key => $item){
+            $product = \App\Models\Product::find($item['id']);
+            $price_applied = $product->price;
+            $is_special = false;
+
+            if($request->client_id){
+                $special_price = \App\Models\Price::where('client_id', $request->client_id)
+                    ->where('product_id', $item['id'])
+                    ->first();
+                if($special_price){
+                    $price_applied = $special_price->price;
+                    $is_special = true;
+                }
+            }
+
+            $cart['items'][$key]['price'] = number_format($price_applied, 2, '.', '');
+            $cart['items'][$key]['amount'] = number_format($price_applied * $item['quantity'], 2, '.', '');
+            $cart['items'][$key]['special'] = $is_special;
+        }
+
+        session()->put('cart', $cart);
+        $this->summary();
+
+        return response()->json(['status' => true]);
     }
 }

@@ -1,4 +1,4 @@
-﻿@extends('template.app')
+@extends('template.app')
 
 @section('title', 'Crear venta')
 
@@ -10,35 +10,44 @@
     <li class="breadcrumb-item active">Crear nuevo</li>
   </ol>
 </nav>
+<style>
+	.ts-dropdown {
+		z-index: 2000 !important;
+		background: var(--bg-primary) !important;
+	}
+	.ts-dropdown .dropdown-item {
+		color: var(--text-main) !important;
+	}
+	.ts-dropdown .dropdown-item:hover {
+		background-color: rgba(0, 0, 0, 0.05) !important;
+	}
+	[data-bs-theme='dark'] .ts-dropdown .dropdown-item:hover {
+		background-color: rgba(255, 255, 255, 0.1) !important;
+	}
+	.card-filter-container {
+		overflow: visible !important;
+	}
+</style>
 <div class="card mb-4 card-filter-container">
 	<div class="card-body">
 		<div class="row">
-			<div class="col-lg-3">
+			<div class="col-lg-2">
 				<div class="mb-3">
 					<label class="form-label">Orden de venta</label>
 					<input type="text" class="form-control" value="{{ $order }}" disabled>
 				</div>
 			</div>
-			<div class="col-lg-3">
-				<div class="mb-3">
-					<label class="form-label">Guía de remisión</label>
-					<div class="input-group">
-						<span class="input-group-text">GR-00000</span>
-						<input type="text" class="form-control" id="guide">
-					</div>
-				</div>
-			</div>
-			<div class="col-lg-3">
+			<div class="col-lg-3" style="display:none">
 				<div class="mb-3">
 					<label class="form-label">Tipo de venta</label>
 					<select class="form-select" id="type">
 						<option value="">Seleccionar</option>
-						<option value="Contado">Contado</option>
+						<option value="Contado" selected>Contado</option>
 						<option value="Credito">Crédito</option>
 					</select>
 				</div>
 			</div>
-			<div class="col-lg-4">
+			<div class="col-lg-2">
 				<div class="mb-3">
 					<label class="form-label">Fecha</label>
 					<input type="date" class="form-control" id="date" value="{{ now()->format('Y-m-d') }}">
@@ -46,7 +55,10 @@
 			</div>
 			<div class="col-lg-4">
 				<div class="mb-3">
-					<label class="form-label">Cliente</label>
+					<label class="form-label d-flex justify-content-between align-items-center">
+						Cliente
+						<span id="client-type-badge"></span>
+					</label>
 					<div class="input-group">
 						<select class="form-select ts-clients" id="client_id">
 							<option value="">Seleccionar</option>
@@ -76,7 +88,7 @@
 				<tr>
 					<th>#</th>
 					<th>Nombre</th>
-					<th>Especial</th>
+					<th>Estado</th>
 					<th>Precio</th>
 					<th>Cantidad</th>
 					<th>Subtotal</th>
@@ -142,6 +154,15 @@
 								<input type="text" class="form-control" name="name">
 							</div>
 						</div>
+						<div class="col-lg-12">
+							<div class="mb-3">
+								<label class="form-label">Tipo de cliente <span class="text-danger">*</span></label>
+								<select class="form-select" name="type" required>
+									<option value="Contado">Contado</option>
+									<option value="Credito">Crédito</option>
+								</select>
+							</div>
+						</div>
 					</div>
 				</div>
 				<div class="modal-footer">
@@ -158,6 +179,18 @@
 <script>
 	$(document).ready(function(){
 		getItems();
+		
+		var basePrices = {};
+		$('.ts-products option').each(function(){
+			if($(this).val()){
+				var text = $(this).text();
+				var parts = text.split(' - S/');
+				basePrices[$(this).val()] = {
+					name: parts[0],
+					price: parts[1]
+				};
+			}
+		});
 
 		var tsClients = new TomSelect('.ts-clients', {
 			valueField: 'id',
@@ -171,7 +204,6 @@
 					url: '{{ route('clients.api') }}?q=' + encodeURIComponent(query),
 					method: 'GET',
 					success: function(data){
-						console.log(data);
 						callback(data.items);
 					},
 					error: function(err){
@@ -184,6 +216,12 @@
 					return `<div>${escape(data.name)}</div>`;
 				},
 				item: function(data, escape) {
+					$('#type').val(data.type);
+					
+					var badgeClass = data.type === 'Credito' ? 'bg-purple-lt' : 'bg-azure-lt';
+					var badgeText = data.type === 'Credito' ? 'Crédito' : 'Contado';
+					$('#client-type-badge').attr('class', 'badge ' + badgeClass).text(badgeText);
+
 					return `<div>${escape(data.name)}</div>`;
 				},
 				no_results: function(data, escape){
@@ -192,7 +230,7 @@
 			}
 		});
 
-		new TomSelect('.ts-products', {
+		var tsProducts = new TomSelect('.ts-products', {
 			valueField: 'id',
 			labelField: 'name',
 			searchField: 'name',
@@ -209,6 +247,44 @@
 				}
 			}
 		});
+
+		tsClients.on('change', function(value){
+			if(!value){
+				$('#client-type-badge').attr('class', '').text('');
+				$('#type').val('Contado');
+				updateProductLabels({});
+			} else {
+				$.get('{{ url("prices/special") }}/' + value, function(prices){
+					updateProductLabels(prices);
+				});
+			}
+
+			// Actualizar todos los precios del carrito
+			$.post('{{ route("cart.updatePrices") }}', { client_id: value }, function(){
+				getItems();
+			});
+		});
+
+		function updateProductLabels(specialPrices){
+			var specials = {};
+			if(Array.isArray(specialPrices)){
+				specialPrices.forEach(p => specials[p.product_id] = p.price);
+			}
+
+			$('.ts-products option').each(function(){
+				var id = $(this).val();
+				if(id && basePrices[id]){
+					var price = specials[id] ? specials[id] : basePrices[id].price;
+					var newName = basePrices[id].name + ' - S/' + price;
+					
+					// Update underlying option
+					$(this).text(newName);
+					
+					// Update TomSelect
+					tsProducts.updateOption(id, { name: newName });
+				}
+			});
+		}
 	});
 
 	$('#storeClientForm').submit(function(e){
@@ -251,7 +327,7 @@
 						<td>${key + 1}</td>
 						<td>${item.name}</td>
 						<td>
-							<input type="checkbox" class="form-check-input cbx-special" ${item.special ? 'checked' : ''}>
+							${item.special ? '<span class="badge bg-purple-lt fw-bold">Precio especial</span>' : ''}
 						</td>
 						<td>
 							<input type="text" class="form-control form-control-sm txt-price" value="${ money(item.price) }" data-id="${item.id}" style="width: 60px;">
@@ -284,11 +360,11 @@
 	}
 
 	function addItem(id){
-
+		var client_id = $('#client_id').val();
 		$.ajax({
 			url: '{{ route('cart.store') }}',
 			method: 'POST',
-			data: { id:id },
+			data: { id:id, client_id: client_id },
 			success: function(data){
 				getItems();
 			},
@@ -327,13 +403,11 @@
 
 		var price = $(this).parent().parent().find('.txt-price').val();
 		var quantity = $(this).parent().parent().find('.txt-quantity').val();
-		var special = $(this).parent().parent().find('.cbx-special').prop('checked');
 		
-
 		$.ajax({
 			url: '{{ route('cart.update') }}',
 			method: 'PATCH',
-			data: { id, price, quantity, special },
+			data: { id, price, quantity },
 			success: function(data){
 				if(data.status){
 					getItems();
@@ -367,14 +441,14 @@
 
 	$(document).on('click', '#btn-save', function(){
 
-		var guide = $('#guide').val();
+		// var guide = $('#guide').val(); // Removed
 		var type = $('#type').val();
 		var date = $('#date').val();
 		var client_id = $('#client_id').val();
 		$.ajax({
 			url: '{{ route('sales.store') }}',
 			method: 'POST',
-			data: { guide, type, date, client_id },
+			data: { type, date, client_id }, // Removed guide
 			success: function(data){
 				if(data.status){
 					location.href = '{{ route('sales.index') }}';
@@ -388,8 +462,6 @@
 		});
 
 	});
-
-
 
 </script>
 @endsection

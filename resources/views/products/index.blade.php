@@ -34,6 +34,8 @@
 				<tr>
 					<th>Nombre</th>
 					<th>Precio</th>
+					<th>Stock</th>
+					<th>¿Reduce stock?</th>
 					<th>Acción</th>
 				</tr>
 			</thead>
@@ -43,6 +45,14 @@
 				<tr>
 					<td>{{ $product->name }}</td>
 					<td>S/{{ $product->price }}</td>
+					<td>{{ $product->stock ?? 'N/A' }}</td>
+					<td>
+						@if($product->reduces_stock)
+						<span class="badge bg-success text-success-fg">Si</span>
+						@else
+						<span class="badge bg-secondary text-secondary-fg">No</span>
+						@endif
+					</td>
 					<td>
 						<div class="d-flex gap-2">
 							<div class="d-flex gap-2">
@@ -99,14 +109,24 @@
                                 </div>
 							</div>
 						</div>
-						<div class="col-lg-12">
+						<div class="col-lg-6">
 							<div class="mb-3">
-								<label class="form-label fw-bold">Precio de Venta <span class="text-danger">*</span></label>
-								<div class="input-group">
-                                    <span class="input-group-text bg-light text-muted border-end-0 fw-bold">S/</span>
-                                    <input type="number" step="0.01" class="form-control" name="price" placeholder="0.00" required>
+								<label class="form-label fw-bold">Stock Inicial (opcional)</label>
+								<div class="input-icon">
+                                    <span class="input-icon-addon">
+                                        <i class="ti ti-database text-muted"></i>
+                                    </span>
+                                    <input type="number" class="form-control" name="stock" placeholder="0">
                                 </div>
-                                <div class="form-hint mt-1 small">Ingresa el monto neto en Soles (S/).</div>
+							</div>
+						</div>
+						<div class="col-lg-6">
+							<div class="mb-3 mt-4">
+								<label class="form-check">
+									<input class="form-check-input" type="checkbox" name="reduces_stock" value="1">
+									<span class="form-check-label fw-bold">¿Este producto reduce stock?</span>
+								</label>
+								<div class="form-hint small">Si se marca, el stock se descontará en todas las ventas.</div>
 							</div>
 						</div>
 					</div>
@@ -151,13 +171,32 @@
                                 </div>
 							</div>
 						</div>
-						<div class="col-lg-12">
+						<div class="col-lg-6">
 							<div class="mb-3">
 								<label class="form-label fw-bold">Precio de Venta</label>
 								<div class="input-group">
                                     <span class="input-group-text bg-light text-muted border-end-0 fw-bold">S/</span>
                                     <input type="number" step="0.01" class="form-control" name="price" id="editPrice" required>
                                 </div>
+							</div>
+						</div>
+						<div class="col-lg-6">
+							<div class="mb-3">
+								<label class="form-label fw-bold">Stock</label>
+								<div class="input-icon">
+                                    <span class="input-icon-addon">
+                                        <i class="ti ti-database text-muted"></i>
+                                    </span>
+                                    <input type="number" class="form-control" name="stock" id="editStock">
+                                </div>
+							</div>
+						</div>
+						<div class="col-lg-12">
+							<div class="mb-3">
+								<label class="form-check">
+									<input class="form-check-input" type="checkbox" name="reduces_stock" id="editIsBidon" value="1">
+									<span class="form-check-label fw-bold">¿Este producto reduce stock?</span>
+								</label>
 							</div>
 						</div>
 					</div>
@@ -215,6 +254,8 @@
 			success: function(data){
 				$('#editName').val(data.name);
 				$('#editPrice').val(data.price);
+				$('#editStock').val(data.stock);
+				$('#editIsBidon').prop('checked', data.reduces_stock == 1);
 				$('#editId').val(data.id);
 				$('#editModal').modal('show');
 			},

@@ -51,7 +51,7 @@
 	<div class="card-body py-3 border-bottom">
 		<form>
 			<div class="row g-3 align-items-end">
-				<div class="col-md-4">
+				<div class="col-md-2">
 					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Mes</label>
 					<select class="form-select text-dark" name="month">
 						<option value="">Seleccionar mes</option>
@@ -71,6 +71,14 @@
 						<option value="{{ $i }}" @if(request()->year == $i) selected @endif>{{ $i }}</option>
 						@endfor
 					</select>
+				</div>
+                <div class="col-md-2">
+					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Desde</label>
+					<input type="date" class="form-control text-dark" name="from_date" value="{{ request()->from_date }}">
+				</div>
+                <div class="col-md-2">
+					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Hasta</label>
+					<input type="date" class="form-control text-dark" name="to_date" value="{{ request()->to_date }}">
 				</div>
                 <div class="col-md-2">
 			        <button type="submit" class="btn btn-brand w-100 py-2 fw-bold"><i class="ti ti-search me-1 fs-3"></i> Buscar</button>
@@ -158,7 +166,12 @@
   			<div class="modal-body">
   			  <div class="mb-3">
   			  	<label class="form-label">Descripción</label>
-  			  	<input type="text" class="form-control" name="description" required>
+  			  	<select class="form-select ts-description" name="description" id="createDescription" required>
+                    <option value="">Seleccionar o escribir...</option>
+                    @foreach($descriptions as $desc)
+                        <option value="{{ $desc }}">{{ $desc }}</option>
+                    @endforeach
+                </select>
   			  </div>
   			  
   			  <div class="d-flex justify-content-between align-items-center mb-2">
@@ -197,7 +210,12 @@
   			<div class="modal-body">
   			  <div class="mb-3">
   			  	<label class="form-label">Descripción</label>
-  			  	<input type="text" class="form-control" name="description" id="editDescription" required>
+  			  	<select class="form-select ts-description" name="description" id="editDescription" required>
+                    <option value="">Seleccionar o escribir...</option>
+                    @foreach($descriptions as $desc)
+                        <option value="{{ $desc }}">{{ $desc }}</option>
+                    @endforeach
+                </select>
   			  </div>
   			  
   			  <div class="d-flex justify-content-between align-items-center mb-2">
@@ -235,6 +253,9 @@
 			<option value="{{ $pm->id }}">{{ $pm->name }}</option>
 		@endforeach
 	`;
+
+	var tsDescriptionCreate;
+	var tsDescriptionEdit;
 
 	function addPaymentRowCreate(amount = '') {
 		var rowCount = $('#payment-rows-create .payment-row').length;
@@ -287,6 +308,13 @@
 	$('#createModal').on('show.bs.modal', function () {
 		if($('#payment-rows-create').is(':empty')) {
 			addPaymentRowCreate();
+		}
+
+		if(!tsDescriptionCreate){
+			tsDescriptionCreate = new TomSelect('#createDescription', {
+				create: true,
+				persist: false,
+			});
 		}
 	});
 
@@ -375,7 +403,13 @@
 			url: '{{ route('expenses.index') }}' + '/' + id + '/edit/',
 			method: 'GET',
 			success: function(data){
-				$('#editDescription').val(data.description);
+				if(!tsDescriptionEdit){
+					tsDescriptionEdit = new TomSelect('#editDescription', {
+						create: true,
+						persist: false,
+					});
+				}
+				tsDescriptionEdit.setValue(data.description);
 				$('#editId').val(data.id);
 				
 				// Initialize with all payments in the group

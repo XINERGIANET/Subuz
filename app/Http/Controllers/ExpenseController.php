@@ -18,10 +18,15 @@ class ExpenseController extends Controller
             return $query->whereMonth('date', $month);
         })->when($request->year, function($query, $year){
             return $query->whereYear('date', $year);
+        })->when($request->from_date, function($query, $from){
+            return $query->whereDate('date', '>=', $from);
+        })->when($request->to_date, function($query, $to){
+            return $query->whereDate('date', '<=', $to);
         })->latest('date')->paginate(10);
         $payment_methods = PaymentMethod::all();
         $total_expenses = $expenses->sum('amount');
-        return view('expenses.index', compact('expenses', 'payment_methods', 'total_expenses'));
+        $descriptions = Expense::select('description')->distinct()->pluck('description');
+        return view('expenses.index', compact('expenses', 'payment_methods', 'total_expenses', 'descriptions'));
     }
 
     public function store(Request $request){
@@ -135,6 +140,10 @@ class ExpenseController extends Controller
                 return $query->whereMonth('date', $month);
             })->when($request->year, function($query, $year){
                 return $query->whereYear('date', $year);
+            })->when($request->from_date, function($query, $from){
+                return $query->whereDate('date', '>=', $from);
+            })->when($request->to_date, function($query, $to){
+                return $query->whereDate('date', '<=', $to);
             })->latest('date')->get();
 
         $fpdf = new Fpdf;
@@ -153,9 +162,14 @@ class ExpenseController extends Controller
         
         $months = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
         $period = "Periodo: ";
-        if($request->month) $period .= $months[$request->month] . " ";
-        if($request->year) $period .= $request->year;
-        if(!$request->month && !$request->year) $period .= "Todos los registros";
+        if($request->from_date || $request->to_date) {
+            if($request->from_date) $period .= "Desde " . date('d/m/Y', strtotime($request->from_date)) . " ";
+            if($request->to_date) $period .= "Hasta " . date('d/m/Y', strtotime($request->to_date));
+        } else {
+            if($request->month) $period .= $months[$request->month] . " ";
+            if($request->year) $period .= $request->year;
+            if(!$request->month && !$request->year) $period .= "Todos los registros";
+        }
         
         $fpdf->SetFont('Montserrat', '', 10);
         $fpdf->SetTextColor(80, 80, 80);

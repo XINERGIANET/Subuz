@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\ReportLiquidation;
 use App\Models\Client;
 use App\Models\Sale;
+use App\Models\Cashbox;
 
 class ReportController extends Controller
 {
@@ -19,6 +20,17 @@ class ReportController extends Controller
 
     public function liquidation(){
         return view('reports.liquidation');
+    }
+
+    public function cashbox(Request $request){
+        $date = $request->date ? $request->date : now()->format('Y-m-d');
+        
+        $cashboxes = Cashbox::with(['movements', 'openedBy', 'closedBy', 'movements.user', 'movements.payment_method'])
+            ->whereDate('opened_at', $date)
+            ->orWhereDate('closed_at', $date)
+            ->get();
+
+        return view('reports.cashbox', compact('cashboxes', 'date'));
     }
 
     public function pdf(Request $request){

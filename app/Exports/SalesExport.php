@@ -25,7 +25,7 @@ class SalesExport implements FromCollection, WithHeadings, WithMapping, WithStyl
     */
     public function collection()
     {
-        return Sale::with(['payment_method', 'client'])
+        $query = Sale::with(['payment_method', 'client'])
             ->when($this->request->client_id, function($q, $client_id){
                 return $q->where('client_id', $client_id);
             })
@@ -43,8 +43,13 @@ class SalesExport implements FromCollection, WithHeadings, WithMapping, WithStyl
             })
             ->when($this->request->is_credit, function($q){
                 return $q->where('type', 'Credito')->where('paid', 0);
-            })
-            ->latest('date')->get();
+            });
+
+        if(!$this->request->start_date && !$this->request->end_date && !$this->request->is_pending && !$this->request->is_credit && !$this->request->client_id){
+            $query->whereDate('date', now());
+        }
+
+        return $query->latest('date')->get();
     }
 
     public function map($sale): array

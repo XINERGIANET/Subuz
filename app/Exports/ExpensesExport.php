@@ -30,6 +30,10 @@ class ExpensesExport implements FromCollection, WithHeadings, WithMapping, WithS
                 return $query->whereMonth('date', $month);
             })->when($this->request->year, function($query, $year){
                 return $query->whereYear('date', $year);
+            })->when($this->request->from_date, function($query, $from){
+                return $query->whereDate('date', '>=', $from);
+            })->when($this->request->to_date, function($query, $to){
+                return $query->whereDate('date', '<=', $to);
             })->latest('date')->get();
     }
 

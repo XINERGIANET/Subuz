@@ -40,12 +40,24 @@ class ChargeController extends Controller
 
     public function pending(Request $request){
         $payment_methods = PaymentMethod::all();
-        $query = Sale::whereIn('type', ['Contado', 'Pago pendiente'])->where('paid', 0);
+        $query = Sale::whereIn('type', ['Contado', 'Pago pendiente'])
+            ->where('paid', 0)
+            ->when($request->client_id, function($q, $client_id){
+                return $q->where('client_id', $client_id);
+            })
+            ->when($request->start_date, function($q, $start_date){
+                return $q->whereDate('date', '>=', $start_date);
+            })
+            ->when($request->end_date, function($q, $end_date){
+                return $q->whereDate('date', '<=', $end_date);
+            });
+
         $total = $query->sum('total');
         
         $sales = $query->latest('date')->paginate(10);
+        $selected_client = $request->client_id ? Client::find($request->client_id) : null;
 
-        return view('charges.pending', compact('sales', 'payment_methods', 'total'));
+        return view('charges.pending', compact('sales', 'payment_methods', 'total', 'selected_client'));
     }
 
     public function history(Request $request){

@@ -223,7 +223,7 @@
   			<div class="modal-body">
   				<div class="mb-3">
   					<label class="form-label">Monto inicial</label>
-  					<input type="number" step="0.01" class="form-control" name="opening_amount">
+  					<input type="number" step="0.01" class="form-control" name="opening_amount" value="{{ $suggested_opening_amount }}">
   				</div>
   			</div>
   			<div class="modal-footer">

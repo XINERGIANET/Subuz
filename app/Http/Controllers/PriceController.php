@@ -69,4 +69,8 @@ class PriceController extends Controller
             'status' => true
         ]);
     }
+    public function getSpecialPrices($client_id){
+        $prices = Price::where('client_id', $client_id)->get();
+        return response()->json($prices);
+    }
 }

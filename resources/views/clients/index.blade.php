@@ -17,10 +17,15 @@
 			</button>
 		</div>
 		<div>
-			<form>
+			<form class="d-flex gap-2">
+				<select class="form-select w-auto" name="type" onchange="this.form.submit()">
+					<option value="">Todos los tipos</option>
+					<option value="Contado" {{ request()->type == 'Contado' ? 'selected' : '' }}>Contado</option>
+					<option value="Credito" {{ request()->type == 'Credito' ? 'selected' : '' }}>Crédito</option>
+				</select>
 				<div class="input-group">
-					<input type="text" class="form-control" placeholder="Buscar" name="search" value="{{ request()->search }}">
-					<button type="submit" class="btn btn btn-icon">
+					<input type="text" class="form-control" placeholder="Buscar..." name="search" value="{{ request()->search }}">
+					<button type="submit" class="btn btn-icon">
 						<i class="ti ti-search icon"></i>
 					</button>
 				</div>
@@ -39,6 +44,7 @@
 					<th>Correo electrónico</th>
 					<th>Teléfono</th>
 					<th>Teléfono 2</th>
+					<th>Tipo</th>
 					<th>Acción</th>
 				</tr>
 			</thead>
@@ -54,6 +60,13 @@
 					<td>{{ $client->email }}</td>
 					<td>{{ $client->phone }}</td>
 					<td>{{ $client->phone_2 }}</td>
+					<td>
+						@if($client->type == 'Credito')
+						<span class="badge bg-purple-lt">Crédito</span>
+						@else
+						<span class="badge bg-azure-lt">Contado</span>
+						@endif
+					</td>
 					<td>
 						<div class="d-flex gap-2">
 							<div class="d-flex gap-2">
@@ -125,6 +138,9 @@
 									<option value="Chiclayo">Chiclayo</option>
 									<option value="Lambayeque">Lambayeque</option>
 									<option value="Pimentel">Pimentel</option>
+									<option value="La Victoria">La Victoria</option>
+									<option value="Reque">Reque</option>
+									<option value="Puerto Eten">Puerto Eten</option>
 								</select>
 							</div>
 						</div>
@@ -140,10 +156,13 @@
 								<input type="text" class="form-control" name="phone">
 							</div>
 						</div>
-						<div class="col-lg-6">
+						<div class="col-lg-12">
 							<div class="mb-3">
-								<label class="form-label">Teléfono 2</label>
-								<input type="text" class="form-control" name="phone_2">
+								<label class="form-label">Tipo de cliente <span class="text-danger">*</span></label>
+								<select class="form-select" name="type" required>
+									<option value="Contado">Contado</option>
+									<option value="Credito">Crédito</option>
+								</select>
 							</div>
 						</div>
 					</div>
@@ -199,6 +218,9 @@
 									<option value="Chiclayo">Chiclayo</option>
 									<option value="Lambayeque">Lambayeque</option>
 									<option value="Pimentel">Pimentel</option>
+									<option value="La Victoria">La Victoria</option>
+									<option value="Reque">Reque</option>
+									<option value="Puerto Eten">Puerto Eten</option>
 								</select>
 							</div>
 						</div>
@@ -214,10 +236,13 @@
 								<input type="text" class="form-control" name="phone" id="editPhone">
 							</div>
 						</div>
-						<div class="col-lg-6">
+						<div class="col-lg-12">
 							<div class="mb-3">
-								<label class="form-label">Teléfono 2</label>
-								<input type="text" class="form-control" name="phone_2" id="editPhone2">
+								<label class="form-label">Tipo de cliente <span class="text-danger">*</span></label>
+								<select class="form-select" name="type" id="editType" required>
+									<option value="Contado">Contado</option>
+									<option value="Credito">Crédito</option>
+								</select>
 							</div>
 						</div>
 					</div>
@@ -277,6 +302,7 @@
 				$('#editEmail').val(data.email);
 				$('#editPhone').val(data.phone);
 				$('#editPhone2').val(data.phone_2);
+				$('#editType').val(data.type);
 				$('#editId').val(data.id);
 				$('#editModal').modal('show');
 			},
@@ -326,8 +352,12 @@
 					url: '{{ route('clients.index') }}' + '/' + id,
 					method: 'DELETE',
 					success: function(data){
-						ToastMessage.fire({ text: 'Registro eliminado' })
-							.then(() => location.reload());
+						if(data.status){
+							ToastMessage.fire({ text: 'Registro eliminado' })
+								.then(() => location.reload());
+						}else{
+							ToastError.fire({ text: data.error ? data.error : 'Ocurrió un error' });
+						}
 					},
 					error: function(err){
 						ToastError.fire({ text: 'Ocurrió un error' });

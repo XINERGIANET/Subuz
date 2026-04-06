@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 	<meta charset="UTF-8">
@@ -146,13 +146,23 @@
 						</li>
 						@endif
 						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer'))
-						<li class="nav-item">
+						<li class="nav-item {{ request()->is('expenses*') ? 'active' : '' }}">
 							<a class="nav-link" href="{{ route('expenses.index') }}" >
 								<span class="nav-link-icon d-md-none d-lg-inline-block">
 									<i class="ti ti-truck-loading icon"></i>
 								</span>
 								<span class="nav-link-title">
 									Gastos
+								</span>
+							</a>
+						</li>
+						<li class="nav-item {{ request()->is('finances*') ? 'active' : '' }}">
+							<a class="nav-link" href="{{ route('finances.index') }}" >
+								<span class="nav-link-icon d-md-none d-lg-inline-block">
+									<i class="ti ti-building-bank icon"></i>
+								</span>
+								<span class="nav-link-title">
+									Finanzas
 								</span>
 							</a>
 						</li>
@@ -172,6 +182,9 @@
 									<div class="dropdown-menu-column">
 										<a class="dropdown-item" href="{{ route('reports.liquidation') }}">
 											<i class="ti ti-file-text icon me-2"></i> Liquidaci&oacute;n
+										</a>
+										<a class="dropdown-item" href="{{ route('reports.cashbox') }}">
+											<i class="ti ti-cash icon me-2"></i> Cierres de caja
 										</a>
 									</div>
 								</div>

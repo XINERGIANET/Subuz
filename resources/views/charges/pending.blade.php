@@ -50,13 +50,24 @@
 	<div class="card-body bg-light-lt py-3">
 		<form>
 			<div class="row g-3 align-items-end">
-				<div class="col-md-4">
+				<div class="col-md-3">
 					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Cliente</label>
 					<select class="form-select ts-clients" name="client_id">
 						<option value="">Seleccionar cliente</option>
+						@if(isset($selected_client) && $selected_client)
+							<option value="{{ $selected_client->id }}" selected>{{ $selected_client->name }}</option>
+						@endif
 					</select>
 				</div>
-                <div class="col-md-2">
+                <div class="col-md-3">
+					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Fecha desde</label>
+					<input type="date" class="form-control" name="start_date" value="{{ request()->start_date }}">
+				</div>
+                <div class="col-md-3">
+					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Fecha hasta</label>
+					<input type="date" class="form-control" name="end_date" value="{{ request()->end_date }}">
+				</div>
+                <div class="col-md-3">
 			        <button type="submit" class="btn btn-brand w-100 py-2 fw-bold"><i class="ti ti-filter icon me-1"></i> Filtrar</button>
                 </div>
 			</div>
@@ -89,11 +100,16 @@
 					<td>{{ optional($sale->client)->name ?? 'Consumidor Final' }}</td>
 					<td class="text-center fw-bold text-primary">S/{{ number_format($sale->total, 2) }}</td>
 					<td class="text-end">
-						@if(auth()->user()->hasRole('admin'))
-							<button class="btn btn-icon btn-brand btn-payment" data-id="{{ $sale->id }}" data-total="{{ $sale->total }}" data-type="{{ $sale->type }}" data-bs-toggle="tooltip" title="Registrar Pago">
-								<i class="ti ti-cash icon text-white fs-2"></i>
+						<div class="d-flex gap-2 justify-content-end">
+							<button class="btn btn-icon btn-outline-primary btn-show" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Ver Detalle">
+								<i class="ti ti-eye icon fs-2"></i>
 							</button>
-						@endif
+							@if(auth()->user()->hasRole('admin'))
+								<button class="btn btn-icon btn-brand btn-payment" data-id="{{ $sale->id }}" data-total="{{ $sale->total }}" data-type="{{ $sale->type }}" data-bs-toggle="tooltip" title="Registrar Pago">
+									<i class="ti ti-cash icon text-white fs-2"></i>
+								</button>
+							@endif
+						</div>
 					</td>		
 				</tr>
                 @empty
@@ -117,7 +133,7 @@
 <div class="modal modal-blur fade" id="paymentModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" role="document">
   	<div class="modal-content">
-  		<form id="paymentForm" method="POST">
+  		<form id="paymentForm" method="POST" enctype="multipart/form-data">
   			<div class="modal-header">
   			  <h5 class="modal-title">Pagar</h5>
   			  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -129,6 +145,13 @@
   			  <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="add-payment-line">
   			  	<i class="ti ti-plus icon"></i> Agregar método de pago
   			  </button>
+			  <div class="mt-3">
+				  <label class="form-label small text-muted mb-1">Foto de Evidencia (Opcional)</label>
+				  <input type="file" name="photo" id="payment_photo" class="form-control" accept="image/*" capture="camera">
+				  <div id="payment_photo_preview_container" class="mt-2 text-center d-none">
+					  <img id="payment_photo_preview" src="#" alt="Vista previa" class="img-fluid rounded border shadow-sm" style="max-height: 200px;">
+				  </div>
+			  </div>
   			</div>
   			<div class="modal-footer d-flex justify-content-between align-items-center">
   				<div>
@@ -147,10 +170,86 @@
   	</div>
   </div>
 </div>
+
+<div class="modal modal-blur fade" id="showModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+  	<div class="modal-content">
+  		<div class="modal-header">
+  		  <h5 class="modal-title">Detalle de venta</h5>
+  		  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+  		</div>
+  		<div class="modal-body">
+  		  <div class="mb-3 d-none" id="photo-container">
+  		    <label class="form-label small fw-bold text-muted text-uppercase mb-1">Foto de evidencia</label>
+  		    <div class="text-center">
+  		      <img src="" id="show-photo" class="img-fluid rounded border shadow-sm" style="max-height: 300px;">
+  		    </div>
+  		  </div>
+  		  <div class="table-responsive">
+			<table class="table table-vcenter">
+				<thead class="table-corporate-header">
+					<tr>
+						<th>Producto</th>
+						<th>Precio</th>
+						<th>Cantidad</th>
+						<th>Subtotal</th>
+					</tr>
+				</thead>
+				<tbody id="tbl-show-items"></tbody>
+				<tfoot>
+					<tr>
+						<td colspan="3" class="text-end fw-bold">Total:</td>
+						<td class="fw-bold fs-4 text-brand" id="modal-sale-total">S/0.00</td>
+					</tr>
+				</tfoot>
+			</table>
+		  </div>
+  		</div>
+        <div class="modal-footer bg-light-subtle">
+            <button type="button" class="btn btn-brand w-100 py-2" data-bs-dismiss="modal">Aceptar</button>
+        </div>
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('scripts')
 <script>
+	$(document).ready(function(){
+		new TomSelect('.ts-clients', {
+			valueField: 'id',
+			labelField: 'name',
+			searchField: ['name', 'document'],
+			copyClassesToDropdown: false,
+			dropdownClass: 'dropdown-menu ts-dropdown',
+			optionClass:'dropdown-item',
+			dropdownParent: 'body',
+			load: function(query, callback){
+				$.ajax({
+					url: '{{ route('clients.api') }}?q=' + encodeURIComponent(query),
+					method: 'GET',
+					success: function(data){
+						callback(data.items);
+					},
+					error: function(err){
+						console.log(err);
+					}
+				})
+			},
+			render: {
+				option: function(data, escape) {
+					return `<div>${escape(data.name)} - ${escape(data.document)}</div>`;
+				},
+				item: function(data, escape) {
+					return `<div>${escape(data.name)} - ${escape(data.document)}</div>`;
+				},
+				no_results: function(data, escape){
+					return '<div class="no-results">No se encontraron resultados</div>'
+				}
+			}
+		});
+	});
+
 	var paymentMethodOptions = `
 		<option value="">Seleccionar</option>
 		@foreach($payment_methods as $payment_method)
@@ -168,6 +267,11 @@
 		$('#total_sale_value').val(total);
 		$('#total-sale-display').text('S/' + total.toFixed(2));
 		
+		// Reset file input
+		$('#payment_photo').val('');
+		$('#payment_photo_preview_container').addClass('d-none');
+		$('#payment_photo_preview').attr('src', '#');
+
 		// Reset to one line
 		$('#payment-lines').html('');
 		addPaymentLine();
@@ -244,13 +348,29 @@
 		calculateBalance();
 	});
 
+	$(document).on('change', '#payment_photo', function() {
+		const file = this.files[0];
+		if (file) {
+			let reader = new FileReader();
+			reader.onload = function(event) {
+				$('#payment_photo_preview').attr('src', event.target.result);
+				$('#payment_photo_preview_container').removeClass('d-none');
+			}
+			reader.readAsDataURL(file);
+		}
+	});
+
 	$('#paymentForm').submit(function(e){
 		e.preventDefault();
+		
+		var formData = new FormData(this);
 
 		$.ajax({
 			url: '{{ route('payments.store') }}',
 			method: 'POST',
-			data: $(this).serialize(),
+			data: formData,
+			processData: false,
+			contentType: false,
 			success: function(data){
 				if(data.status){
 					$('#paymentModal').modal('hide');
@@ -263,6 +383,50 @@
 			error: function(err){
 				console.log(err);
 				ToastError.fire({ text: 'Ocurrió un error en el servidor' });
+			}
+		});
+
+	});
+
+	$(document).on('click', '.btn-show', function(){
+		var id = $(this).data('id');
+
+		$.ajax({
+			url: '{{ url('sales') }}' + '/' + id + '/details',
+			method: 'GET',
+			success: function(data){
+				if(data.status){
+					var html = '';
+
+					data.details.forEach(function(item){
+						var subtotal = (Number(item.price)*Number(item.quantity)).toFixed(2);
+						html += `
+							<tr>
+								<td>${item.product.name}</td>
+								<td>S/${Number(item.price).toFixed(2)}</td>
+								<td>${item.quantity}</td>
+								<td>S/${subtotal}</td>
+							</tr>
+						`;
+					});
+
+					$('#tbl-show-items').html(html);
+					$('#modal-sale-total').text('S/' + Number(data.total).toFixed(2));
+
+					if(data.photo && data.photo.indexOf('photo-view/') !== -1 && !data.photo.endsWith('photo-view/')){
+						$('#show-photo').attr('src', data.photo);
+						$('#photo-container').removeClass('d-none');
+					}else{
+						$('#photo-container').addClass('d-none');
+						$('#show-photo').attr('src', '');
+					}
+
+					$('#showModal').modal('show');
+				}
+			},
+			error: function(err){
+				console.log(err);
+				ToastError.fire({ text: 'Error al cargar los detalles' });
 			}
 		});
 

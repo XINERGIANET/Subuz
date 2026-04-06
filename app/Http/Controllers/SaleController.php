@@ -15,6 +15,7 @@ use App\Models\Week;
 use App\Models\Payment;
 use App\Models\Cashbox;
 use App\Models\CashboxMovement;
+use App\Models\Client;
 use Codedge\Fpdf\Fpdf\Fpdf;
 
 class SaleController extends Controller
@@ -22,37 +23,120 @@ class SaleController extends Controller
     public function index(Request $request){
         $query = Sale::with(['payment_method', 'client', 'movements']);
 
-        if($request->start_date || $request->end_date){
-            $query->when($request->client_id, function($q, $client_id){
-                    return $q->where('client_id', $client_id);
-                })
-                ->when($request->type, function($q, $type){
-                    return $q->where('type', $type);
-                })
-                ->when($request->start_date, function($q, $start_date){
-                    return $q->whereDate('date', '>=', $start_date);
-                })
-                ->when($request->end_date, function($q, $end_date){
-                    return $q->whereDate('date', '<=', $end_date);
-                });
-        }else{
+        $query->when($request->client_id, function($q, $client_id){
+                return $q->where('client_id', $client_id);
+            })
+            ->when($request->type, function($q, $type){
+                return $q->where('type', $type);
+            })
+            ->when($request->start_date, function($q, $start_date){
+                return $q->whereDate('date', '>=', $start_date);
+            })
+            ->when($request->end_date, function($q, $end_date){
+                return $q->whereDate('date', '<=', $end_date);
+            })
+            ->when($request->delivery_status, function($q, $delivery_status){
+                if($delivery_status == 'delivered'){
+                    return $q->where(function($sq){
+                        $sq->where('paid', 1)
+                        ->orWhere('type', 'Pago pendiente')
+                        ->orWhereHas('movements', function($mq){
+                            $mq->where('type', 'debt');
+                        });
+                    });
+                }elseif($delivery_status == 'pending'){
+                    return $q->where('status', '!=', 'Anulado')
+                        ->where('paid', 0)
+                        ->where('type', '!=', 'Pago pendiente')
+                        ->whereDoesntHave('movements', function($mq){
+                            $mq->where('type', 'debt');
+                        });
+                }
+            });
+
+        if(!$request->start_date && !$request->end_date && !$request->client_id && !$request->type && !$request->delivery_status){
             $query->whereDate('date', now());
         }
 
-        // Totals excluding annulled
-        $total_sales = (clone $query)->where('status', '!=', 'Anulado')->sum('total');
+        // Totals for delivered sales
+        $total_sales_query = (clone $query)
+            ->where('status', '!=', 'Anulado')
+            ->where(function($q) {
+                $q->where('paid', 1)
+                ->orWhere('type', 'Pago pendiente')
+                ->orWhereHas('movements', function($mq) {
+                    $mq->where('type', 'debt');
+                });
+            });
+
+        if (auth()->check() && auth()->user()->hasRole('despachador')) {
+            $total_sales_query->whereHas('movements', function($mq) {
+                $mq->where('user_id', auth()->id())->whereIn('type', ['paid', 'debt']);
+            });
+        }
+
+        $total_sales = $total_sales_query->sum('total');
         
+        // Total cash for dispatchers (actual cash payments for filtered sales)
+        $total_cash_query = (clone $query)->where('status', '!=', 'Anulado');
+        if (auth()->check() && auth()->user()->hasRole('despachador')) {
+            $total_cash_query->whereHas('movements', function($mq) {
+                $mq->where('user_id', auth()->id())->whereIn('type', ['paid', 'debt']);
+            });
+        }
+        $total_cash = Payment::where('payment_method_id', 1) // 1 = Efectivo
+            ->whereIn('sale_id', $total_cash_query->pluck('id'))
+            ->sum('amount');
+
+        // Total by payment methods for dispatchers
+        $payment_totals = \DB::table('payments')
+            ->join('payment_methods', 'payments.payment_method_id', '=', 'payment_methods.id')
+            ->select('payment_methods.name', \DB::raw('SUM(payments.amount) as total'))
+            ->whereIn('payments.sale_id', $total_cash_query->pluck('id'))
+            ->groupBy('payment_methods.name')
+            ->get();
+
         // Annulled sales for metrics and modal
         $annulled_sales_query = (clone $query)->where('status', 'Anulado');
         $annulled_count = $annulled_sales_query->count();
         $annulled_sales = $annulled_sales_query->get();
 
+        // Count of delivered orders today (for dispatchers and metrics)
+        $delivered_count_query = (clone $query)
+            ->where('status', '!=', 'Anulado')
+            ->where(function($q) {
+                $q->where('paid', 1)
+                ->orWhere('type', 'Pago pendiente')
+                ->orWhereHas('movements', function($mq) {
+                    $mq->where('type', 'debt');
+                });
+            });
+
+        if (auth()->check() && auth()->user()->hasRole('despachador')) {
+            $delivered_count_query->whereHas('movements', function($mq) {
+                $mq->where('user_id', auth()->id())->whereIn('type', ['paid', 'debt']);
+            });
+        }
+
+        $delivered_count = $delivered_count_query->count();
+
+        if (auth()->check() && auth()->user()->hasRole('despachador')) {
+            $query->where('status', '!=', 'Anulado')
+                  ->where('paid', 0)
+                  ->where('type', '!=', 'Pago pendiente')
+                  ->whereDoesntHave('movements', function($mq){
+                      $mq->where('type', 'debt');
+                  });
+        }
+
         $sales = $query->latest('date')->paginate(10);
 
         $payment_methods = PaymentMethod::all();
         $cashbox = Cashbox::currentOpen();
+        $selected_client = $request->client_id ? Client::find($request->client_id) : null;
 
-        return view('sales.index', compact('sales', 'total_sales', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox'));
+        $products = Product::all();
+        return view('sales.index', compact('sales', 'total_sales', 'total_cash', 'payment_totals', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox', 'products', 'selected_client', 'delivered_count'));
     }
 
     public function create(){
@@ -71,10 +155,9 @@ class SaleController extends Controller
             'total' => '0.00'
         ];
 
-        $request->merge(['guide' => 'GR-'.str_pad($request->guide, 5, "0", STR_PAD_LEFT)]);
 
         $validator = Validator::make($request->all(), [
-            'guide' => 'required|unique:sales',
+            'guide' => 'nullable|unique:sales',
             'type' => 'required|in:Contado,Credito',
             'date' => 'required|date',
             'client_id' => 'required'
@@ -113,12 +196,15 @@ class SaleController extends Controller
             ]);
         }
         
+        $client = Client::find($request->client_id);
+        $isNewClient = $client->sales()->where('status', '!=', 'Anulado')->count() == 0;
+        
         $sale = Sale::create([
             'order' => $order,
             'date' => $request->date.' '.now()->format('H:i:s'),
             'week_id' => $week->id,
             'guide' => $request->guide,
-            'type' => $request->type,
+            'type' => $client->type,
             'payment_method_id' => null,
             'client_id' => $request->client_id,
             'total' => $cart['total'],
@@ -127,6 +213,14 @@ class SaleController extends Controller
         ]);
 
         foreach($cart['items'] as $item){
+            $product = Product::find($item['id']);
+            
+            if($product && $product->stock !== null){
+                if($product->reduces_stock){
+                    $product->decrement('stock', $item['quantity']);
+                }
+            }
+
             SaleDetail::create([
                 'sale_id' => $sale->id,
                 'product_id' => $item['id'],
@@ -155,6 +249,8 @@ class SaleController extends Controller
 
         return response()->json([
             'status' => true,
+            'photo' => $sale->photo ? url('photo-view/' . $sale->photo) : null,
+            'total' => number_format($sale->total, 2, '.', ''),
             'details' => optional($sale)->details()->with('product')->get()
         ]);
     }
@@ -164,6 +260,7 @@ class SaleController extends Controller
             'status' => true,
             'id' => $sale->id,
             'date' => optional($sale->date)->format('Y-m-d'),
+            'type' => $sale->type,
             'details' => optional($sale)->details()->with('product')->get()
         ]);
     }
@@ -171,6 +268,7 @@ class SaleController extends Controller
     public function update(Request $request, Sale $sale){
         $validator = Validator::make($request->all(), [
             'date' => 'required|date',
+            'type' => 'required|string',
             'details.id.*' => 'required|integer',
             'details.price.*' => 'required|numeric',
             'details.quantity.*' => 'required|integer'
@@ -195,9 +293,19 @@ class SaleController extends Controller
             $total += floatval($price) * intval($quantity);
         }
 
+        $debt = $sale->debt;
+        if ($request->type == 'Credito') {
+            $total_paid = $sale->payments()->sum('amount');
+            $debt = $total - $total_paid;
+        } else {
+            $debt = 0;
+        }
+
         $sale->update([
             'date' => $request->date,
-            'total' => $total
+            'type' => $request->type,
+            'total' => $total,
+            'debt' => $debt > 0 ? $debt : 0
         ]);
 
         if($validator->fails()){
@@ -331,7 +439,6 @@ class SaleController extends Controller
     }
 
     public function markDispatch(Request $request, Sale $sale){
-
         if(!auth()->user()->hasRole('admin') && !auth()->user()->hasRole('despachador')){
             return response()->json([
                 'status' => false,
@@ -340,7 +447,13 @@ class SaleController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'paid' => 'required|boolean'
+            'paid' => 'required|boolean',
+            'guide' => 'required|string|max:255',
+            'photo' => 'required|image|mimes:jpeg,png,jpg|max:51200'
+        ],[
+            'guide.required' => 'El número de guía es obligatorio para despachar.',
+            'photo.required' => 'La foto de evidencia es obligatoria para despachar.',
+            'photo.image' => 'El archivo debe ser una imagen válida.',
         ]);
 
         if($validator->fails()){
@@ -358,7 +471,6 @@ class SaleController extends Controller
         }
 
         $cashbox = Cashbox::currentOpen();
-
         if(!$cashbox){
             return response()->json([
                 'status' => false,
@@ -366,84 +478,102 @@ class SaleController extends Controller
             ]);
         }
 
-        DB::transaction(function() use ($request, $sale, $cashbox){
+        // Handle Photo Upload
+        $photoPath = null;
+        if ($request->hasFile('photo')) {
+            $file = $request->file('photo');
+            $filename = 'dispatch_' . $sale->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+            $photoPath = $file->storeAs('dispatches', $filename, 'public');
+        }
 
-            if($request->paid){
+        try {
+            DB::transaction(function() use ($request, $sale, $cashbox, $photoPath){
                 
-                $payments = $request->payments;
-                $totalPaid = 0;
-                
-                if(!$payments || count($payments) == 0){
-                    throw new \Exception("Debe agregar por lo menos un método de pago.");
-                }
+                $commonUpdate = [
+                    'guide' => $request->guide,
+                    'photo' => $photoPath
+                ];
 
-                foreach($payments as $payment){
-                    if(!isset($payment['method_id']) || !isset($payment['amount'])){
-                        throw new \Exception("Datos de pago incompletos.");
+                if($request->paid){
+                    $payments = $request->payments;
+                    $totalPaid = 0;
+                    
+                    if(!$payments || count($payments) == 0){
+                        throw new \Exception("Debe agregar por lo menos un método de pago.");
                     }
-                    $totalPaid += floatval($payment['amount']);
-                }
 
-                if(abs($totalPaid - floatval($sale->total)) > 0.01){
-                    throw new \Exception("La suma de los pagos (S/".number_format($totalPaid, 2).") debe ser igual al total de la venta (S/".number_format($sale->total, 2).").");
-                }
+                    foreach($payments as $payment){
+                        if(!isset($payment['method_id']) || !isset($payment['amount'])){
+                            throw new \Exception("Datos de pago incompletos.");
+                        }
+                        $totalPaid += floatval($payment['amount']);
+                    }
 
-                // Update sale as paid
-                $sale->update([
-                    'type' => 'Contado',
-                    'payment_method_id' => $payments[0]['method_id'], // Use first as primary reference
-                    'debt' => 0,
-                    'paid' => 1
-                ]);
+                    if(abs($totalPaid - floatval($sale->total)) > 0.01){
+                        throw new \Exception("La suma de los pagos (S/".number_format($totalPaid, 2).") debe ser igual al total de la venta (S/".number_format($sale->total, 2).").");
+                    }
 
-                // Register all movements and payments
-                foreach($payments as $payment){
-                    Payment::create([
-                        'sale_id' => $sale->id,
-                        'payment_method_id' => $payment['method_id'],
-                        'amount' => $payment['amount'],
-                        'date' => now()
-                    ]);
+                    // Update sale as paid
+                    $sale->update(array_merge($commonUpdate, [
+                        'type' => 'Contado',
+                        'payment_method_id' => $payments[0]['method_id'], // Use first as primary reference
+                        'debt' => 0,
+                        'paid' => 1
+                    ]));
+
+                    // Register all movements and payments
+                    foreach($payments as $payment){
+                        Payment::create([
+                            'sale_id' => $sale->id,
+                            'payment_method_id' => $payment['method_id'],
+                            'amount' => $payment['amount'],
+                            'date' => now()
+                        ]);
+
+                        CashboxMovement::create([
+                            'cashbox_id' => $cashbox->id,
+                            'sale_id' => $sale->id,
+                            'user_id' => auth()->id(),
+                            'payment_method_id' => $payment['method_id'],
+                            'type' => 'paid',
+                            'amount' => $payment['amount'],
+                            'date' => now()
+                        ]);
+                    }
+
+                }else{
+                    if(!auth()->user()->hasRole('despachador') && !auth()->user()->hasRole('admin')){
+                        throw new \Exception("Solo el despachador o administrador puede marcar pendiente de pago.");
+                    }
+
+                    $sale->update(array_merge($commonUpdate, [
+                        'type' => $sale->type,
+                        'payment_method_id' => null,
+                        'debt' => $sale->total,
+                        'paid' => 0
+                    ]));
 
                     CashboxMovement::create([
                         'cashbox_id' => $cashbox->id,
                         'sale_id' => $sale->id,
                         'user_id' => auth()->id(),
-                        'payment_method_id' => $payment['method_id'],
-                        'type' => 'paid',
-                        'amount' => $payment['amount'],
+                        'payment_method_id' => null,
+                        'type' => 'debt',
+                        'amount' => $sale->total,
                         'date' => now()
                     ]);
                 }
+            });
 
-            }else{
-
-                if(!auth()->user()->hasRole('despachador')){
-                    throw new \Exception("Solo el despachador puede marcar pendiente de pago.");
-                }
-
-                $sale->update([
-                    'type' => $sale->type,
-                    'payment_method_id' => null,
-                    'debt' => $sale->total,
-                    'paid' => 0
-                ]);
-
-                CashboxMovement::create([
-                    'cashbox_id' => $cashbox->id,
-                    'sale_id' => $sale->id,
-                    'user_id' => auth()->id(),
-                    'payment_method_id' => null,
-                    'type' => 'debt',
-                    'amount' => $sale->total,
-                    'date' => now()
-                ]);
-            }
-        });
-
-        return response()->json([
-            'status' => true
-        ]);
+            return response()->json([
+                'status' => true
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
     public function updateDeliveryStatus(Request $request, Sale $sale)
@@ -472,4 +602,182 @@ class SaleController extends Controller
             return response()->json(['status' => true]);
         }
     }
+    public function addDetail(Request $request, Sale $sale)
+    {
+        $validator = Validator::make($request->all(), [
+            'product_id' => 'required|exists:products,id',
+            'quantity' => 'required|integer|min:1',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'error' => $validator->errors()->first()]);
+        }
+
+        $product = Product::find($request->product_id);
+        
+        $price = $product->price;
+        $special_price = \App\Models\Price::where('client_id', $sale->client_id)
+            ->where('product_id', $product->id)
+            ->first();
+        if($special_price){
+            $price = $special_price->price;
+        }
+        
+        $quantity = $request->quantity;
+
+        DB::transaction(function () use ($sale, $product, $price, $quantity) {
+            // Check if product already in sale
+            $detail = $sale->details()->where('product_id', $product->id)->first();
+            
+            if ($detail) {
+                // If it exists, we update quantity and price (in case special price changed)
+                $detail->increment('quantity', $quantity);
+                $detail->update(['price' => $price]);
+            } else {
+                SaleDetail::create([
+                    'sale_id' => $sale->id,
+                    'product_id' => $product->id,
+                    'price' => $price,
+                    'quantity' => $quantity,
+                    'special' => 0
+                ]);
+            }
+
+            // Calculate precise new total
+            $realTotal = $sale->details()->get()->sum(function($d) {
+                return $d->price * $d->quantity;
+            });
+            
+            $diff = $realTotal - $sale->total;
+
+            // Update sale total
+            $sale->update(['total' => $realTotal]);
+            
+            // If it was a credit sale, update debt
+            if ($sale->type == 'Credito' && !$sale->paid) {
+                // Determine new debt based on total - paid
+                $totalPaid = $sale->payments()->sum('amount');
+                $newDebt = max(0, $realTotal - $totalPaid);
+                $sale->update(['debt' => $newDebt]);
+                
+                // Update or create debt movement in cashbox
+                $movement = $sale->movements()->where('type', 'debt')->first();
+                if ($movement) {
+                    $movement->update(['amount' => $newDebt]);
+                }
+            }
+            
+            // Update stock
+            if ($product->stock !== null && $product->reduces_stock) {
+                $product->decrement('stock', $quantity);
+            }
+        });
+
+        return response()->json(['status' => true]);
+    }
+
+    public function updateDetail(Request $request, Sale $sale, SaleDetail $detail)
+    {
+        $validator = Validator::make($request->all(), [
+            'quantity' => 'required|integer|min:1',
+            'price' => 'required|numeric|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'error' => $validator->errors()->first()]);
+        }
+
+        if ($detail->sale_id !== $sale->id) {
+            return response()->json(['status' => false, 'error' => 'Detalle no válido']);
+        }
+
+        DB::transaction(function () use ($sale, $detail, $request) {
+            $product = $detail->product;
+            $oldQuantity = $detail->quantity;
+            $newQuantity = $request->quantity;
+
+            // Update detail
+            $detail->update([
+                'quantity' => $newQuantity,
+                'price' => $request->price
+            ]);
+
+            // Calculate precise new total
+            $realTotal = $sale->details()->get()->sum(function($d) {
+                return $d->price * $d->quantity;
+            });
+
+            // Update sale total
+            $sale->update(['total' => $realTotal]);
+
+            // If it was a credit sale, update debt
+            if ($sale->type == 'Credito' && !$sale->paid) {
+                $totalPaid = $sale->payments()->sum('amount');
+                $newDebt = max(0, $realTotal - $totalPaid);
+                $sale->update(['debt' => $newDebt]);
+                
+                $movement = $sale->movements()->where('type', 'debt')->first();
+                if ($movement) {
+                    $movement->update(['amount' => $newDebt]);
+                }
+            }
+
+            // Update stock
+            if ($product && $product->stock !== null && $product->reduces_stock) {
+                $diff = $newQuantity - $oldQuantity;
+                $product->decrement('stock', $diff);
+            }
+        });
+
+        return response()->json(['status' => true]);
+    }
+
+    public function destroyDetail(Request $request, Sale $sale, SaleDetail $detail)
+    {
+        // Ensure detail belongs to sale
+        if ($detail->sale_id !== $sale->id) {
+            return response()->json(['status' => false, 'error' => 'Detalle no válido']);
+        }
+
+        DB::transaction(function () use ($sale, $detail) {
+            $product = $detail->product;
+            $quantity = $detail->quantity;
+
+            // Delete the detail
+            $detail->delete();
+
+            // Calculate precise new total
+            $realTotal = $sale->details()->get()->sum(function($d) {
+                return $d->price * $d->quantity;
+            });
+
+            // Update sale total
+            $sale->update(['total' => $realTotal]);
+
+            // If it was a credit sale, update debt
+            if ($sale->type == 'Credito' && !$sale->paid) {
+                $totalPaid = $sale->payments()->sum('amount');
+                $newDebt = max(0, $realTotal - $totalPaid);
+                $sale->update(['debt' => $newDebt]);
+                
+                // Update debt movement if exists
+                $movement = $sale->movements()->where('type', 'debt')->first();
+                if ($movement) {
+                    if ($newDebt > 0) {
+                        $movement->update(['amount' => $newDebt]);
+                    } else {
+                        $movement->update(['amount' => 0]);
+                    }
+                }
+            }
+
+            // Update stock
+            if ($product && $product->stock !== null && $product->reduces_stock) {
+                $product->increment('stock', $quantity);
+            }
+        });
+
+        return response()->json(['status' => true]);
+    }
 }
+

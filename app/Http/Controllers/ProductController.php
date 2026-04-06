@@ -20,7 +20,9 @@ class ProductController extends Controller
 
         $validator = Validator::make($request->all(), [
             'name' => 'required',
-            'price' => 'required|numeric'
+            'price' => 'required|numeric',
+            'stock' => 'nullable|integer',
+            'reduces_stock' => 'nullable'
         ]);
 
         if($validator->fails()){
@@ -30,7 +32,9 @@ class ProductController extends Controller
             ]);
         }
 
-        Product::create($request->all());
+        $data = $request->all();
+        $data['reduces_stock'] = $request->has('reduces_stock');
+        Product::create($data);
 
         return response()->json([
             'status' => true
@@ -44,7 +48,9 @@ class ProductController extends Controller
     public function update(Request $request, Product $product){
         $validator = Validator::make($request->all(), [
             'name' => 'required',
-            'price' => 'required|numeric'
+            'price' => 'required|numeric',
+            'stock' => 'nullable|integer',
+            'reduces_stock' => 'nullable'
         ]);
 
         if($validator->fails()){
@@ -54,7 +60,9 @@ class ProductController extends Controller
             ]);
         }
 
-        $product->update($request->all());
+        $data = $request->all();
+        $data['reduces_stock'] = $request->has('reduces_stock');
+        $product->update($data);
 
         return response()->json([
             'status' => true

@@ -20,7 +20,8 @@ class Sale extends Model
         'total',
         'debt',
         'paid',
-        'status'
+        'status',
+        'photo'
     ];
 
     protected $dates = ['date'];

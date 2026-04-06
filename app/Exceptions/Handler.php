@@ -38,4 +38,18 @@ class Handler extends ExceptionHandler
             //
         });
     }
+
+    public function render($request, Throwable $exception)
+    {
+        if ($exception instanceof \Illuminate\Http\Exceptions\PostTooLargeException) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'El archivo es demasiado grande para el servidor. Por favor, revisa la configuración de post_max_size en php.ini.'
+                ], 413);
+            }
+        }
+
+        return parent::render($request, $exception);
+    }
 }

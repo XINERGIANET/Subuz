@@ -17,6 +17,7 @@ class CashboxController extends Controller
         $total_expenses = 0;
         $total_manual_income = 0;
         $suggested_closing_amount = null;
+        $suggested_opening_amount = 0;
 
         if($cashbox){
             $movements = CashboxMovement::with(['sale.client', 'payment_method', 'user'])
@@ -32,11 +33,16 @@ class CashboxController extends Controller
                 ->sum('amount');
 
             $suggested_closing_amount = ($cashbox->opening_amount + $total_paid + $total_manual_income) - $total_expenses;
+        } else {
+            $last_box = Cashbox::where('is_open', 0)->latest('closed_at')->first();
+            if($last_box){
+                $suggested_opening_amount = $last_box->closing_amount;
+            }
         }
 
         $payment_methods = \App\Models\PaymentMethod::all();
 
-        return view('cashbox.index', compact('cashbox', 'movements', 'total_paid', 'total_debt', 'total_expenses', 'total_manual_income', 'suggested_closing_amount', 'payment_methods'));
+        return view('cashbox.index', compact('cashbox', 'movements', 'total_paid', 'total_debt', 'total_expenses', 'total_manual_income', 'suggested_closing_amount', 'payment_methods', 'suggested_opening_amount'));
     }
 
     public function storeIncome(Request $request){
@@ -119,14 +125,6 @@ class CashboxController extends Controller
             'note' => $request->note,
             'is_open' => 0
         ]);
-
-        Cashbox::create([
-            'opened_by' => auth()->id(),
-            'opened_at' => now(),
-            'opening_amount' => $closing_amount,
-            'is_open' => 1
-        ]);
-
-        return back()->with('message', 'Caja cerrada');
+        return back()->with('message', 'Caja cerrada correctamente.');
     }
 }

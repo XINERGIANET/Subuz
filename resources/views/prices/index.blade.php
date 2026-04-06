@@ -9,6 +9,18 @@
 		<li class="breadcrumb-item active">Precios especiales</li>
 	</ol>
 </nav>
+
+<style>
+	.ts-dropdown {
+		z-index: 2000 !important;
+	}
+	.ts-wrapper.focus {
+		z-index: 1000 !important;
+	}
+	.modal-body {
+		overflow: visible !important;
+	}
+</style>
 <div class="card">
 	<div class="card-header d-flex justify-content-between flex-column flex-sm-row gap-2">
 		<div>
@@ -170,6 +182,7 @@
 			copyClassesToDropdown: false,
 			dropdownClass: 'dropdown-menu ts-dropdown',
 			optionClass:'dropdown-item',
+			dropdownParent: 'body',
 			load: function(query, callback){
 				$.ajax({
 					url: '{{ route('clients.api') }}?q=' + encodeURIComponent(query),
@@ -203,6 +216,7 @@
 			copyClassesToDropdown: false,
 			dropdownClass: 'dropdown-menu ts-dropdown',
 			optionClass:'dropdown-item',
+			dropdownParent: 'body',
 			render: {
 				no_results: function(data, escape){
 					return '<div class="no-results">No se encontraron resultados</div>'

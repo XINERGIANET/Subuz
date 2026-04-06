@@ -16,11 +16,24 @@ use App\Http\Controllers\SettingController;
 use App\Http\Controllers\CashboxController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\PaymentMethodController;
+use App\Http\Controllers\FinanceController;
 
 
 Route::get('login', [AuthController::class, 'login'])->name('auth.login');
 Route::post('login', [AuthController::class, 'check'])->name('auth.check');
 Route::post('logout', [AuthController::class, 'logout'])->name('auth.logout');
+
+Route::get('photo-view/{path}', function ($path) {
+    $fullPath = storage_path('app/public/' . $path);
+
+    if (!file_exists($fullPath)) {
+        // Debugging: return the path as text if not found instead of 404/redirect
+        return "ERROR: File not found at " . $fullPath;
+    }
+
+    if (ob_get_level()) ob_end_clean();
+    return response()->file($fullPath);
+})->where('path', '.*');
 
 Route::get('reports/pdf', [ReportController::class, 'pdf'])->name('reports.pdf');
 
@@ -32,6 +45,10 @@ Route::middleware('auth')->group(function(){
 	Route::get('sales/{sale}/details', [SaleController::class, 'details'])->name('sales.details');
 	Route::post('sales/{sale}/dispatch', [SaleController::class, 'markDispatch'])->name('sales.dispatch');
 	Route::post('sales/{sale}/delivery-status', [SaleController::class, 'updateDeliveryStatus'])->name('sales.updateDeliveryStatus');
+	Route::post('sales/{sale}/add-detail', [SaleController::class, 'addDetail'])->name('sales.addDetail');
+	Route::patch('sales/{sale}/details/{detail}', [SaleController::class, 'updateDetail'])->name('sales.updateDetail');
+	Route::delete('sales/{sale}/details/{detail}', [SaleController::class, 'destroyDetail'])->name('sales.destroyDetail');
+
 
 	Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
 	Route::post('settings', [SettingController::class, 'update'])->name('settings.update');
@@ -50,7 +67,6 @@ Route::middleware('auth')->group(function(){
 	});
 
 	Route::middleware('role:admin|seller')->group(function(){
-		Route::get('clients/api', [ClientController::class, 'api'])->name('clients.api');
 		Route::get('products/api', [ProductController::class, 'api'])->name('products.api');
 		Route::resource('products', ProductController::class);
 
@@ -58,6 +74,7 @@ Route::middleware('auth')->group(function(){
 		Route::resource('clients', ClientController::class)->where(['client' => '[0-9]+']);
 
 		Route::resource('prices', PriceController::class);
+		Route::get('prices/special/{client_id}', [PriceController::class, 'getSpecialPrices'])->name('prices.special');
 
 		Route::resource('payment_methods', PaymentMethodController::class);
 
@@ -67,10 +84,12 @@ Route::middleware('auth')->group(function(){
 		Route::post('cart', [CartController::class, 'store'])->name('cart.store');
 		Route::patch('cart', [CartController::class, 'update'])->name('cart.update');
 		Route::delete('destroy', [CartController::class, 'destroy'])->name('cart.destroy');
+		Route::post('cart/update-prices', [CartController::class, 'updatePricesByClient'])->name('cart.updatePrices');
 	});
 
 	Route::middleware('role:admin|seller|despachador')->group(function(){
 		Route::resource('sales', SaleController::class)->except(['index', 'show']);
+		Route::get('clients/api', [ClientController::class, 'api'])->name('clients.api');
 	});
 
 	Route::middleware('role:admin|viewer')->group(function(){
@@ -85,12 +104,18 @@ Route::middleware('auth')->group(function(){
 		Route::get('expenses/excel', [ExpenseController::class, 'excel'])->name('expenses.excel');
 		Route::get('expenses/pdf', [ExpenseController::class, 'pdf'])->name('expenses.pdf');
 		Route::resource('expenses', ExpenseController::class);
+
+		Route::get('finances', [FinanceController::class, 'index'])->name('finances.index');
+		Route::post('finances', [FinanceController::class, 'store'])->name('finances.store');
+		Route::get('finances/{finance}', [FinanceController::class, 'show'])->name('finances.show');
+		Route::post('finances/payment', [FinanceController::class, 'storePayment'])->name('finances.payment');
 	});
 
 	Route::middleware('role:admin|seller|viewer')->group(function(){
 		Route::get('sales/pdf', [SaleController::class, 'pdf'])->name('sales.pdf');
 		Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
 		Route::get('reports/liquidation', [ReportController::class, 'liquidation'])->name('reports.liquidation');
+		Route::get('reports/cashbox', [ReportController::class, 'cashbox'])->name('reports.cashbox');
 	});
 
 	Route::middleware('role:admin|despachador')->group(function(){
@@ -101,3 +126,5 @@ Route::middleware('auth')->group(function(){
 	});
 
 });
+
+

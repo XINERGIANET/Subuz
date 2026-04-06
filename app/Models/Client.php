@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Client extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'document',
@@ -17,8 +18,14 @@ class Client extends Model
         'district',
         'email',
         'phone',
-        'phone_2'
+        'phone_2',
+        'type'
     ];
 
     public $timestamps = false;
+
+    public function sales()
+    {
+        return $this->hasMany(Sale::class);
+    }
 }

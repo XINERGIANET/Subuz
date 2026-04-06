@@ -28,6 +28,14 @@ class Cashbox extends Model
         return $this->hasMany(CashboxMovement::class);
     }
 
+    public function openedBy(){
+        return $this->belongsTo(User::class, 'opened_by');
+    }
+
+    public function closedBy(){
+        return $this->belongsTo(User::class, 'closed_by');
+    }
+
     public static function currentOpen(){
         return self::where('is_open', 1)->latest('opened_at')->first();
     }
