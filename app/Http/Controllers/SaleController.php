@@ -35,6 +35,12 @@ class SaleController extends Controller
             ->when($request->end_date, function($q, $end_date){
                 return $q->whereDate('date', '<=', $end_date);
             })
+            ->when($request->payment_method_id, function($q, $pm_id){
+                if($pm_id == 'credit'){
+                    return $q->where('type', 'Credito');
+                }
+                return $q->where('payment_method_id', $pm_id);
+            })
             ->when($request->delivery_status, function($q, $delivery_status){
                 if($delivery_status == 'delivered'){
                     return $q->where(function($sq){
@@ -54,8 +60,12 @@ class SaleController extends Controller
                 }
             });
 
-        if(!$request->start_date && !$request->end_date && !$request->client_id && !$request->type && !$request->delivery_status){
+        if (auth()->check() && (auth()->user()->hasRole('despachador') || auth()->user()->hasRole('asistente'))) {
             $query->whereDate('date', now());
+        } elseif (!$request->start_date && !$request->end_date) {
+            if (!$request->client_id && !$request->type && !$request->delivery_status) {
+                $query->whereDate('date', now());
+            }
         }
 
         // Totals for delivered sales
@@ -129,6 +139,17 @@ class SaleController extends Controller
                   });
         }
 
+        // Total Credit for the filtered period
+        $total_credit = (clone $query)
+            ->where('status', '!=', 'Anulado')
+            ->where('type', 'Credito')
+            ->sum('total');
+
+        $total_pending = (clone $query)
+            ->where('status', '!=', 'Anulado')
+            ->where('paid', 0)
+            ->sum('total');
+
         $sales = $query->latest('date')->paginate(10);
 
         $payment_methods = PaymentMethod::all();
@@ -136,7 +157,7 @@ class SaleController extends Controller
         $selected_client = $request->client_id ? Client::find($request->client_id) : null;
 
         $products = Product::all();
-        return view('sales.index', compact('sales', 'total_sales', 'total_cash', 'payment_totals', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox', 'products', 'selected_client', 'delivered_count'));
+        return view('sales.index', compact('sales', 'total_sales', 'total_cash', 'payment_totals', 'total_credit', 'total_pending', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox', 'products', 'selected_client', 'delivered_count'));
     }
 
     public function create(){
@@ -439,7 +460,7 @@ class SaleController extends Controller
     }
 
     public function markDispatch(Request $request, Sale $sale){
-        if(!auth()->user()->hasRole('admin') && !auth()->user()->hasRole('despachador')){
+        if(!auth()->user()->hasRole('admin') && !auth()->user()->hasRole('despachador') && !auth()->user()->hasRole('asistente')){
             return response()->json([
                 'status' => false,
                 'error' => 'No autorizado'
@@ -542,8 +563,8 @@ class SaleController extends Controller
                     }
 
                 }else{
-                    if(!auth()->user()->hasRole('despachador') && !auth()->user()->hasRole('admin')){
-                        throw new \Exception("Solo el despachador o administrador puede marcar pendiente de pago.");
+                    if(!auth()->user()->hasRole('despachador') && !auth()->user()->hasRole('admin') && !auth()->user()->hasRole('asistente')){
+                        throw new \Exception("Solo el despachador, asistente o administrador puede marcar pendiente de pago.");
                     }
 
                     $sale->update(array_merge($commonUpdate, [

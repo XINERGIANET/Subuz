@@ -45,14 +45,17 @@
                 <a href="{{ route('sales.create') }}" class="btn btn-brand btn-pill px-4 shadow-sm py-2 fw-bold">
                     <i class="ti ti-plus icon me-1"></i> Nueva Venta
                 </a>
+                @if(!auth()->user()->hasRole('asistente'))
                 <a href="{{ route('expenses.index', ['create' => 1]) }}" class="btn btn-outline-primary btn-pill px-4 shadow-sm py-2 fw-bold" style="background: white; color: var(--brand-color); border-color: var(--brand-color);">
                     <i class="ti ti-receipt icon me-1"></i> Gastos
                 </a>
+                @endif
             </div>
         </div>
     </div>
 </div>
 
+@if(!auth()->user()->hasRole('asistente'))
 <div class="hr-text hr-text-left text-primary fw-bold mb-3 uppercase-text">SALDOS DE CUENTAS (TIEMPO REAL)</div>
 
 <div class="row row-cards mb-4">
@@ -67,10 +70,13 @@
         </div>
     </div>
 </div>
+@endif
 
+@if(!auth()->user()->hasRole('asistente'))
 <div id="dynamic_methods_container" class="row row-cards mb-4">
     <!-- Dynamic cards will be injected here -->
 </div>
+@endif
 
 @if(auth()->user()->hasRole('admin'))
 <div class="card mb-4 border-0 shadow-sm">
@@ -609,6 +615,11 @@
 				$('#pending').text('S/'+res.pending);
 
                 $('#total_balance').text('S/'+res.total_balance);
+                
+                // For assistant metrics
+                $('#asistente_total_entregado').text('S/'+res.total_sales_paid);
+                $('#asistente_balance_caja').text('S/'+res.total_balance);
+                $('#asistente_credito').text('S/'+res.total_credit);
                 
                 let methods_html = '';
                 const colors = ['bg-azure', 'bg-blue', 'bg-indigo', 'bg-purple', 'bg-pink', 'bg-red', 'bg-orange', 'bg-yellow', 'bg-green', 'bg-teal'];

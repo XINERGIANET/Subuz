@@ -17,6 +17,7 @@ use App\Http\Controllers\CashboxController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\FinanceController;
+use App\Http\Controllers\InvoiceController;
 
 
 Route::get('login', [AuthController::class, 'login'])->name('auth.login');
@@ -53,20 +54,35 @@ Route::middleware('auth')->group(function(){
 	Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
 	Route::post('settings', [SettingController::class, 'update'])->name('settings.update');
 
-	Route::middleware('role:admin')->group(function(){
+	Route::middleware('role:admin|asistente')->group(function(){
 		Route::get('dashboard/api', [WebController::class, 'dashboard'])->name('dashboard.api');
 		Route::get('dashboard/daily/api', [WebController::class, 'dashboardDaily'])->name('dashboard.daily.api');
 		Route::get('dashboard/product/api', [WebController::class, 'dashboardProduct'])->name('dashboard.product.api');
 		Route::get('dashboard/distribution/api', [WebController::class, 'dashboardDistribution'])->name('dashboard.distribution.api');
+
+		Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index');
+		Route::get('invoices/pending', [InvoiceController::class, 'pending'])->name('invoices.pending');
+		Route::post('invoices', [InvoiceController::class, 'store'])->name('invoices.store');
+	});
+
+	Route::middleware('role:admin')->group(function(){
 		Route::get('dispatchers', [UserController::class, 'indexDispatchers'])->name('users.dispatchers.index');
 		Route::get('dispatchers/create', [UserController::class, 'createDispatcher'])->name('users.dispatchers.create');
 		Route::post('dispatchers', [UserController::class, 'storeDispatcher'])->name('users.dispatchers.store');
 		Route::get('dispatchers/{dispatcher}/edit', [UserController::class, 'editDispatcher'])->name('users.dispatchers.edit');
 		Route::put('dispatchers/{dispatcher}', [UserController::class, 'updateDispatcher'])->name('users.dispatchers.update');
 		Route::delete('dispatchers/{dispatcher}', [UserController::class, 'destroyDispatcher'])->name('users.dispatchers.destroy');
+		Route::get('dispatchers/{dispatcher}/report', [UserController::class, 'dispatcherReport'])->name('users.dispatchers.report');
+
+		Route::get('assistants', [UserController::class, 'indexAssistants'])->name('users.assistants.index');
+		Route::get('assistants/create', [UserController::class, 'createAssistant'])->name('users.assistants.create');
+		Route::post('assistants', [UserController::class, 'storeAssistant'])->name('users.assistants.store');
+		Route::get('assistants/{assistant}/edit', [UserController::class, 'editAssistant'])->name('users.assistants.edit');
+		Route::put('assistants/{assistant}', [UserController::class, 'updateAssistant'])->name('users.assistants.update');
+		Route::delete('assistants/{assistant}', [UserController::class, 'destroyAssistant'])->name('users.assistants.destroy');
 	});
 
-	Route::middleware('role:admin|seller')->group(function(){
+	Route::middleware('role:admin|seller|asistente')->group(function(){
 		Route::get('products/api', [ProductController::class, 'api'])->name('products.api');
 		Route::resource('products', ProductController::class);
 
@@ -87,7 +103,7 @@ Route::middleware('auth')->group(function(){
 		Route::post('cart/update-prices', [CartController::class, 'updatePricesByClient'])->name('cart.updatePrices');
 	});
 
-	Route::middleware('role:admin|seller|despachador')->group(function(){
+	Route::middleware('role:admin|seller|despachador|asistente')->group(function(){
 		Route::resource('sales', SaleController::class)->except(['index', 'show']);
 		Route::get('clients/api', [ClientController::class, 'api'])->name('clients.api');
 	});

@@ -18,6 +18,7 @@
 		$isDespachador = auth()->user()->hasRole('despachador');
 		$roleLabel = [
 			'admin' => 'Administrador',
+			'asistente' => 'Asistente',
 			'seller' => 'Vendedor',
 			'viewer' => 'Visualizador',
 			'despachador' => 'Despachador'
@@ -86,7 +87,7 @@
 								</span>
 							</a>
 						</li>
-						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
+						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente'))
 						<li class="nav-item dropdown">
 							<a class="nav-link dropdown-toggle" href="#navbar-register" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button" aria-expanded="false" >
 								<span class="nav-link-icon d-md-none d-lg-inline-block">
@@ -99,7 +100,7 @@
 							<div class="dropdown-menu">
 								<div class="dropdown-menu-columns">
 									<div class="dropdown-menu-column">
-										@if(auth()->user()->hasRole('admin'))
+										@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente'))
 										<a class="dropdown-item" href="{{ route('products.index') }}">
 											<i class="ti ti-package icon me-2"></i> Productos
 										</a>
@@ -107,12 +108,17 @@
 										<a class="dropdown-item" href="{{ route('clients.index') }}">
 											<i class="ti ti-users icon me-2"></i> Clientes
 										</a>
-										@if(auth()->user()->hasRole('admin'))
+										@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente'))
 										<a class="dropdown-item" href="{{ route('prices.index') }}">
 											<i class="ti ti-tag icon me-2"></i> Precios especiales
 										</a>
+										@endif
+										@if(auth()->user()->hasRole('admin'))
 										<a class="dropdown-item" href="{{ route('users.dispatchers.index') }}">
 											<i class="ti ti-truck-delivery icon me-2"></i> Despachadores
+										</a>
+										<a class="dropdown-item" href="{{ route('users.assistants.index') }}">
+											<i class="ti ti-user-edit icon me-2"></i> Asistentes
 										</a>
 										<a class="dropdown-item" href="{{ route('payment_methods.index') }}">
 											<i class="ti ti-credit-card icon me-2"></i> Cuentas
@@ -141,6 +147,16 @@
 								</span>
 								<span class="nav-link-title">
 									Caja
+								</span>
+							</a>
+						</li>
+						<li class="nav-item {{ request()->is('invoices*') ? 'active' : '' }}">
+							<a class="nav-link" href="{{ route('invoices.index') }}" >
+								<span class="nav-link-icon d-md-none d-lg-inline-block">
+									<i class="ti ti-file-text icon"></i>
+								</span>
+								<span class="nav-link-title">
+									Facturación
 								</span>
 							</a>
 						</li>

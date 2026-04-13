@@ -12,7 +12,7 @@
 <div class="card">
 	<div class="card-header d-flex justify-content-between flex-column flex-sm-row gap-2">
 		<div>
-			@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
+			@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente'))
 			<a class="btn btn-brand" href="{{ route('sales.create') }}">
 				<i class="ti ti-plus icon"></i> Crear nuevo
 			</a>
@@ -31,14 +31,29 @@
 			</div>
 			@endif
 		</div>
-		@if(!auth()->user()->hasRole('despachador'))
-		<div class="text-center">
-			<span class="d-block small">
-				Total Entregado
-			</span>
-			<span class="fs-2 fw-bold text-primary">
-					S/{{ number_format($total_sales, 2) }}
-				</span>
+		@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente') || auth()->user()->hasRole('seller'))
+		<div class="d-flex text-center gap-3 flex-wrap justify-content-center justify-content-md-end">
+			<div>
+				<span class="d-block small text-muted">Total Entregado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+				<span class="fs-3 fw-bold text-primary">S/{{ number_format($total_sales, 2) }}</span>
+			</div>
+			<div class="vr mx-1"></div>
+			@foreach($payment_totals as $pt)
+			<div>
+				<span class="d-block small text-muted">{{ $pt->name == 'Interbank' ? 'Interbank Empresa' : $pt->name }} {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+				<span class="fs-3 fw-bold text-success">S/{{ number_format($pt->total, 2) }}</span>
+			</div>
+			<div class="vr mx-1"></div>
+			@endforeach
+			<div>
+				<span class="d-block small text-muted">Crédito {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+				<span class="fs-3 fw-bold text-info">S/{{ number_format($total_credit, 2) }}</span>
+			</div>
+			<div class="vr mx-1"></div>
+			<div>
+				<span class="d-block small text-muted">No Pagado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+				<span class="fs-3 fw-bold text-danger">S/{{ number_format($total_pending, 2) }}</span>
+			</div>
 		</div>
 		@endif
 
@@ -85,7 +100,7 @@
 	<div class="card-body border-bottom">
 		<form class="mb-3">
 			<div class="row">
-				<div class="col-lg-3">
+				<div class="col-lg-2">
 					<div class="mb-3">
 						<label class="form-label">Cliente</label>
 						<select class="form-select ts-clients" name="client_id">
@@ -97,45 +112,58 @@
 					</div>
 				</div>
 				@if(!auth()->user()->hasRole('despachador'))
-				<div class="col-lg-2">
-					<div class="mb-3">
-						<label class="form-label">Tipo de venta</label>
-						<select class="form-select" name="type">
-							<option value="">Seleccionar</option>
-							<option value="Contado" {{ request()->type == 'Contado' ? 'selected' : '' }}>Contado</option>
-							<option value="Credito" {{ request()->type == 'Credito' ? 'selected' : '' }}>Crédito</option>
-							<option value="Pago pendiente" {{ request()->type == 'Pago pendiente' ? 'selected' : '' }}>Pago pendiente</option>
-						</select>
+					@php $is_admin = auth()->user()->hasRole('admin'); @endphp
+					<div class="col-lg-2">
+						<div class="mb-3">
+							<label class="form-label">Tipo de venta</label>
+							<select class="form-select" name="type">
+								<option value="">Seleccionar</option>
+								<option value="Contado" {{ request()->type == 'Contado' ? 'selected' : '' }}>Contado</option>
+								<option value="Credito" {{ request()->type == 'Credito' ? 'selected' : '' }}>Crédito</option>
+								<option value="Pago pendiente" {{ request()->type == 'Pago pendiente' ? 'selected' : '' }}>Pago pendiente</option>
+							</select>
+						</div>
 					</div>
-				</div>
-				<div class="col-lg-2">
-					<div class="mb-3">
-						<label class="form-label">Estado de entrega</label>
-						<select class="form-select" name="delivery_status">
-							<option value="">Seleccionar</option>
-							<option value="delivered" {{ request()->delivery_status == 'delivered' ? 'selected' : '' }}>Entregado</option>
-							<option value="pending" {{ request()->delivery_status == 'pending' ? 'selected' : '' }}>No entregado</option>
-						</select>
+					<div class="col-lg-2">
+						<div class="mb-3">
+							<label class="form-label">Cuenta</label>
+							<select class="form-select" name="payment_method_id">
+								<option value="">Seleccionar</option>
+								<option value="credit" {{ request()->payment_method_id == 'credit' ? 'selected' : '' }}>Crédito</option>
+								@foreach($payment_methods as $pm)
+									<option value="{{ $pm->id }}" {{ request()->payment_method_id == $pm->id ? 'selected' : '' }}>{{ $pm->name }}</option>
+								@endforeach
+							</select>
+						</div>
 					</div>
-				</div>
-				<div class="col-lg-2">
-					<div class="mb-3">
-						<label class="form-label">Fecha desde</label>
-						<input type="date" class="form-control" name="start_date" value="{{ request()->start_date ? request()->start_date : now()->format('Y-m-d') }}">
+					<div class="col-lg-2">
+						<div class="mb-3">
+							<label class="form-label">Estado de entrega</label>
+							<select class="form-select" name="delivery_status">
+								<option value="">Seleccionar</option>
+								<option value="delivered" {{ request()->delivery_status == 'delivered' ? 'selected' : '' }}>Entregado</option>
+								<option value="pending" {{ request()->delivery_status == 'pending' ? 'selected' : '' }}>No entregado</option>
+							</select>
+						</div>
 					</div>
-				</div>
-				<div class="col-lg-3">
-					<div class="mb-3">
-						<label class="form-label">Fecha hasta</label>
-						<input type="date" class="form-control" name="end_date" value="{{ request()->end_date ? request()->end_date : now()->format('Y-m-d') }}">
-					</div>
-				</div>
+					@if($is_admin)
+						<div class="col-lg-2">
+							<div class="mb-3">
+								<label class="form-label">Fecha desde</label>
+								<input type="date" class="form-control" name="start_date" value="{{ request()->start_date ? request()->start_date : now()->format('Y-m-d') }}">
+							</div>
+						</div>
+						<div class="col-lg-2">
+							<div class="mb-3">
+								<label class="form-label">Fecha hasta</label>
+								<input type="date" class="form-control" name="end_date" value="{{ request()->end_date ? request()->end_date : now()->format('Y-m-d') }}">
+							</div>
+						</div>
+					@endif
 				@endif
 			</div>
 			<button type="submit" class="btn btn-brand"><i class="ti ti-filter icon"></i> Filtrar</button>
-			@if(request()->has('client_id') && request()->client_id)
-				<a href="{{ route('sales.index') }}" class="btn btn-outline-secondary ms-2"><i class="ti ti-rotate-clockwise icon"></i> Limpiar</a>
-			@endif
+			<a href="{{ route('sales.index') }}" class="btn btn-outline-secondary ms-2"><i class="ti ti-rotate-clockwise icon"></i> Limpiar filtros</a>
 		</form>
 	</div>
 	<div class="table-responsive">
@@ -193,12 +221,12 @@
 							<button class="btn btn-icon btn-show" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Detalle venta">
 								<i class="ti ti-eye icon"></i>
 							</button>
-							@if((auth()->user()->hasRole('despachador') || auth()->user()->hasRole('admin'))  && !$isDelivered)
+							@if((auth()->user()->hasRole('despachador') || auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente'))  && !$isDelivered)
 							<button class="btn btn-icon btn-dispatch" data-id="{{ $sale->id }}" data-order="{{ $sale->order }}" data-guide="{{ $sale->guide }}" data-total="{{ $sale->total }}" data-type="{{ $sale->type }}" data-bs-toggle="tooltip" title="Despachar">
 								<i class="ti ti-check icon"></i>
 							</button>
 							@endif
-							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller'))
+							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente'))
 							<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Editar">
 								<i class="ti ti-edit icon"></i>
 							</button>

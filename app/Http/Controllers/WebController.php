@@ -27,42 +27,89 @@ class WebController extends Controller
     }
 
     public function dashboard(Request $request){
-        $sales = Sale::when($request->start_date, function($query, $start_date){
+        $isAssistant = auth()->user()->hasRole('asistente');
+        
+        // Use consistent date handling
+        $today = now()->toDateString();
+        $start_date = $isAssistant ? $today : $request->start_date;
+        $end_date = $isAssistant ? $today : $request->end_date;
+
+        $query = Sale::query();
+        
+        if ($start_date) {
+            $query->whereDate('date', '>=', $start_date);
+        }
+        if ($end_date) {
+            $query->whereDate('date', '<=', $end_date);
+        }
+
+        $sales = (clone $query)->sum('total');
+
+        $expenses = Expense::when($start_date, function($query, $start_date){
             return $query->whereDate('date', '>=', $start_date);
-        })->when($request->end_date, function($query, $end_date){
-            return $query->whereDate('date', '<=', $end_date);
-        })->sum('total');
-        $expenses = Expense::when($request->start_date, function($query, $start_date){
-            return $query->whereDate('date', '>=', $start_date);
-        })->when($request->end_date, function($query, $end_date){
+        })->when($end_date, function($query, $end_date){
             return $query->whereDate('date', '<=', $end_date);
         })->sum('amount');
+
         $manual_income = CashboxMovement::where('type', 'income')
-            ->when($request->start_date, function($query, $start_date){
+            ->when($start_date, function($query, $start_date){
                 return $query->whereDate('date', '>=', $start_date);
-            })->when($request->end_date, function($query, $end_date){
+            })->when($end_date, function($query, $end_date){
                 return $query->whereDate('date', '<=', $end_date);
             })->sum('amount');
 
         $revenues = $sales - $expenses;
-        $pending = Sale::when($request->start_date, function($query, $start_date){
-            return $query->whereDate('date', '>=', $start_date);
-        })->when($request->end_date, function($query, $end_date){
-            return $query->whereDate('date', '<=', $end_date);
-        })->where('paid', 0)->sum('total');
+        $pending = (clone $query)->where('paid', 0)->sum('total');
 
-        $global_payments = Payment::sum('amount');
-        $global_manual_income = CashboxMovement::where('type', 'income')->sum('amount');
-        $global_expense = Expense::sum('amount');
+        // Total Entregado logic (matching SaleController)
+        $total_sales_paid_query = (clone $query)
+            ->where('status', '!=', 'Anulado')
+            ->where(function($q) {
+                $q->where('paid', 1)
+                ->orWhere('type', 'Pago pendiente')
+                ->orWhereHas('movements', function($mq) {
+                    $mq->where('type', 'debt');
+                });
+            });
+        
+        $total_sales_paid = $total_sales_paid_query->sum('total');
+
+        $total_credit = (clone $query)
+            ->where('status', '!=', 'Anulado')
+            ->where('type', 'Credito')
+            ->sum('total');
+
+        $global_payments = Payment::when($start_date, function($q, $sd){ return $q->whereDate('date', '>=', $sd); })
+            ->when($end_date, function($q, $ed){ return $q->whereDate('date', '<=', $ed); })
+            ->sum('amount');
+        
+        $global_manual_income = CashboxMovement::where('type', 'income')
+            ->when($start_date, function($q, $sd){ return $q->whereDate('date', '>=', $sd); })
+            ->when($end_date, function($q, $ed){ return $q->whereDate('date', '<=', $ed); })
+            ->sum('amount');
+            
+        $global_expense = Expense::when($start_date, function($q, $sd){ return $q->whereDate('date', '>=', $sd); })
+            ->when($end_date, function($q, $ed){ return $q->whereDate('date', '<=', $ed); })
+            ->sum('amount');
+            
         $total_balance = ($global_payments + $global_manual_income) - $global_expense;
         
         $payment_methods_data = PaymentMethod::all();
         $methods_totals = [];
         
         foreach($payment_methods_data as $method) {
-            $payments = Payment::where('payment_method_id', $method->id)->sum('amount');
-            $manual = CashboxMovement::where('type', 'income')->where('payment_method_id', $method->id)->sum('amount');
-            $expense = Expense::where('payment_method_id', $method->id)->sum('amount');
+            $payments = Payment::where('payment_method_id', $method->id)
+                ->when($start_date, function($q, $sd){ return $q->whereDate('date', '>=', $sd); })
+                ->when($end_date, function($q, $ed){ return $q->whereDate('date', '<=', $ed); })
+                ->sum('amount');
+            $manual = CashboxMovement::where('type', 'income')->where('payment_method_id', $method->id)
+                ->when($start_date, function($q, $sd){ return $q->whereDate('date', '>=', $sd); })
+                ->when($end_date, function($q, $ed){ return $q->whereDate('date', '<=', $ed); })
+                ->sum('amount');
+            $expense = Expense::where('payment_method_id', $method->id)
+                ->when($start_date, function($q, $sd){ return $q->whereDate('date', '>=', $sd); })
+                ->when($end_date, function($q, $ed){ return $q->whereDate('date', '<=', $ed); })
+                ->sum('amount');
             $balance = ($payments + $manual) - $expense;
 
             $methods_totals[] = [
@@ -99,6 +146,16 @@ class WebController extends Controller
             $totalExpensesByMonth[$expense->month-1] = $expense->total;
         }
 
+        $total_sales_paid = Sale::when($isAssistant, function($q){ return $q->whereDate('date', now()); })
+            ->where('status', '!=', 'Anulado')
+            ->where('paid', 1)
+            ->sum('total');
+        
+        $total_credit = Sale::when($isAssistant, function($q){ return $q->whereDate('date', now()); })
+            ->where('status', '!=', 'Anulado')
+            ->where('type', 'Credito')
+            ->sum('total');
+
         return response()->json([
             'sales' => number_format($sales, 2),
             'expenses' => number_format($expenses, 2),
@@ -106,6 +163,8 @@ class WebController extends Controller
             'revenues' => number_format($revenues, 2),
             'pending' => number_format($pending, 2),
             'total_balance' => number_format($total_balance, 2),
+            'total_sales_paid' => number_format($total_sales_paid, 2),
+            'total_credit' => number_format($total_credit, 2),
             'methods' => $methods_totals,
             'totalSales' => $totalSalesByMonth,
             'totalExpenses' => $totalExpensesByMonth
