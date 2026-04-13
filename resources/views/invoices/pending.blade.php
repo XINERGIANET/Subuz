@@ -11,15 +11,25 @@
   </ol>
 </nav>
 
+<style>
+	.ts-dropdown {
+		z-index: 2000 !important;
+	}
+	.card-filter-container {
+		overflow: visible !important;
+	}
+</style>
+
 <div class="row row-cards">
     <div class="col-12">
-        <div class="card mb-3">
+        <div class="card mb-3 card-filter-container">
             <div class="card-header">
                 <h3 class="card-title">Seleccionar Cliente para Facturar</h3>
             </div>
             <div class="card-body">
                 <form action="{{ route('invoices.pending') }}" method="GET" class="row g-3">
-                    <div class="col-md-6">
+                    <div class="col-md-5">
+                        <label class="form-label">Cliente</label>
                         <select class="form-select ts-clients" name="client_id" onchange="this.form.submit()">
                             <option value="">Seleccione un cliente...</option>
                             @foreach($clients as $client)
@@ -27,6 +37,21 @@
                             @endforeach
                         </select>
                     </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Desde</label>
+                        <input type="date" class="form-control" name="start_date" value="{{ request()->start_date }}" onchange="this.form.submit()">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Hasta</label>
+                        <input type="date" class="form-control" name="end_date" value="{{ request()->end_date }}" onchange="this.form.submit()">
+                    </div>
+                    @if(request()->client_id || request()->start_date || request()->end_date)
+                    <div class="col-md-1 d-flex align-items-end">
+                        <a href="{{ route('invoices.pending') }}" class="btn btn-outline-secondary w-100 btn-icon" title="Limpiar filtros">
+                            <i class="ti ti-filter-off"></i>
+                        </a>
+                    </div>
+                    @endif
                 </form>
             </div>
         </div>
@@ -44,8 +69,8 @@
                     <div class="row g-3">
                         <div class="col-md-4">
                             <label class="form-label required">Número de Factura</label>
-                            <input type="text" class="form-control" name="number" placeholder="Ej: F001-00001" required value="{{ old('number') }}">
-                            <small class="text-muted fs-6">Formato sugerido: Serie-Número</small>
+                            <input type="text" class="form-control" name="number" placeholder="Ej: F001-00001" required value="{{ old('number', $next_invoice) }}">
+                            <small class="text-muted fs-6">Sugerido correlativo: {{ $next_invoice }}</small>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label required">Fecha de Emisión</label>
@@ -169,6 +194,7 @@
                 dropdownClass: 'dropdown-menu ts-dropdown',
                 optionClass:'dropdown-item',
                 controlInput: '<input>',
+                dropdownParent: 'body',
                 render: {
                     no_results: function(data, escape){
                         return '<div class="no-results">No se encontraron resultados</div>';

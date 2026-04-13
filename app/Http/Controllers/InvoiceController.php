@@ -18,6 +18,14 @@ class InvoiceController extends Controller
             $query->where('client_id', $request->client_id);
         }
 
+        if ($request->start_date) {
+            $query->whereDate('date', '>=', $request->start_date);
+        }
+
+        if ($request->end_date) {
+            $query->whereDate('date', '<=', $request->end_date);
+        }
+
         $sales = $query->with(['invoices', 'client'])->latest('date')->paginate(15);
         $clients = Client::all();
         $selected_client = $request->client_id ? Client::find($request->client_id) : null;
@@ -35,11 +43,22 @@ class InvoiceController extends Controller
             $query->where('client_id', $request->client_id);
         }
 
+        if ($request->start_date) {
+            $query->whereDate('date', '>=', $request->start_date);
+        }
+
+        if ($request->end_date) {
+            $query->whereDate('date', '<=', $request->end_date);
+        }
+
         $sales = $query->with('client')->latest('date')->get();
         $clients = Client::all();
         $selected_client = $request->client_id ? Client::find($request->client_id) : null;
 
-        return view('invoices.pending', compact('sales', 'clients', 'selected_client'));
+        $invoice_count = DB::table('settings')->pluck('invoice_count')->first() ?? 0;
+        $next_invoice = 'F' . str_pad($invoice_count + 1, 5, "0", STR_PAD_LEFT);
+
+        return view('invoices.pending', compact('sales', 'clients', 'selected_client', 'next_invoice'));
     }
 
     public function store(Request $request)
@@ -70,6 +89,9 @@ class InvoiceController extends Controller
                 ]);
 
                 $invoice->sales()->attach($request->sales);
+
+                // Increment invoice count in settings
+                DB::table('settings')->increment('invoice_count');
             });
 
             return redirect()->route('invoices.index')->with('message', 'Factura creada con éxito.');

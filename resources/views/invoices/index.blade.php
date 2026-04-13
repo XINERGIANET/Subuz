@@ -9,7 +9,17 @@
     <li class="breadcrumb-item active">Facturación</li>
   </ol>
 </nav>
-<div class="card">
+
+<style>
+	.ts-dropdown {
+		z-index: 2000 !important;
+	}
+	.card-filter-container {
+		overflow: visible !important;
+	}
+</style>
+
+<div class="card card-filter-container">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h3 class="card-title">Ventas Facturadas</h3>
         <a href="{{ route('invoices.pending') }}" class="btn btn-brand">
@@ -28,10 +38,18 @@
                         @endforeach
                     </select>
                 </div>
+                <div class="col-lg-2">
+                    <label class="form-label">Desde</label>
+                    <input type="date" class="form-control" name="start_date" value="{{ request()->start_date }}">
+                </div>
+                <div class="col-lg-2">
+                    <label class="form-label">Hasta</label>
+                    <input type="date" class="form-control" name="end_date" value="{{ request()->end_date }}">
+                </div>
                 <div class="col-lg-2 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary w-100">Filtrar</button>
                 </div>
-                @if(request()->client_id)
+                @if(request()->client_id || request()->start_date || request()->end_date)
                 <div class="col-lg-2 d-flex align-items-end">
                     <a href="{{ route('invoices.index') }}" class="btn btn-outline-secondary w-100">Limpiar</a>
                 </div>
@@ -90,6 +108,7 @@
                 dropdownClass: 'dropdown-menu ts-dropdown',
                 optionClass:'dropdown-item',
                 controlInput: '<input>',
+                dropdownParent: 'body',
                 render: {
                     no_results: function(data, escape){
                         return '<div class="no-results">No se encontraron resultados</div>';
