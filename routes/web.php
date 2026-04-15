@@ -38,6 +38,10 @@ Route::get('photo-view/{path}', function ($path) {
 
 Route::get('reports/pdf', [ReportController::class, 'pdf'])->name('reports.pdf');
 
+Route::get('comprobante/{invoice}', [InvoiceController::class, 'publicDetail'])
+	->name('invoices.public_detail')
+	->middleware('signed');
+
 Route::middleware('auth')->group(function(){
 
 	Route::get('/',[WebController::class, 'index']);
@@ -63,6 +67,11 @@ Route::middleware('auth')->group(function(){
 		Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index');
 		Route::get('invoices/pending', [InvoiceController::class, 'pending'])->name('invoices.pending');
 		Route::post('invoices', [InvoiceController::class, 'store'])->name('invoices.store');
+		Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'showPdf'])->name('invoices.pdf');
+		Route::get('invoices/{invoice}/local-pdf', [InvoiceController::class, 'localPdf'])->name('invoices.local_pdf');
+		Route::get('invoices/{invoice}/xml', [InvoiceController::class, 'downloadXml'])->name('invoices.xml');
+		Route::get('invoices/{invoice}/cdr', [InvoiceController::class, 'downloadCdr'])->name('invoices.cdr');
+		Route::post('invoices/{invoice}/resend', [InvoiceController::class, 'resend'])->name('invoices.resend');
 	});
 
 	Route::middleware('role:admin')->group(function(){

@@ -21,9 +21,9 @@
 
 <div class="card card-filter-container">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <h3 class="card-title">Ventas Facturadas</h3>
+        <h3 class="card-title">Comprobantes Emitidos</h3>
         <a href="{{ route('invoices.pending') }}" class="btn btn-brand">
-            <i class="ti ti-plus icon"></i> Facturar Ventas Pendientes
+            <i class="ti ti-plus icon"></i> Emitir Comprobantes Pendientes
         </a>
     </div>
     <div class="card-body border-bottom">
@@ -46,10 +46,18 @@
                     <label class="form-label">Hasta</label>
                     <input type="date" class="form-control" name="end_date" value="{{ request()->end_date }}">
                 </div>
+                <div class="col-lg-2">
+                    <label class="form-label">Tipo</label>
+                    <select class="form-select" name="type">
+                        <option value="">Todos</option>
+                        <option value="factura" {{ request()->type == 'factura' ? 'selected' : '' }}>Factura</option>
+                        <option value="boleta" {{ request()->type == 'boleta' ? 'selected' : '' }}>Boleta</option>
+                    </select>
+                </div>
                 <div class="col-lg-2 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary w-100">Filtrar</button>
                 </div>
-                @if(request()->client_id || request()->start_date || request()->end_date)
+                @if(request()->client_id || request()->start_date || request()->end_date || request()->type)
                 <div class="col-lg-2 d-flex align-items-end">
                     <a href="{{ route('invoices.index') }}" class="btn btn-outline-secondary w-100">Limpiar</a>
                 </div>
@@ -61,39 +69,93 @@
         <table class="table table-vcenter card-table table-hover">
             <thead>
                 <tr>
-                    <th>Fecha Venta</th>
-                    <th>Pedido</th>
+                    <th>Documento</th>
                     <th>Cliente</th>
-                    <th>Factura(s) Asociada(s)</th>
-                    <th class="text-end">Total Venta</th>
+                    <th>Fecha Emisión</th>
+                    <th class="text-end">Total</th>
+                    <th class="text-center">Estado SUNAT</th>
+                    <th class="text-end">Acciones</th>
                 </tr>
             </thead>
             <tbody>
-                @forelse($sales as $sale)
+                @forelse($invoices as $invoice)
                 <tr>
-                    <td class="text-muted">{{ date('d/m/Y', strtotime($sale->date)) }}</td>
-                    <td class="fw-bold">{{ $sale->order }}</td>
-                    <td>{{ $sale->client->name }}</td>
                     <td>
-                        @foreach($sale->invoices as $invoice)
-                            <span class="badge bg-blue-lt mb-1">FACT #{{ $invoice->number }}</span>
-                        @endforeach
+                        @php
+                            $isFactura = $invoice->document_type == 'factura';
+                            $badgeClass = $isFactura ? 'bg-purple-lt' : 'bg-azure-lt';
+                            $prefix = $isFactura ? 'FACT' : 'BOL';
+                        @endphp
+                        <span class="badge {{ $badgeClass }} fw-bold">
+                            {{ $prefix }} #{{ $invoice->number }}
+                        </span>
                     </td>
-                    <td class="text-end fw-bold">S/ {{ number_format($sale->total, 2) }}</td>
+                    <td>
+                        <div class="fw-bold">{{ $invoice->client->name }}</div>
+                        <div class="text-muted small">{{ $invoice->client->document }}</div>
+                    </td>
+                    <td class="text-muted">{{ $invoice->date->format('d/m/Y') }}</td>
+                    <td class="text-end fw-bold">S/ {{ number_format($invoice->total, 2) }}</td>
+                    <td class="text-center">
+                        @if($invoice->electronic_invoice_status == 'SENT')
+                            <span class="badge bg-green-lt"><i class="ti ti-check me-1"></i> Aceptado</span>
+                        @elseif($invoice->electronic_invoice_status == 'ERROR')
+                            <span class="badge bg-red-lt" title="{{ $invoice->electronic_invoice_response['message'] ?? 'Error desconocido' }}">Error SUNAT</span>
+                        @else
+                            <span class="badge bg-secondary-lt">No emitido</span>
+                        @endif
+                    </td>
+                    <td class="text-end">
+                        <div class="btn-group">
+                            @php
+                                $pdfUrl = $invoice->electronic_invoice_pdf_a4_url ?: route('invoices.local_pdf', $invoice);
+                            @endphp
+                            <a href="{{ $pdfUrl }}" target="_blank" class="btn btn-sm btn-primary" title="Ver PDF">
+                                <i class="ti ti-file-text icon-inline me-1"></i> Ver PDF
+                            </a>
+                            
+                            @if($invoice->electronic_invoice_status == 'SENT')
+                            <button type="button" class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                                <span class="visually-hidden">Opciones</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <a class="dropdown-item" href="{{ route('invoices.xml', $invoice) }}">
+                                        <i class="ti ti-file-code me-2"></i> Descargar XML
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="{{ route('invoices.cdr', $invoice) }}">
+                                        <i class="ti ti-file-check me-2"></i> Descargar CDR
+                                    </a>
+                                </li>
+                            </ul>
+                            @endif
+                        </div>
+
+                        @if($invoice->electronic_invoice_status != 'SENT')
+                        <form action="{{ route('invoices.resend', $invoice) }}" method="POST" class="d-inline resend-form ms-1">
+                            @csrf
+                            <button type="submit" class="btn btn-sm btn-warning" title="Reenviar a SUNAT">
+                                <i class="ti ti-rotate icon-inline me-1"></i> Reenviar
+                            </button>
+                        </form>
+                        @endif
+                    </td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="5" class="text-center py-4">
-                        <div class="text-muted">No se encontraron ventas facturadas correspondientes a la búsqueda.</div>
+                    <td colspan="6" class="text-center py-5">
+                        <div class="text-muted">No se encontraron comprobantes correspondientes a la búsqueda.</div>
                     </td>
                 </tr>
                 @endforelse
             </tbody>
         </table>
     </div>
-    @if($sales->hasPages())
+    @if($invoices->hasPages())
     <div class="card-footer d-flex align-items-center">
-        {{ $sales->appends(request()->query())->links() }}
+        {{ $invoices->appends(request()->query())->links() }}
     </div>
     @endif
 </div>
@@ -116,6 +178,34 @@
                 }
             });
         }
+
+        // Confirmación para Reenvío a SUNAT
+        const resendForms = document.querySelectorAll('.resend-form');
+        resendForms.forEach(form => {
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        title: '¿Estás seguro?',
+                        text: "Se intentará enviar el comprobante a SUNAT nuevamente.",
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: '#465fff',
+                        cancelButtonColor: '#d33',
+                        confirmButtonText: 'Sí, reenviar',
+                        cancelButtonText: 'Cancelar'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            form.submit();
+                        }
+                    });
+                } else {
+                    if (confirm('¿Estás seguro de que deseas reenviar este comprobante a SUNAT?')) {
+                        form.submit();
+                    }
+                }
+            });
+        });
     });
 </script>
 @endsection

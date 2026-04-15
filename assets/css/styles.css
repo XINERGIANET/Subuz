@@ -483,19 +483,19 @@ body {
 .navbar-vertical .nav-link-title,
 .navbar-vertical .navbar-brand,
 .navbar-vertical .nav-link-icon i,
-.navbar-vertical .navbar-collapse .nav-item.dropdown .nav-link:after {
+.navbar-vertical .nav-item.dropdown .nav-link:after {
 	color: rgba(255, 255, 255, 0.9) !important;
 }
 
 /* Sidebar Submenu Styling - Universal */
-.navbar-vertical .navbar-collapse .dropdown-menu {
+.navbar-vertical .dropdown-menu {
 	background-color: transparent !important;
 	border: none !important;
 	padding: 0 !important;
 	margin: 0 !important;
 }
 
-.navbar-vertical .navbar-collapse .dropdown-item {
+.navbar-vertical .dropdown-item {
 	color: rgba(255, 255, 255, 0.6) !important;
 	font-size: 0.75rem !important;
 	padding: 0.45rem 1rem 0.45rem 2.5rem !important;
@@ -509,13 +509,13 @@ body {
 	position: relative;
 }
 
-.navbar-vertical .navbar-collapse .dropdown-item:hover {
+.navbar-vertical .dropdown-item:hover {
 	color: #ffffff !important;
 	background-color: rgba(255, 255, 255, 0.1) !important;
 	transform: translateX(3px);
 }
 
-.navbar-vertical .navbar-collapse .dropdown-item .icon {
+.navbar-vertical .dropdown-item .icon {
 	color: inherit !important;
 	opacity: 0.7 !important;
 	width: 1rem !important;
@@ -524,11 +524,11 @@ body {
 	left: 0.75rem;
 }
 
-.navbar-vertical .navbar-collapse .dropdown-item:hover .icon {
+.navbar-vertical .dropdown-item:hover .icon {
 	opacity: 1 !important;
 }
 
-.navbar-vertical .navbar-collapse .dropdown-toggle:after {
+.navbar-vertical .dropdown-toggle:after {
 	color: rgba(255, 255, 255, 0.5) !important;
 }
 
@@ -669,7 +669,7 @@ body {
 
 	/* --- SUBMENU CONTROL --- */
 	/* Restore Bootstrap's default behavior for dropdowns: User MUST click to open */
-	.navbar-vertical .navbar-collapse .dropdown-menu {
+	.navbar-vertical .dropdown-menu {
 		display: none;
 		/* Keep them closed by default */
 	}
@@ -731,36 +731,6 @@ body.sidebar-mini .navbar-vertical:hover .navbar-brand-image {
 	color: var(--brand-color) !important;
 }
 
-
-.mobile-menu-header {
-	display: none !important;
-}
-
-.mobile-logo {
-	height: 24px !important;
-	filter: brightness(0) invert(1) !important;
-}
-
-.btn-close-mobile {
-	background: transparent !important;
-	border: none !important;
-	color: #ffffff !important;
-	padding: 0.5rem !important;
-	cursor: pointer !important;
-	display: flex !important;
-	align-items: center !important;
-	justify-content: center !important;
-	transition: transform 0.2s ease !important;
-}
-
-.btn-close-mobile i {
-	font-size: 1.75rem !important;
-}
-
-.btn-close-mobile:active {
-	transform: scale(0.9) !important;
-}
-
 /* Responsive Sidebar Side-Drawer (Left-to-Right) */
 @media (max-width: 991.98px) {
 	.navbar-vertical {
@@ -777,7 +747,7 @@ body.sidebar-mini .navbar-vertical:hover .navbar-brand-image {
 		background-color: var(--brand-color) !important;
 		margin: 0 !important;
 		padding: 1.5rem !important;
-		z-index: 3000 !important;
+		z-index: 1050 !important;
 		display: block !important;
 		visibility: visible !important;
 		transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
@@ -817,7 +787,32 @@ body.sidebar-mini .navbar-vertical:hover .navbar-brand-image {
 		background-color: var(--brand-color) !important;
 		position: sticky !important;
 		top: 0 !important;
-		z-index: 3100 !important;
+		z-index: 1100 !important;
+	}
+
+	.mobile-logo {
+		height: 24px !important;
+		filter: brightness(0) invert(1) !important;
+	}
+
+	.btn-close-mobile {
+		background: transparent !important;
+		border: none !important;
+		color: #ffffff !important;
+		padding: 0.5rem !important;
+		cursor: pointer !important;
+		display: flex !important;
+		align-items: center !important;
+		justify-content: center !important;
+		transition: transform 0.2s ease !important;
+	}
+
+	.btn-close-mobile i {
+		font-size: 1.75rem !important;
+	}
+
+	.btn-close-mobile:active {
+		transform: scale(0.9) !important;
 	}
 }
 
