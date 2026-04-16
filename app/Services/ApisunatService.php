@@ -61,8 +61,12 @@ class ApisunatService
         $rucEmisor = config('apisunat.company.ruc', '20615250024');
         $fileName = sprintf('%s-%s-%s-%s', $rucEmisor, $docType, $serie, str_pad($suggestedNumber, 8, '0', STR_PAD_LEFT));
 
-        // 2. Construir cuerpo del documento
+        // 2. Construir cuerpo del documento (cbc:ID debe usar correlativo 8 dígitos como en fileName SUNAT)
         $documentBody = $this->buildDocumentBody($invoice, $docType, $serie, $suggestedNumber);
+
+        if (empty($documentBody['cac:InvoiceLine'])) {
+            return ['status' => 'ERROR', 'message' => 'El comprobante no tiene líneas de detalle para enviar a SUNAT.'];
+        }
 
         // 3. Enviar a Apisunat
         $sendResp = Http::timeout(35)->asJson()->post($apiUrl . '/personas/v1/sendBill', [
@@ -73,6 +77,11 @@ class ApisunatService
         ]);
 
         if ($sendResp->failed()) {
+            return ['status' => 'ERROR', 'message' => 'Error al enviar comprobante: ' . $sendResp->body()];
+        }
+
+        $sendPayload = $sendResp->json();
+        if (is_array($sendPayload) && (($sendPayload['status'] ?? null) === 'ERROR' || isset($sendPayload['error']))) {
             return ['status' => 'ERROR', 'message' => 'Error al enviar comprobante: ' . $sendResp->body()];
         }
 
@@ -146,6 +155,9 @@ class ApisunatService
     protected function buildDocumentBody(Invoice $invoice, $docType, $serie, $number)
     {
         $client = $invoice->client;
+
+        // SUNAT: correlativo 8 dígitos; debe coincidir con la parte C de fileName (evita errores en API Apisunat)
+        $correlativoPadded = str_pad((string) max(0, (int) $number), 8, '0', STR_PAD_LEFT);
         
         // Calcular totales con precisión
         $total = (float) $invoice->total;
@@ -167,7 +179,7 @@ class ApisunatService
         $body = [
             "cbc:UBLVersionID" => "2.1",
             "cbc:CustomizationID" => "2.0",
-            "cbc:ID" => "{$serie}-{$number}",
+            "cbc:ID" => "{$serie}-{$correlativoPadded}",
             "cbc:IssueDate" => $invoice->date->format('Y-m-d'),
             "cbc:IssueTime" => now()->format('H:i:s'),
             "cbc:InvoiceTypeCode" => [
