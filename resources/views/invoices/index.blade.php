@@ -179,11 +179,51 @@
             });
         }
 
-        // Confirmación para Reenvío a SUNAT
+        // Reenvío a SUNAT vía AJAX (misma idea que emitir en pendientes: respuesta JSON, sin 302)
         const resendForms = document.querySelectorAll('.resend-form');
         resendForms.forEach(form => {
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
+                const submitResend = function() {
+                    const btn = form.querySelector('button[type="submit"]');
+                    const originalHtml = btn ? btn.innerHTML : '';
+                    if (btn) {
+                        btn.disabled = true;
+                        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Enviando...';
+                    }
+                    $.ajax({
+                        url: form.getAttribute('action'),
+                        method: 'POST',
+                        data: $(form).serialize(),
+                        success: function(response) {
+                            if (response.status) {
+                                Swal.fire({
+                                    title: '¡Éxito!',
+                                    text: response.message || 'Comprobante reenviado.',
+                                    icon: 'success'
+                                }).then(function() { window.location.reload(); });
+                            } else {
+                                Swal.fire('Error', response.error || 'No se pudo reenviar.', 'error');
+                                if (btn) {
+                                    btn.disabled = false;
+                                    btn.innerHTML = originalHtml;
+                                }
+                            }
+                        },
+                        error: function(xhr) {
+                            var err = 'Error de servidor';
+                            if (xhr.responseJSON) {
+                                if (xhr.responseJSON.error) err = xhr.responseJSON.error;
+                                else if (xhr.responseJSON.message) err = xhr.responseJSON.message;
+                            }
+                            Swal.fire('Error', err, 'error');
+                            if (btn) {
+                                btn.disabled = false;
+                                btn.innerHTML = originalHtml;
+                            }
+                        }
+                    });
+                };
                 if (typeof Swal !== 'undefined') {
                     Swal.fire({
                         title: '¿Estás seguro?',
@@ -194,14 +234,14 @@
                         cancelButtonColor: '#d33',
                         confirmButtonText: 'Sí, reenviar',
                         cancelButtonText: 'Cancelar'
-                    }).then((result) => {
+                    }).then(function(result) {
                         if (result.isConfirmed) {
-                            form.submit();
+                            submitResend();
                         }
                     });
                 } else {
                     if (confirm('¿Estás seguro de que deseas reenviar este comprobante a SUNAT?')) {
-                        form.submit();
+                        submitResend();
                     }
                 }
             });

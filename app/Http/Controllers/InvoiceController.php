@@ -185,17 +185,37 @@ class InvoiceController extends Controller
         }
     }
 
-    public function resend(Invoice $invoice)
+    public function resend(Request $request, Invoice $invoice)
     {
         try {
             $result = $this->apisunatService->emitInvoice($invoice);
-            
+
             if ($result['status'] === 'SENT') {
-                return back()->with('message', 'Comprobante reenviado con éxito.');
-            } else {
-                return back()->with('error', 'Error al reenviar: ' . ($result['message'] ?? 'Respuesta desconocida'));
+                if ($request->ajax()) {
+                    return response()->json([
+                        'status' => true,
+                        'message' => 'Comprobante reenviado con éxito.',
+                    ]);
+                }
+                return redirect()->route('invoices.index')->with('message', 'Comprobante reenviado con éxito.');
             }
+
+            if ($result['status'] === 'SKIPPED') {
+                if ($request->ajax()) {
+                    return response()->json(['status' => false, 'error' => $result['message'] ?? 'Omitido']);
+                }
+                return back()->with('error', $result['message'] ?? 'Omitido');
+            }
+
+            $msg = 'Error al reenviar: ' . ($result['message'] ?? 'Respuesta desconocida');
+            if ($request->ajax()) {
+                return response()->json(['status' => false, 'error' => $msg]);
+            }
+            return back()->with('error', $msg);
         } catch (\Exception $e) {
+            if ($request->ajax()) {
+                return response()->json(['status' => false, 'error' => 'Error al procesar el reenvío: ' . $e->getMessage()]);
+            }
             return back()->with('error', 'Error al procesar el reenvío: ' . $e->getMessage());
         }
     }

@@ -28,15 +28,14 @@ class ApisunatService
             return ['status' => 'SKIPPED', 'message' => 'Facturación electrónica no configurada o desactivada.'];
         }
 
-        $apiUrl = $config->api_url ?: config('apisunat.url', 'https://back.apisunat.com');
-        $apiUrl = rtrim($apiUrl, '/'); // Eliminar barra final si existe
-        
-        if (empty($apiUrl) || $apiUrl === '/') {
-            $apiUrl = 'https://back.apisunat.com';
-        }
+        $creds = $this->resolveApisunatCredentials($config);
+        $apiUrl = $creds['api_url'];
+        $personaId = $creds['persona_id'];
+        $personaToken = $creds['persona_token'];
 
-        $personaId = $config->persona_id ?: config('apisunat.id');
-        $personaToken = $config->persona_token ?: config('apisunat.token.prod');
+        if ($personaId === '' || $personaToken === '') {
+            return ['status' => 'ERROR', 'message' => 'APISUNAT: falta APISUNAT_ID o APISUNAT_TOKEN_PROD. Verifique .env y ejecute en el servidor: php artisan config:clear'];
+        }
 
         // Determinar tipo de documento (01 Factura, 03 Boleta)
         $isRuc = $invoice->document_type === 'factura' || strlen($invoice->client->document) === 11;
@@ -44,7 +43,7 @@ class ApisunatService
         $serie = $isRuc ? ($config->series_factura ?: 'F001') : ($config->series_boleta ?: 'B001');
 
         // 1. Obtener número correlativo sugerido si no tiene uno
-        $correlativeResp = Http::timeout(20)->post($apiUrl . '/personas/lastDocument', [
+        $correlativeResp = Http::timeout(20)->asJson()->post($apiUrl . '/personas/lastDocument', [
             'personaId' => (string) $personaId,
             'personaToken' => (string) $personaToken,
             'type' => $docType,
@@ -56,6 +55,9 @@ class ApisunatService
         }
 
         $suggestedNumber = $correlativeResp->json('suggestedNumber');
+        if ($suggestedNumber === null || $suggestedNumber === '') {
+            return ['status' => 'ERROR', 'message' => 'Error al obtener correlativo: respuesta inválida. ' . $correlativeResp->body()];
+        }
         $rucEmisor = config('apisunat.company.ruc', '20615250024');
         $fileName = sprintf('%s-%s-%s-%s', $rucEmisor, $docType, $serie, str_pad($suggestedNumber, 8, '0', STR_PAD_LEFT));
 
@@ -63,7 +65,7 @@ class ApisunatService
         $documentBody = $this->buildDocumentBody($invoice, $docType, $serie, $suggestedNumber);
 
         // 3. Enviar a Apisunat
-        $sendResp = Http::timeout(35)->post($apiUrl . '/personas/v1/sendBill', [
+        $sendResp = Http::timeout(35)->asJson()->post($apiUrl . '/personas/v1/sendBill', [
             'personaId' => (string) $personaId,
             'personaToken' => (string) $personaToken,
             'fileName' => $fileName,
@@ -113,13 +115,32 @@ class ApisunatService
         // Si existe pero tiene campos nulos (debido a errores previos de caché), los reparamos
         elseif (empty($config->persona_id) || empty($config->persona_token)) {
             $config->update([
-                'api_url' => $config->api_url ?: (config('apisunat.url') ?: env('APISUNAT_URL', 'https://back.apisunat.com')),
-                'persona_id' => $config->persona_id ?: (config('apisunat.id') ?: env('APISUNAT_ID')),
-                'persona_token' => $config->persona_token ?: (config('apisunat.token.prod') ?: env('APISUNAT_TOKEN_PROD')),
+                'api_url' => $config->api_url ?: (config('apisunat.url') ?: 'https://back.apisunat.com'),
+                'persona_id' => $config->persona_id ?: config('apisunat.id'),
+                'persona_token' => $config->persona_token ?: config('apisunat.token.prod'),
             ]);
+            $config->refresh();
         }
 
         return $config;
+    }
+
+    /**
+     * Credenciales desde BD y config (no usar env() aquí: con config:cache devuelve null fuera de archivos config).
+     */
+    protected function resolveApisunatCredentials(BranchElectronicBillingConfig $config): array
+    {
+        $apiUrl = trim((string) ($config->api_url ?: config('apisunat.url', 'https://back.apisunat.com')));
+        $apiUrl = rtrim($apiUrl, '/');
+        if ($apiUrl === '' || $apiUrl === '/') {
+            $apiUrl = 'https://back.apisunat.com';
+        }
+
+        return [
+            'api_url' => $apiUrl,
+            'persona_id' => trim((string) ($config->persona_id ?: config('apisunat.id'))),
+            'persona_token' => trim((string) ($config->persona_token ?: config('apisunat.token.prod'))),
+        ];
     }
 
     protected function buildDocumentBody(Invoice $invoice, $docType, $serie, $number)
