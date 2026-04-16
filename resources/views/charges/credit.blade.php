@@ -100,7 +100,7 @@
 					<td>{{ $sale->date->format('d/m/Y') }}</td>
 					<td>{{ optional($sale->client)->name ?? 'N/A' }}</td>
 					<td class="text-center">
-						@if($sale->paid || $sale->type == 'Pago pendiente')
+						@if($sale->paid || $sale->type == 'Pago pendiente' || $sale->movements->where('type', 'debt')->isNotEmpty())
 						<span class="badge bg-success-lt px-2 py-1">Entregado</span>
 						@else
 						<span class="badge bg-warning-lt px-2 py-1">No entregado</span>

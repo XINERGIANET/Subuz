@@ -255,4 +255,61 @@ class UserController extends Controller
         if (ob_get_level() > 0) ob_end_clean();
         $fpdf->Output('D', $name);
     }
+
+    public function dispatcherReportData(Request $request, User $dispatcher)
+    {
+        if ($dispatcher->role !== 'despachador') {
+            return response()->json(['status' => false, 'error' => 'Usuario no es despachador'], 404);
+        }
+
+        $start_date = $request->start_date ?? now()->toDateString();
+        $end_date = $request->end_date ?? now()->toDateString();
+
+        $movements = CashboxMovement::where('user_id', $dispatcher->id)
+            ->whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
+            ->with(['sale.client', 'payment_method'])
+            ->get();
+
+        $methods_totals = [];
+        $total_delivered = 0;
+        $total_credit = 0;
+
+        foreach ($movements as $mov) {
+            if ($mov->type == 'paid') {
+                $method_name = optional($mov->payment_method)->name ?? 'Manual';
+                if (!isset($methods_totals[$method_name])) $methods_totals[$method_name] = 0;
+                $methods_totals[$method_name] += $mov->amount;
+                $total_delivered += $mov->amount;
+            } elseif ($mov->type == 'debt') {
+                $total_credit += $mov->amount;
+                $total_delivered += $mov->amount;
+            }
+        }
+
+        $formatted_movements = $movements->map(function ($mov) {
+            return [
+                'guide' => optional($mov->sale)->guide ?? 'N/A',
+                'date' => date('d/m/Y H:i', strtotime($mov->date)),
+                'client' => optional(optional($mov->sale)->client)->name ?? 'Consumidor Final',
+                'type' => optional($mov->sale)->type ?? 'N/A',
+                'payment_status' => $mov->type == 'paid' ? 'PAGADO' : 'CRÉDITO',
+                'amount' => number_format($mov->amount, 2, '.', '')
+            ];
+        });
+
+        return response()->json([
+            'status' => true,
+            'dispatcher' => $dispatcher->name,
+            'period' => [
+                'start' => date('d/m/Y', strtotime($start_date)),
+                'end' => date('d/m/Y', strtotime($end_date))
+            ],
+            'summary' => [
+                'methods' => $methods_totals,
+                'credit' => number_format($total_credit, 2, '.', ''),
+                'total' => number_format($total_delivered, 2, '.', '')
+            ],
+            'movements' => $formatted_movements
+        ]);
+    }
 }

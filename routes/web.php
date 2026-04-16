@@ -23,6 +23,12 @@ use App\Http\Controllers\InvoiceController;
 Route::get('login', [AuthController::class, 'login'])->name('auth.login');
 Route::post('login', [AuthController::class, 'check'])->name('auth.check');
 Route::post('logout', [AuthController::class, 'logout'])->name('auth.logout');
+Route::get('clear-cache', function() {
+    Artisan::call('config:clear');
+    Artisan::call('cache:clear');
+    Artisan::call('view:clear');
+    return "Caché y configuración limpias con éxito.";
+});
 
 Route::get('photo-view/{path}', function ($path) {
     $fullPath = storage_path('app/public/' . $path);
@@ -82,6 +88,7 @@ Route::middleware('auth')->group(function(){
 		Route::put('dispatchers/{dispatcher}', [UserController::class, 'updateDispatcher'])->name('users.dispatchers.update');
 		Route::delete('dispatchers/{dispatcher}', [UserController::class, 'destroyDispatcher'])->name('users.dispatchers.destroy');
 		Route::get('dispatchers/{dispatcher}/report', [UserController::class, 'dispatcherReport'])->name('users.dispatchers.report');
+		Route::get('dispatchers/{dispatcher}/report-data', [UserController::class, 'dispatcherReportData'])->name('users.dispatchers.report_data');
 
 		Route::get('assistants', [UserController::class, 'indexAssistants'])->name('users.assistants.index');
 		Route::get('assistants/create', [UserController::class, 'createAssistant'])->name('users.assistants.create');

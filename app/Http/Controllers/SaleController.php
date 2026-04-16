@@ -379,10 +379,18 @@ class SaleController extends Controller
                 return $q->whereDate('date', '<=', $end_date);
             })
             ->when($request->is_pending, function($q){
-                return $q->whereIn('type', ['Contado', 'Pago pendiente'])->where('paid', 0);
+                return $q->whereIn('type', ['Contado', 'Pago pendiente'])
+                    ->where('paid', 0)
+                    ->whereHas('movements', function($mq) {
+                        $mq->where('type', 'debt');
+                    });
             })
             ->when($request->is_credit, function($q){
-                return $q->where('type', 'Credito')->where('paid', 0);
+                return $q->where('type', 'Credito')
+                    ->where('paid', 0)
+                    ->whereHas('movements', function($mq) {
+                        $mq->where('type', 'debt');
+                    });
             });
 
         if(!$request->start_date && !$request->end_date && !$request->is_pending && !$request->is_credit && !$request->client_id){

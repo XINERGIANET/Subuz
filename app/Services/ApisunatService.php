@@ -28,9 +28,15 @@ class ApisunatService
             return ['status' => 'SKIPPED', 'message' => 'Facturación electrónica no configurada o desactivada.'];
         }
 
-        $apiUrl = $config->api_url ?: config('apisunat.url');
-        $personaId = $config->persona_id;
-        $personaToken = $config->persona_token;
+        $apiUrl = $config->api_url ?: config('apisunat.url', 'https://back.apisunat.com');
+        $apiUrl = rtrim($apiUrl, '/'); // Eliminar barra final si existe
+        
+        if (empty($apiUrl) || $apiUrl === '/') {
+            $apiUrl = 'https://back.apisunat.com';
+        }
+
+        $personaId = $config->persona_id ?: config('apisunat.id');
+        $personaToken = $config->persona_token ?: config('apisunat.token.prod');
 
         // Determinar tipo de documento (01 Factura, 03 Boleta)
         $isRuc = $invoice->document_type === 'factura' || strlen($invoice->client->document) === 11;
@@ -50,7 +56,7 @@ class ApisunatService
         }
 
         $suggestedNumber = $correlativeResp->json('suggestedNumber');
-        $rucEmisor = config('apisunat.company.ruc', '20100100100');
+        $rucEmisor = config('apisunat.company.ruc', '20615250024');
         $fileName = sprintf('%s-%s-%s-%s', $rucEmisor, $docType, $serie, str_pad($suggestedNumber, 8, '0', STR_PAD_LEFT));
 
         // 2. Construir cuerpo del documento
@@ -90,21 +96,52 @@ class ApisunatService
     protected function getConfig()
     {
         // Como no hay sucursales, tomamos la primera configuración disponible
-        return BranchElectronicBillingConfig::first();
+        $config = BranchElectronicBillingConfig::first();
+
+        // Si no existe, lo creamos
+        if (!$config) {
+            $config = BranchElectronicBillingConfig::create([
+                'id' => 1,
+                'enabled' => true,
+                'api_url' => config('apisunat.url', 'https://back.apisunat.com'),
+                'persona_id' => config('apisunat.id'),
+                'persona_token' => config('apisunat.token.prod'),
+                'series_boleta' => config('apisunat.series.boleta', 'B001'),
+                'series_factura' => config('apisunat.series.factura', 'F001'),
+            ]);
+        } 
+        // Si existe pero tiene campos nulos (debido a errores previos de caché), los reparamos
+        elseif (empty($config->persona_id) || empty($config->persona_token)) {
+            $config->update([
+                'api_url' => $config->api_url ?: (config('apisunat.url') ?: env('APISUNAT_URL', 'https://back.apisunat.com')),
+                'persona_id' => $config->persona_id ?: (config('apisunat.id') ?: env('APISUNAT_ID')),
+                'persona_token' => $config->persona_token ?: (config('apisunat.token.prod') ?: env('APISUNAT_TOKEN_PROD')),
+            ]);
+        }
+
+        return $config;
     }
 
     protected function buildDocumentBody(Invoice $invoice, $docType, $serie, $number)
     {
         $client = $invoice->client;
         
-        // Calcular totales
-        $total = $invoice->total;
+        // Calcular totales con precisión
+        $total = (float) $invoice->total;
         $igvRate = 0.18;
         $subtotal = round($total / (1 + $igvRate), 2);
         $totalIgv = round($total - $subtotal, 2);
 
-        $rucEmisor = config('apisunat.company.ruc', '20100100100');
-        $razonSocial = config('apisunat.company.legal_name', 'SUBUZ SAC');
+        $rucEmisor = config('apisunat.company.ruc', '20615250024');
+        $razonSocialEmisor = config('apisunat.company.legal_name', 'SUBUZ SAC');
+        $direccionEmisor = config('apisunat.company.address', '-');
+
+        // Lógica de identificación de cliente refinada
+        $docCliente = (string) $client->document;
+        $isRuc = strlen($docCliente) === 11;
+        $schemeID = $isRuc ? "6" : (strlen($docCliente) === 8 ? "1" : "0");
+        $razonSocialCliente = trim($client->business_name ?: $client->name) ?: '-';
+        $direccionCliente = trim($client->address ?: '-');
 
         $body = [
             "cbc:UBLVersionID" => "2.1",
@@ -122,16 +159,19 @@ class ApisunatService
                     "cac:PartyIdentification" => [
                         "cbc:ID" => [
                             "schemeID" => "6",
-                            "value" => $rucEmisor
+                            "value" => (string) $rucEmisor
                         ]
                     ],
                     "cac:PartyName" => [
-                        "cbc:Name" => $razonSocial
+                        "cbc:Name" => $razonSocialEmisor
                     ],
                     "cac:PartyLegalEntity" => [
-                        "cbc:RegistrationName" => $razonSocial,
+                        "cbc:RegistrationName" => $razonSocialEmisor,
                         "cac:RegistrationAddress" => [
                             "cbc:AddressTypeCode" => "0000",
+                            "cac:AddressLine" => [
+                                "cbc:Line" => $direccionEmisor
+                            ],
                             "cac:Country" => [
                                 "cbc:IdentificationCode" => "PE"
                             ]
@@ -143,12 +183,20 @@ class ApisunatService
                 "cac:Party" => [
                     "cac:PartyIdentification" => [
                         "cbc:ID" => [
-                            "schemeID" => strlen($client->document) === 11 ? "6" : "1",
-                            "value" => $client->document ?: "00000000"
+                            "schemeID" => (string) $schemeID,
+                            "value" => (string) ($docCliente ?: "00000000")
                         ]
                     ],
                     "cac:PartyLegalEntity" => [
-                        "cbc:RegistrationName" => $client->business_name ?: $client->name,
+                        "cbc:RegistrationName" => $razonSocialCliente,
+                        "cac:RegistrationAddress" => [
+                            "cac:AddressLine" => [
+                                "cbc:Line" => $direccionCliente
+                            ],
+                            "cac:Country" => [
+                                "cbc:IdentificationCode" => "PE"
+                            ]
+                        ]
                     ]
                 ]
             ],
@@ -156,17 +204,17 @@ class ApisunatService
                 [
                     "cbc:TaxAmount" => [
                         "currencyID" => "PEN",
-                        "value" => $totalIgv
+                        "value" => number_format($totalIgv, 2, '.', '')
                     ],
                     "cac:TaxSubtotal" => [
                         [
                             "cbc:TaxableAmount" => [
                                 "currencyID" => "PEN",
-                                "value" => $subtotal
+                                "value" => number_format($subtotal, 2, '.', '')
                             ],
                             "cbc:TaxAmount" => [
                                 "currencyID" => "PEN",
-                                "value" => $totalIgv
+                                "value" => number_format($totalIgv, 2, '.', '')
                             ],
                             "cac:TaxCategory" => [
                                 "cac:TaxScheme" => [
@@ -182,44 +230,48 @@ class ApisunatService
             "cac:LegalMonetaryTotal" => [
                 "cbc:LineExtensionAmount" => [
                     "currencyID" => "PEN",
-                    "value" => $subtotal
+                    "value" => number_format($subtotal, 2, '.', '')
                 ],
                 "cbc:TaxInclusiveAmount" => [
                     "currencyID" => "PEN",
-                    "value" => $total
+                    "value" => number_format($total, 2, '.', '')
                 ],
                 "cbc:PayableAmount" => [
                     "currencyID" => "PEN",
-                    "value" => $total
+                    "value" => number_format($total, 2, '.', '')
                 ]
             ],
             "cac:InvoiceLine" => []
         ];
 
-        // Líneas de la factura (Consolidar de todos los Sales)
+        // Líneas de la factura
         $itemsCount = 1;
         foreach ($invoice->sales as $sale) {
             foreach ($sale->details as $detail) {
-                $itemTotal = $detail->price * $detail->quantity;
+                $itemPrice = (float) $detail->price;
+                $itemQty = (float) $detail->quantity;
+                $itemTotal = $itemPrice * $itemQty;
+                
                 $itemSubtotal = round($itemTotal / (1 + $igvRate), 2);
                 $itemIgv = round($itemTotal - $itemSubtotal, 2);
+                $valueUnitPrice = round($itemPrice / (1 + $igvRate), 4);
 
                 $body["cac:InvoiceLine"][] = [
                     "cbc:ID" => (string) $itemsCount++,
                     "cbc:InvoicedQuantity" => [
                         "unitCode" => "NIU",
-                        "value" => $detail->quantity
+                        "value" => number_format($itemQty, 2, '.', '')
                     ],
                     "cbc:LineExtensionAmount" => [
                         "currencyID" => "PEN",
-                        "value" => $itemSubtotal
+                        "value" => number_format($itemSubtotal, 2, '.', '')
                     ],
                     "cac:PricingReference" => [
                         "cac:AlternativeConditionPrice" => [
                             [
                                 "cbc:PriceAmount" => [
                                     "currencyID" => "PEN",
-                                    "value" => $detail->price
+                                    "value" => number_format($itemPrice, 2, '.', '')
                                 ],
                                 "cbc:PriceTypeCode" => "01"
                             ]
@@ -229,20 +281,20 @@ class ApisunatService
                         [
                             "cbc:TaxAmount" => [
                                 "currencyID" => "PEN",
-                                "value" => $itemIgv
+                                "value" => number_format($itemIgv, 2, '.', '')
                             ],
                             "cac:TaxSubtotal" => [
                                 [
                                     "cbc:TaxableAmount" => [
                                         "currencyID" => "PEN",
-                                        "value" => $itemSubtotal
+                                        "value" => number_format($itemSubtotal, 2, '.', '')
                                     ],
                                     "cbc:TaxAmount" => [
                                         "currencyID" => "PEN",
-                                        "value" => $itemIgv
+                                        "value" => number_format($itemIgv, 2, '.', '')
                                     ],
                                     "cac:TaxCategory" => [
-                                        "cbc:Percent" => 18,
+                                        "cbc:Percent" => "18",
                                         "cbc:TaxExemptionReasonCode" => "10",
                                         "cac:TaxScheme" => [
                                             "cbc:ID" => "1000",
@@ -255,12 +307,12 @@ class ApisunatService
                         ]
                     ],
                     "cac:Item" => [
-                        "cbc:Description" => $detail->product->name
+                        "cbc:Description" => (string) ($detail->product->name ?? 'Producto')
                     ],
                     "cac:Price" => [
                         "cbc:PriceAmount" => [
                             "currencyID" => "PEN",
-                            "value" => round($detail->price / (1 + $igvRate), 2)
+                            "value" => number_format($valueUnitPrice, 4, '.', '')
                         ]
                     ]
                 ];

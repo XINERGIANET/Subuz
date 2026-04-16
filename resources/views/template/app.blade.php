@@ -341,6 +341,7 @@
 </div>
 </div>
 
+@yield('modal')
 <script src="{{ asset('assets/js/tabler.min.js') }}"></script>
 <script src="{{ asset('assets/js/theme.min.js') }}"></script>
 <script src="{{ asset('assets/js/tom-select.base.min.js') }}"></script>

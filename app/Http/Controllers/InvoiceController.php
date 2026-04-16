@@ -86,6 +86,15 @@ class InvoiceController extends Controller
         $selected_client = $request->client_id ? Client::find($request->client_id) : null;
         $selected_type = $request->type;
 
+        // Asegurar que exista al menos un registro en settings
+        if (DB::table('settings')->count() === 0) {
+            DB::table('settings')->insert([
+                'id' => 1,
+                'factura_count' => 0,
+                'boleta_count' => 0
+            ]);
+        }
+
         $settings = DB::table('settings')->first();
         $next_factura = str_pad(($settings->factura_count ?? 0) + 1, 8, "0", STR_PAD_LEFT);
         $next_boleta = str_pad(($settings->boleta_count ?? 0) + 1, 8, "0", STR_PAD_LEFT);
@@ -122,6 +131,15 @@ class InvoiceController extends Controller
 
                 if ($documentType === 'boleta' && ($client->document === '0' || $client->document === '' || $client->document === '00000000') && $total > 700) {
                     throw new \Exception('No se puede emitir una Boleta sin identificación que supere los S/ 700.00.');
+                }
+
+                // Asegurar que exista al menos un registro en settings para evitar duplicados si está vacío
+                if (DB::table('settings')->count() === 0) {
+                    DB::table('settings')->insert([
+                        'id' => 1,
+                        'factura_count' => 0,
+                        'boleta_count' => 0
+                    ]);
                 }
 
                 // Obtener correlativo directamente de la base de datos de manera segura según el tipo
@@ -192,7 +210,7 @@ class InvoiceController extends Controller
         $isFactura = $docType === 'factura';
 
         $company = config('apisunat.company');
-        $rucEmisor = $company['ruc'] ?? '20100100100';
+        $rucEmisor = $company['ruc'] ?? '20615250024';
         $razonSocial = $company['legal_name'] ?? 'SUBUZ SAC';
         $direccionEmisor = $company['address'] ?? '';
 
