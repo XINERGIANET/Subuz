@@ -7,7 +7,6 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Sale;
 use App\Models\Invoice;
 use App\Models\Client;
-use App\Models\BranchElectronicBillingConfig;
 use App\Services\ApisunatService;
 use App\Support\SolesEnLetras;
 use chillerlan\QRCode\Common\EccLevel;
@@ -86,14 +85,7 @@ class InvoiceController extends Controller
         $selected_client = $request->client_id ? Client::find($request->client_id) : null;
         $selected_type = $request->type;
 
-        // Asegurar que exista al menos un registro en settings
-        if (DB::table('settings')->count() === 0) {
-            DB::table('settings')->insert([
-                'id' => 1,
-                'factura_count' => 0,
-                'boleta_count' => 0
-            ]);
-        }
+        $this->ensureSettingsRowExists();
 
         $settings = DB::table('settings')->first();
         $next_factura = str_pad(($settings->factura_count ?? 0) + 1, 8, "0", STR_PAD_LEFT);
@@ -133,14 +125,7 @@ class InvoiceController extends Controller
                     throw new \Exception('No se puede emitir una Boleta sin identificación que supere los S/ 700.00.');
                 }
 
-                // Asegurar que exista al menos un registro en settings para evitar duplicados si está vacío
-                if (DB::table('settings')->count() === 0) {
-                    DB::table('settings')->insert([
-                        'id' => 1,
-                        'factura_count' => 0,
-                        'boleta_count' => 0
-                    ]);
-                }
+                $this->ensureSettingsRowExists();
 
                 // Obtener correlativo directamente de la base de datos de manera segura según el tipo
                 $counter_column = ($documentType === 'factura') ? 'factura_count' : 'boleta_count';
@@ -187,6 +172,13 @@ class InvoiceController extends Controller
 
     public function resend(Request $request, Invoice $invoice)
     {
+        $request->validate([
+            'invoice_id' => 'required|integer|in:'.$invoice->id,
+        ], [
+            'invoice_id.required' => 'Falta el identificador del comprobante en el formulario.',
+            'invoice_id.in' => 'El comprobante no coincide con la solicitud de reenvío.',
+        ]);
+
         try {
             $result = $this->apisunatService->emitInvoice($invoice);
 
@@ -209,9 +201,19 @@ class InvoiceController extends Controller
 
             $msg = 'Error al reenviar: ' . ($result['message'] ?? 'Respuesta desconocida');
             if ($request->ajax()) {
-                return response()->json(['status' => false, 'error' => $msg]);
+                return response()->json([
+                    'status' => false,
+                    'error' => $msg,
+                    'hint' => $result['hint'] ?? null,
+                    'file_name' => $result['fileName'] ?? null,
+                    'debug_file' => $result['debug_file'] ?? null,
+                ]);
             }
-            return back()->with('error', $msg);
+            $flash = $msg;
+            if (!empty($result['hint'])) {
+                $flash .= ' | ' . $result['hint'];
+            }
+            return back()->with('error', $flash);
         } catch (\Exception $e) {
             if ($request->ajax()) {
                 return response()->json(['status' => false, 'error' => 'Error al procesar el reenvío: ' . $e->getMessage()]);
@@ -234,10 +236,9 @@ class InvoiceController extends Controller
         $razonSocial = $company['legal_name'] ?? 'SUBUZ SAC';
         $direccionEmisor = $company['address'] ?? '';
 
-        $billing = BranchElectronicBillingConfig::first();
         $serieDefault = $isFactura
-            ? ($billing->series_factura ?? config('apisunat.series.factura', 'F001'))
-            : ($billing->series_boleta ?? config('apisunat.series.boleta', 'B001'));
+            ? config('apisunat.series.factura', 'F001')
+            : config('apisunat.series.boleta', 'B001');
 
         if ($invoice->electronic_invoice_series && $invoice->electronic_invoice_number !== null && $invoice->electronic_invoice_number !== '') {
             $serie = $invoice->electronic_invoice_series;
@@ -521,10 +522,9 @@ class InvoiceController extends Controller
         $docLabel = $docType === 'factura' ? 'Factura de venta electrónica' : 'Boleta de venta electrónica';
 
         $isFactura = $docType === 'factura';
-        $billing = BranchElectronicBillingConfig::first();
         $serieDefault = $isFactura
-            ? ($billing->series_factura ?? config('apisunat.series.factura', 'F001'))
-            : ($billing->series_boleta ?? config('apisunat.series.boleta', 'B001'));
+            ? config('apisunat.series.factura', 'F001')
+            : config('apisunat.series.boleta', 'B001');
         if ($invoice->electronic_invoice_series && $invoice->electronic_invoice_number !== null && $invoice->electronic_invoice_number !== '') {
             $serie = $invoice->electronic_invoice_series;
             $numeroFiscal = (int) $invoice->electronic_invoice_number;
@@ -567,5 +567,23 @@ class InvoiceController extends Controller
             return back()->with('error', 'El CDR no está disponible.');
         }
         return redirect()->away($invoice->electronic_invoice_cdr_url);
+    }
+
+    /**
+     * Inserta la fila inicial de settings si está vacía.
+     * Incluye sale_count e invoice_count exigidos por MySQL en modo estricto.
+     */
+    private function ensureSettingsRowExists(): void
+    {
+        if (DB::table('settings')->count() > 0) {
+            return;
+        }
+        DB::table('settings')->insert([
+            'id' => 1,
+            'sale_count' => 0,
+            'invoice_count' => 0,
+            'factura_count' => 0,
+            'boleta_count' => 0,
+        ]);
     }
 }

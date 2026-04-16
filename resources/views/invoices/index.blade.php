@@ -136,6 +136,8 @@
                         @if($invoice->electronic_invoice_status != 'SENT')
                         <form action="{{ route('invoices.resend', $invoice) }}" method="POST" class="d-inline resend-form ms-1">
                             @csrf
+                            <input type="hidden" name="invoice_id" value="{{ $invoice->id }}">
+                            <input type="hidden" name="invoice_number" value="{{ $invoice->number }}">
                             <button type="submit" class="btn btn-sm btn-warning" title="Reenviar a SUNAT">
                                 <i class="ti ti-rotate icon-inline me-1"></i> Reenviar
                             </button>
@@ -203,7 +205,17 @@
                                     icon: 'success'
                                 }).then(function() { window.location.reload(); });
                             } else {
-                                Swal.fire('Error', response.error || 'No se pudo reenviar.', 'error');
+                                var errHtml = '<p style="text-align:left">' + (response.error || 'No se pudo reenviar.') + '</p>';
+                                if (response.hint) {
+                                    errHtml += '<p style="text-align:left;font-size:0.9em;margin-top:10px;color:#555">' + response.hint + '</p>';
+                                }
+                                if (response.file_name) {
+                                    errHtml += '<p style="text-align:left;font-size:0.85em;margin-top:8px"><strong>fileName SUNAT:</strong> ' + response.file_name + '</p>';
+                                }
+                                if (response.debug_file) {
+                                    errHtml += '<p style="text-align:left;font-size:0.85em"><strong>Depuración en servidor:</strong> storage/app/apisunat-debug/' + response.debug_file + '</p>';
+                                }
+                                Swal.fire({ title: 'Error', html: errHtml, icon: 'error', width: '36rem' });
                                 if (btn) {
                                     btn.disabled = false;
                                     btn.innerHTML = originalHtml;
@@ -214,7 +226,10 @@
                             var err = 'Error de servidor';
                             if (xhr.responseJSON) {
                                 if (xhr.responseJSON.error) err = xhr.responseJSON.error;
-                                else if (xhr.responseJSON.message) err = xhr.responseJSON.message;
+                                else if (xhr.responseJSON.errors) {
+                                    var firstErr = Object.values(xhr.responseJSON.errors)[0];
+                                    err = Array.isArray(firstErr) ? firstErr[0] : firstErr;
+                                } else if (xhr.responseJSON.message) err = xhr.responseJSON.message;
                             }
                             Swal.fire('Error', err, 'error');
                             if (btn) {

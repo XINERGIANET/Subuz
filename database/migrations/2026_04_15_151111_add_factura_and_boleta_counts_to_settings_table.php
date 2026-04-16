@@ -14,7 +14,12 @@ class AddFacturaAndBoletaCountsToSettingsTable extends Migration
     public function up()
     {
         Schema::table('settings', function (Blueprint $table) {
-            //
+            if (!Schema::hasColumn('settings', 'factura_count')) {
+                $table->unsignedInteger('factura_count')->default(0);
+            }
+            if (!Schema::hasColumn('settings', 'boleta_count')) {
+                $table->unsignedInteger('boleta_count')->default(0);
+            }
         });
     }
 

@@ -24,6 +24,10 @@ Route::get('login', [AuthController::class, 'login'])->name('auth.login');
 Route::post('login', [AuthController::class, 'check'])->name('auth.check');
 Route::post('logout', [AuthController::class, 'logout'])->name('auth.logout');
 Route::get('clear-cache', function() {
+    $cached = base_path('bootstrap/cache/config.php');
+    if (is_file($cached)) {
+        @unlink($cached);
+    }
     Artisan::call('config:clear');
     Artisan::call('cache:clear');
     Artisan::call('view:clear');
