@@ -108,6 +108,9 @@
 								<button class="btn btn-icon btn-brand btn-payment" data-id="{{ $sale->id }}" data-total="{{ $sale->total }}" data-type="{{ $sale->type }}" data-bs-toggle="tooltip" title="Registrar Pago">
 									<i class="ti ti-cash icon text-white fs-2"></i>
 								</button>
+								<button class="btn btn-icon btn-outline-danger btn-delete" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Eliminar Venta">
+									<i class="ti ti-trash icon fs-2"></i>
+								</button>
 							@endif
 						</div>
 					</td>		
@@ -182,7 +185,9 @@
   		  <div class="mb-3 d-none" id="photo-container">
   		    <label class="form-label small fw-bold text-muted text-uppercase mb-1">Foto de evidencia</label>
   		    <div class="text-center">
-  		      <img src="" id="show-photo" class="img-fluid rounded border shadow-sm" style="max-height: 300px;">
+  		      <div class="image-zoom-container">
+  		        <img src="" id="show-photo" class="img-fluid" style="max-height: 400px;">
+  		      </div>
   		    </div>
   		  </div>
   		  <div class="table-responsive">
@@ -386,6 +391,46 @@
 			}
 		});
 
+	});
+
+
+	$(document).on('mousemove', '.image-zoom-container', function(e) {
+		const rect = this.getBoundingClientRect();
+		const x = e.clientX - rect.left;
+		const y = e.clientY - rect.top;
+		
+		const width = rect.width;
+		const height = rect.height;
+		
+		const xPercent = (x / width) * 100;
+		const yPercent = (y / height) * 100;
+		
+		$(this).find('img').css('transform-origin', `${xPercent}% ${yPercent}%`);
+	});
+
+	$(document).on('click', '.btn-delete', function(){
+		var id = $(this).data('id');
+		var message = '¿Estás seguro que deseas ELIMINAR esta venta? Esta acción borrará permanentemente el registro y sus pagos, y restaurará el stock.';
+
+		if(confirm(message)){
+			$.ajax({
+				url: '{{ url('sales') }}' + '/' + id,
+				method: 'DELETE',
+				data: {
+					_token: '{{ csrf_token() }}'
+				},
+				success: function(data){
+					if(data.status){
+						location.reload();
+					}else{
+						alert(data.error || 'Ocurrió un error al procesar la solicitud.');
+					}
+				},
+				error: function(err){
+					console.log(err);
+				}
+			});
+		}
 	});
 
 	$(document).on('click', '.btn-show', function(){

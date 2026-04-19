@@ -13,14 +13,21 @@ class Cashbox extends Model
         'opened_by',
         'opened_at',
         'opening_amount',
+        'opening_balances',
         'closed_by',
         'closed_at',
         'closing_amount',
+        'closing_balances',
         'is_open',
         'note'
     ];
 
     protected $dates = ['opened_at', 'closed_at'];
+
+    protected $casts = [
+        'opening_balances' => 'array',
+        'closing_balances' => 'array'
+    ];
 
     public $timestamps = false;
 

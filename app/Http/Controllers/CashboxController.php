@@ -41,8 +41,33 @@ class CashboxController extends Controller
         }
 
         $payment_methods = \App\Models\PaymentMethod::all();
+        $balances = [];
 
-        return view('cashbox.index', compact('cashbox', 'movements', 'total_paid', 'total_debt', 'total_expenses', 'total_manual_income', 'suggested_closing_amount', 'payment_methods', 'suggested_opening_amount'));
+        foreach($payment_methods as $pm){
+            $opening = 0;
+            if($cashbox){
+                if($pm->id == 1){
+                    $opening = $cashbox->opening_amount;
+                } else {
+                    $opening = (is_array($cashbox->opening_balances) && isset($cashbox->opening_balances[$pm->id])) ? $cashbox->opening_balances[$pm->id] : 0;
+                }
+                
+                $paid = $movements->where('payment_method_id', $pm->id)->where('type', 'paid')->sum('amount');
+                $income = $movements->where('payment_method_id', $pm->id)->where('type', 'income')->sum('amount');
+                
+                // Los gastos usualmente son en efectivo, pero si hay movimientos de gasto vinculados a un método, los restamos.
+                $expense = 0;
+                if($pm->id == 1){
+                    $expense = $total_expenses; // Asumimos que los gastos generales son en efectivo
+                }
+
+                $balances[$pm->id] = $opening + $paid + $income - $expense;
+            } else {
+                $balances[$pm->id] = 0;
+            }
+        }
+
+        return view('cashbox.index', compact('cashbox', 'movements', 'total_paid', 'total_debt', 'total_expenses', 'total_manual_income', 'suggested_closing_amount', 'payment_methods', 'suggested_opening_amount', 'balances'));
     }
 
     public function storeIncome(Request $request){
@@ -76,7 +101,8 @@ class CashboxController extends Controller
 
     public function open(Request $request){
         $request->validate([
-            'opening_amount' => 'nullable|numeric|min:0'
+            'opening_amount' => 'nullable|numeric|min:0',
+            'opening_balances' => 'nullable|array'
         ]);
 
         if(Cashbox::currentOpen()){
@@ -87,6 +113,7 @@ class CashboxController extends Controller
             'opened_by' => auth()->id(),
             'opened_at' => now(),
             'opening_amount' => $request->opening_amount ? $request->opening_amount : 0,
+            'opening_balances' => $request->opening_balances,
             'is_open' => 1
         ]);
 
@@ -118,10 +145,25 @@ class CashboxController extends Controller
             $closing_amount = ($cashbox->opening_amount + $total_paid + $total_manual_income) - $total_expenses;
         }
 
+        $payment_methods = \App\Models\PaymentMethod::all();
+        $closing_balances = [];
+        $movements = CashboxMovement::where('cashbox_id', $cashbox->id)->get();
+        $total_expenses = Expense::whereBetween('date', [$cashbox->opened_at, now()])->sum('amount');
+
+        foreach($payment_methods as $pm){
+            $opening = ($pm->id == 1) ? $cashbox->opening_amount : ($cashbox->opening_balances[$pm->id] ?? 0);
+            $paid = $movements->where('payment_method_id', $pm->id)->where('type', 'paid')->sum('amount');
+            $income = $movements->where('payment_method_id', $pm->id)->where('type', 'income')->sum('amount');
+            $expense = ($pm->id == 1) ? $total_expenses : 0;
+            
+            $closing_balances[$pm->id] = ($opening + $paid + $income) - $expense;
+        }
+
         $cashbox->update([
             'closed_by' => auth()->id(),
             'closed_at' => now(),
-            'closing_amount' => $closing_amount,
+            'closing_amount' => $closing_balances[1], // Efectivo
+            'closing_balances' => $closing_balances,
             'note' => $request->note,
             'is_open' => 0
         ]);
