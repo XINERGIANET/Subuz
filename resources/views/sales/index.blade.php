@@ -972,6 +972,7 @@
 
 		$('#dispatchPaymentContainer').hide();
 		$('#payment-rows-container').empty();
+		setPaymentInputsState(false);
 		$('#payment-warning').hide();
     $('#photo_preview_container').addClass('d-none');
     $('#photo_preview').attr('src', '#');
@@ -1132,6 +1133,16 @@
 		`;
 		$('#payment-rows-container').append(html);
 		calculateDistributed();
+		setPaymentInputsState($('input[name="paid"]:checked').val() == '1');
+	}
+
+	function setPaymentInputsState(enabled) {
+		$('#payment-rows-container')
+			.find('select[name^="payments["], input[name^="payments["]')
+			.each(function() {
+				$(this).prop('disabled', !enabled);
+				$(this).prop('required', !!enabled);
+			});
 	}
 
 	$(document).on('click', '#btn-add-payment', function() {
@@ -1181,8 +1192,12 @@
 			if($('#payment-rows-container').is(':empty')) {
 				addPaymentRow($('#dispatch_total').text());
 			}
+			setPaymentInputsState(true);
 		}else{
 			$('#dispatchPaymentContainer').fadeOut();
+			setPaymentInputsState(false);
+			$('#payment-warning').hide();
+			$('#total-distributed').removeClass('text-danger text-success').text('S/0.00');
 		}
 	});
 
@@ -1190,6 +1205,7 @@
 		e.preventDefault();
 		
 		var isPaid = $('input[name="paid"]:checked').val() == '1';
+		setPaymentInputsState(isPaid);
 		if(isPaid) {
 			var total = parseFloat($('#dispatch_total').text());
 			var distributed = 0;
@@ -1257,6 +1273,7 @@
 
             $('#dispatchPaymentContainer').hide();
             $('#payment-rows-container').empty();
+            setPaymentInputsState(false);
             $('#payment-warning').hide();
             $('#photo_preview_container').addClass('d-none');
             $('#photo_preview').attr('src', '#');
