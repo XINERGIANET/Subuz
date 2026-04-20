@@ -1192,6 +1192,87 @@
 		}
 	}
 
+	function loadImageFromFile(file){
+		return new Promise(function(resolve, reject){
+			try{
+				var objectUrl = URL.createObjectURL(file);
+				var img = new Image();
+				img.onload = function(){
+					URL.revokeObjectURL(objectUrl);
+					resolve(img);
+				};
+				img.onerror = function(){
+					URL.revokeObjectURL(objectUrl);
+					reject(new Error('No se pudo leer la imagen.'));
+				};
+				img.src = objectUrl;
+			}catch(e){
+				reject(e);
+			}
+		});
+	}
+
+	function canvasToBlob(canvas, quality){
+		return new Promise(function(resolve, reject){
+			if(!canvas.toBlob){
+				reject(new Error('toBlob no soportado'));
+				return;
+			}
+			canvas.toBlob(function(blob){
+				if(!blob){
+					reject(new Error('No se pudo convertir imagen'));
+					return;
+				}
+				resolve(blob);
+			}, 'image/jpeg', quality);
+		});
+	}
+
+	async function compressImageForUpload(file, maxBytes){
+		if(!file || file.size <= maxBytes){
+			return file;
+		}
+
+		var img = await loadImageFromFile(file);
+		var w = img.naturalWidth || img.width;
+		var h = img.naturalHeight || img.height;
+		var canvas = document.createElement('canvas');
+		var ctx = canvas.getContext('2d');
+		if(!ctx){
+			return file;
+		}
+
+		var currentW = w;
+		var currentH = h;
+		var quality = 0.9;
+		var blob = null;
+		var tries = 0;
+
+		while(tries < 12){
+			canvas.width = Math.max(1, Math.round(currentW));
+			canvas.height = Math.max(1, Math.round(currentH));
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+			ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+			blob = await canvasToBlob(canvas, quality);
+			if(blob.size <= maxBytes){
+				break;
+			}
+			if(quality > 0.45){
+				quality -= 0.1;
+			}else{
+				currentW *= 0.85;
+				currentH *= 0.85;
+			}
+			tries++;
+		}
+
+		if(!blob){
+			return file;
+		}
+		var finalName = (file.name || 'evidencia.jpg').replace(/\.[^.]+$/, '') + '.jpg';
+		return new File([blob], finalName, { type: 'image/jpeg' });
+	}
+
 	$(document).on('change', 'input[name="paid"]', function(){
 		if($(this).val() == '1'){
 			$('#dispatchPaymentContainer').fadeIn();
@@ -1207,7 +1288,7 @@
 		}
 	});
 
-	$('#dispatchForm').submit(function(e){
+	$('#dispatchForm').submit(async function(e){
 		e.preventDefault();
 		
 		var isPaid = $('input[name="paid"]:checked').val() == '1';
@@ -1227,6 +1308,16 @@
 
 		var id = $('#dispatch_sale_id').val();
         var formData = new FormData(this);
+		var photoInput = document.getElementById('dispatch_photo');
+		if(photoInput && photoInput.files && photoInput.files[0]){
+			try{
+				// Comprime automáticamente para evitar 413 en móvil/hosting.
+				var optimized = await compressImageForUpload(photoInput.files[0], 7 * 1024 * 1024);
+				formData.set('photo', optimized, optimized.name);
+			}catch(_e){
+				// Si falla compresión, envía archivo original.
+			}
+		}
 
 		$.ajax({
 			url: '{{ route('sales.index') }}' + '/' + id + '/dispatch',
