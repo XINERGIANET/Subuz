@@ -1251,12 +1251,14 @@ class ApisunatService
         $region = $this->txt(config('apisunat.company.region'), 'LAMBAYEQUE');
         $dist = $this->txt($district, 'CHICLAYO');
 
+        // Orden UBL 2.1 (AddressType): cbc:ID del ubigeo debe ir antes que AddressTypeCode/CityName/District;
+        // si va al final, el XML no valida (SUNAT Client.0306: en RegistrationAddress encontró cbc:ID donde debía cerrar).
         return [
+            'cbc:ID' => $this->ublUbigeoId($ubigeo),
             'cbc:AddressTypeCode' => $this->ublText('0000'),
             'cbc:CityName' => $this->ublText($city),
             'cbc:CountrySubentity' => $this->ublText($region),
             'cbc:District' => $this->ublText($dist),
-            'cbc:ID' => $this->ublUbigeoId($ubigeo),
             'cac:AddressLine' => [
                 'cbc:Line' => $this->ublText($line),
             ],
