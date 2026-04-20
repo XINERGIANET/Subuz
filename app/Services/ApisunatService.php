@@ -432,7 +432,7 @@ class ApisunatService
                 $errMsg = (string) $e['message'];
             }
             if ($errMsg !== '' && stripos($errMsg, '_text') !== false) {
-                $local = 'SUBUZ ya probó: variante portal-like (_text/_attributes, Note vacía, sin PaymentMeans/PaymentTerms), variantes solo-_text, PaymentMeans como bloque en lista, documentBody como string (flat_minimal), customerEmail si hay correo, y el resto de variantes xml2js en POST .../personas/v1/sendBill. Si el TypeError _text sigue, el fallo está en el validador Node de Apisunat (el documento no se crea en el portal hasta que sendBill responda PENDIENTE).';
+                $local = 'SUBUZ ya probó: variante portal-like (_text/_attributes, Note vacía, PaymentTerms+PaymentMeans para SUNAT 3244), variantes solo-_text, PaymentMeans como bloque en lista, documentBody como string (flat_minimal), customerEmail si hay correo, y el resto de variantes xml2js en POST .../personas/v1/sendBill. Si el TypeError _text sigue, el fallo está en el validador Node de Apisunat (el documento no se crea en el portal hasta que sendBill responda PENDIENTE).';
                 $escalation = 'Escalación Apisunat: envíe a soporte@apisunat.com o WhatsApp del panel el archivo apisunat-debug, el URL usado (send_bill_url), la variante (sendBill_variant), y el texto literal: "sendBill devuelve TypeError reading _text con documentBody generado por su generador { } del portal". Pida corrección del endpoint /personas/v1/sendBill o revisión de su cuenta en producción.';
             }
         }
@@ -708,9 +708,8 @@ class ApisunatService
     {
         $body = $this->convertUblNodeToPortalShape($documentBody);
 
-        // En el portal suele ir nota vacía, sin PaymentMeans/PaymentTerms.
+        // Nota vacía estilo portal; se conservan PaymentTerms (SUNAT 3244) y PaymentMeans (catálogo 59).
         $body['cbc:Note'] = [];
-        unset($body['cac:PaymentMeans'], $body['cac:PaymentTerms']);
 
         // Campos opcionales que no son necesarios para validar sendBill.
         unset($body['cbc:ProfileID'], $body['cbc:UUID'], $body['cbc:LineCountNumeric']);
@@ -1041,6 +1040,15 @@ class ApisunatService
                     $clienteDistrict,
                     $dirClienteUbigeo
                 ),
+            ],
+            // SUNAT 3244: debe informarse forma de pago (Contado/Crédito) — cac:PaymentTerms obligatorio en validación OSE.
+            'cac:PaymentTerms' => [
+                'cbc:ID' => $this->ublText('FormaPago'),
+                'cbc:PaymentMeansID' => $this->ublText('Contado'),
+                'cbc:Amount' => $this->ublAmt('PEN', $this->decStr($total, 2)),
+            ],
+            'cac:PaymentMeans' => [
+                'cbc:PaymentMeansCode' => $this->ublPaymentMeansCode('009'),
             ],
             'cac:TaxTotal' => [
                 'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($sumIgv, 2)),
