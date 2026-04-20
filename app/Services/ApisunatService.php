@@ -433,7 +433,7 @@ class ApisunatService
                 $errMsg = (string) $e['message'];
             }
             if ($errMsg !== '' && stripos($errMsg, '_text') !== false) {
-                $local = 'SUBUZ ya probó: Note/PaymentTerms en UBL, variantes solo-_text, PaymentMeans como bloque en lista, documentBody como string (flat_minimal), customerEmail si hay correo, y el resto de variantes xml2js en POST .../personas/v1/sendBill. Si el TypeError _text sigue, el fallo está en el validador Node de Apisunat (el documento no se crea en el portal hasta que sendBill responda PENDIENTE).';
+                $local = 'SUBUZ ya probó: variante portal-like (_text/_attributes, Note vacía, sin PaymentMeans/PaymentTerms), variantes solo-_text, PaymentMeans como bloque en lista, documentBody como string (flat_minimal), customerEmail si hay correo, y el resto de variantes xml2js en POST .../personas/v1/sendBill. Si el TypeError _text sigue, el fallo está en el validador Node de Apisunat (el documento no se crea en el portal hasta que sendBill responda PENDIENTE).';
                 $escalation = 'Escalación Apisunat: envíe a soporte@apisunat.com o WhatsApp del panel el archivo apisunat-debug, el URL usado (send_bill_url), la variante (sendBill_variant), y el texto literal: "sendBill devuelve TypeError reading _text con documentBody generado por su generador { } del portal". Pida corrección del endpoint /personas/v1/sendBill o revisión de su cuenta en producción.';
             }
         }
@@ -664,6 +664,7 @@ class ApisunatService
      */
     protected function buildSendBillDocumentBodyVariants(string $docType, array $documentBody): array
     {
+        $portalLike = $this->buildPortalLikeDocumentBodyVariant($documentBody);
         $strip = $this->stripUblDuplicateText($documentBody);
         $linesArray = $this->forceInvoiceLineAsArray($documentBody);
         $dropUnderscore = $this->stripUblDropUnderscoreWhenTextPresent($documentBody);
@@ -672,6 +673,10 @@ class ApisunatService
         $minimalNoStax = $this->documentBodyWithoutSupplierPartyTaxScheme($minimal);
 
         $variants = [];
+        $variants['flat_portal_like'] = $portalLike;
+        if ($docType !== '03') {
+            $variants['invoice_root_portal_like'] = ['Invoice' => $portalLike];
+        }
         $variants['flat_drop_underscore'] = $dropUnderscore;
         $variants['flat_pm_block_array'] = $pmBlocks;
         if ($docType !== '03') {
@@ -693,6 +698,101 @@ class ApisunatService
         }
 
         return $variants;
+    }
+
+    /**
+     * Forma compatible con el generador del portal Apisunat:
+     * - usa _text y _attributes (sin _ / $)
+     * - elimina nodos opcionales que suelen romper su validador Node.
+     */
+    protected function buildPortalLikeDocumentBodyVariant(array $documentBody): array
+    {
+        $body = $this->convertUblNodeToPortalShape($documentBody);
+
+        // En el portal suele ir nota vacía, sin PaymentMeans/PaymentTerms.
+        $body['cbc:Note'] = [];
+        unset($body['cac:PaymentMeans'], $body['cac:PaymentTerms']);
+
+        // Campos opcionales que no son necesarios para validar sendBill.
+        unset($body['cbc:ProfileID'], $body['cbc:UUID'], $body['cbc:LineCountNumeric']);
+
+        // Cabecera: en ejemplos del portal TaxSubtotal va como objeto único.
+        if (isset($body['cac:TaxTotal']['cac:TaxSubtotal']) && is_array($body['cac:TaxTotal']['cac:TaxSubtotal']) && array_is_list($body['cac:TaxTotal']['cac:TaxSubtotal'])) {
+            $body['cac:TaxTotal']['cac:TaxSubtotal'] = $body['cac:TaxTotal']['cac:TaxSubtotal'][0] ?? [];
+        }
+
+        // Línea: AlternativeConditionPrice suele ir como objeto (no arreglo).
+        $lines = $body['cac:InvoiceLine'] ?? null;
+        if ($lines !== null && is_array($lines)) {
+            $lineList = array_is_list($lines) ? $lines : [$lines];
+            foreach ($lineList as &$line) {
+                if (!is_array($line)) {
+                    continue;
+                }
+                if (isset($line['cac:PricingReference']['cac:AlternativeConditionPrice']) && is_array($line['cac:PricingReference']['cac:AlternativeConditionPrice']) && array_is_list($line['cac:PricingReference']['cac:AlternativeConditionPrice'])) {
+                    $line['cac:PricingReference']['cac:AlternativeConditionPrice'] = $line['cac:PricingReference']['cac:AlternativeConditionPrice'][0] ?? [];
+                }
+            }
+            $body['cac:InvoiceLine'] = array_is_list($lines) ? $lineList : ($lineList[0] ?? []);
+        }
+
+        return $body;
+    }
+
+    /** Convierte nodos UBL xml2js de _/$ a _text/_attributes. */
+    protected function convertUblNodeToPortalShape($node)
+    {
+        if (!is_array($node)) {
+            return $node;
+        }
+        if (array_is_list($node)) {
+            return array_map(function ($item) {
+                return $this->convertUblNodeToPortalShape($item);
+            }, $node);
+        }
+
+        $hasValue = array_key_exists('_text', $node) || array_key_exists('_', $node);
+        $hasAttrs = array_key_exists('$', $node) && is_array($node['$']);
+        $otherKeys = [];
+        foreach ($node as $k => $v) {
+            if ($k !== '_' && $k !== '_text' && $k !== '$') {
+                $otherKeys[] = $k;
+            }
+        }
+
+        if ($hasValue && $hasAttrs && count($otherKeys) === 0) {
+            return [
+                '_attributes' => $node['$'],
+                '_text' => array_key_exists('_text', $node) ? $node['_text'] : $node['_'],
+            ];
+        }
+        if ($hasValue && count($otherKeys) === 0) {
+            return [
+                '_text' => array_key_exists('_text', $node) ? $node['_text'] : $node['_'],
+            ];
+        }
+        if ($hasAttrs && count($otherKeys) === 0) {
+            return [
+                '_attributes' => $node['$'],
+            ];
+        }
+
+        $out = [];
+        foreach ($node as $k => $v) {
+            if ($k === '_') {
+                if (!array_key_exists('_text', $node)) {
+                    $out['_text'] = $v;
+                }
+                continue;
+            }
+            if ($k === '$') {
+                $out['_attributes'] = $v;
+                continue;
+            }
+            $out[$k] = $this->convertUblNodeToPortalShape($v);
+        }
+
+        return $out;
     }
 
     /** Copia profunda y elimina claves de primer nivel. */
