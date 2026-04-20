@@ -18,7 +18,7 @@ class ApisunatService
 
     public function emitInvoice(Invoice $invoice): array
     {
-        $invoice->load(['client', 'sales.details.product']);
+        $invoice->load(['client', 'sales.details.product', 'details.product']);
 
         if (!filter_var(config('apisunat.enabled', true), FILTER_VALIDATE_BOOLEAN)) {
             return ['status' => 'SKIPPED', 'message' => 'Facturación electrónica desactivada (APISUNAT_ENABLED).'];
@@ -935,61 +935,82 @@ class ApisunatService
         $i = 1;
         $sumOpGravada = 0.0;
         $sumIgv = 0.0;
-        foreach ($invoice->sales as $sale) {
-            foreach ($sale->details as $detail) {
-                $pu = (float) $detail->price;
-                $qty = (float) $detail->quantity;
-                $importeConIgv = round($pu * $qty, 2);
-                $valorVenta = round($importeConIgv / (1 + $igv), 2);
-                $igvLinea = round($importeConIgv - $valorVenta, 2);
-                $vu = $qty > 0 ? round($valorVenta / $qty, 6) : 0.0;
-                $sumOpGravada += $valorVenta;
-                $sumIgv += $igvLinea;
-                $desc = $this->txt(data_get($detail, 'product.name'), 'Producto');
+        $items = [];
+        if ($invoice->details()->count() > 0) {
+            foreach ($invoice->details as $detail) {
+                $items[] = [
+                    'price' => $detail->price,
+                    'quantity' => $detail->quantity,
+                    'description' => $detail->description,
+                    'product_id' => $detail->product_id
+                ];
+            }
+        } else {
+            foreach ($invoice->sales as $sale) {
+                foreach ($sale->details as $detail) {
+                    $items[] = [
+                        'price' => $detail->price,
+                        'quantity' => $detail->quantity,
+                        'description' => $this->txt(data_get($detail, 'product.name'), 'Producto'),
+                        'product_id' => $detail->product_id
+                    ];
+                }
+            }
+        }
 
-                $lines[] = [
-                    'cbc:ID' => $this->ublText((string) $i),
-                    'cbc:InvoicedQuantity' => $this->ublQty('NIU', $this->decStr($qty, 4)),
-                    'cbc:LineExtensionAmount' => $this->ublAmt('PEN', $this->decStr($valorVenta, 2)),
-                    'cac:PricingReference' => [
-                        'cac:AlternativeConditionPrice' => [
-                            [
-                                'cbc:PriceAmount' => $this->ublAmt('PEN', $this->decStr($pu, 2)),
-                                'cbc:PriceTypeCode' => $this->ublText('01'),
-                            ],
+        foreach ($items as $item) {
+            $pu = (float) $item['price'];
+            $qty = (float) $item['quantity'];
+            $importeConIgv = round($pu * $qty, 2);
+            $valorVenta = round($importeConIgv / (1 + $igv), 2);
+            $igvLinea = round($importeConIgv - $valorVenta, 2);
+            $vu = $qty > 0 ? round($valorVenta / $qty, 6) : 0.0;
+            $sumOpGravada += $valorVenta;
+            $sumIgv += $igvLinea;
+            $desc = $this->txt($item['description'], 'Producto');
+
+            $lines[] = [
+                'cbc:ID' => $this->ublText((string) $i),
+                'cbc:InvoicedQuantity' => $this->ublQty('NIU', $this->decStr($qty, 4)),
+                'cbc:LineExtensionAmount' => $this->ublAmt('PEN', $this->decStr($valorVenta, 2)),
+                'cac:PricingReference' => [
+                    'cac:AlternativeConditionPrice' => [
+                        [
+                            'cbc:PriceAmount' => $this->ublAmt('PEN', $this->decStr($pu, 2)),
+                            'cbc:PriceTypeCode' => $this->ublText('01'),
                         ],
                     ],
-                    'cac:TaxTotal' => [
-                        'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($igvLinea, 2)),
-                        'cac:TaxSubtotal' => [
-                            [
-                                'cbc:TaxableAmount' => $this->ublAmt('PEN', $this->decStr($valorVenta, 2)),
-                                'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($igvLinea, 2)),
-                                'cac:TaxCategory' => [
-                                    'cbc:Percent' => $this->ublText($this->decStr(18.0, 2)),
-                                    'cbc:TaxExemptionReasonCode' => $this->ublText('10'),
-                                    'cac:TaxScheme' => [
-                                        'cbc:ID' => $this->ublSunatTaxSchemeCatalogId('1000'),
-                                        'cbc:Name' => $this->ublText('IGV'),
-                                        'cbc:TaxTypeCode' => $this->ublText('VAT'),
-                                    ],
+                ],
+                'cac:TaxTotal' => [
+                    'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($igvLinea, 2)),
+                    'cac:TaxSubtotal' => [
+                        [
+                            'cbc:TaxableAmount' => $this->ublAmt('PEN', $this->decStr($valorVenta, 2)),
+                            'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($igvLinea, 2)),
+                            'cac:TaxCategory' => [
+                                'cbc:Percent' => $this->ublText($this->decStr(18.0, 2)),
+                                'cbc:TaxExemptionReasonCode' => $this->ublText('10'),
+                                'cac:TaxScheme' => [
+                                    'cbc:ID' => $this->ublSunatTaxSchemeCatalogId('1000'),
+                                    'cbc:Name' => $this->ublText('IGV'),
+                                    'cbc:TaxTypeCode' => $this->ublText('VAT'),
                                 ],
                             ],
                         ],
                     ],
-                    'cac:Item' => [
-                        'cbc:Description' => $this->ublText($desc),
-                        'cac:SellersItemIdentification' => [
-                            'cbc:ID' => $this->ublSellersItemId((string) ($detail->product_id ?? $i)),
-                        ],
+                ],
+                'cac:Item' => [
+                    'cbc:Description' => $this->ublText($desc),
+                    'cac:SellersItemIdentification' => [
+                        'cbc:ID' => $this->ublSellersItemId((string) ($item['product_id'] ?? $i)),
                     ],
-                    'cac:Price' => [
-                        'cbc:PriceAmount' => $this->ublAmt('PEN', $this->decStr($vu, 6)),
-                        'cbc:BaseQuantity' => $this->ublQty('NIU', $this->decStr($qty, 4)),
-                    ],
-                ];
-                $i++;
-            }
+                ],
+                'cac:Price' => [
+                    'cbc:PriceAmount' => $this->ublAmt('PEN', $this->decStr($vu, 6)),
+                    'cbc:BaseQuantity' => $this->ublQty('NIU', $this->decStr($qty, 4)),
+                ],
+            ];
+            $i++;
         }
 
         $sumOpGravada = round($sumOpGravada, 2);
