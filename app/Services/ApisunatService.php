@@ -926,7 +926,6 @@ class ApisunatService
         $nombreCliente = $this->txt($client->business_name ?: $client->name, '-');
         $dirCliente = $this->txt($client->address, '-');
         $dirClienteUbigeo = (string) config('apisunat.company.client_ubigeo_default', '140101');
-        $dirEmisorUbigeo = (string) config('apisunat.company.ubigeo', '140101');
         $emisorDistrict = $this->txt(config('apisunat.company.district'), 'CHICLAYO');
         $clienteDistrict = $this->txt($client->district ?? null, $emisorDistrict);
 
@@ -1155,16 +1154,6 @@ class ApisunatService
                 'schemeAgencyName' => 'PE:SUNAT',
                 'schemeURI' => 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05',
             ],
-        ];
-    }
-
-    /** Código de producto interno (schemeID 999). */
-    private function ublSellersItemId(string $id): array
-    {
-        return [
-            '_' => $id,
-            '_text' => $id,
-            '$' => ['schemeID' => '999'],
         ];
     }
 
