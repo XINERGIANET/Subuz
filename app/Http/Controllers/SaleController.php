@@ -694,24 +694,33 @@ class SaleController extends Controller
 
     public function updateDeliveryStatus(Request $request, Sale $sale)
     {
+        if(!auth()->user()->hasRole('admin') && !auth()->user()->hasRole('despachador') && !auth()->user()->hasRole('asistente')){
+            return response()->json([
+                'status' => false,
+                'error' => 'No autorizado'
+            ], 403);
+        }
+
         $status = $request->status; // 1 = Entregado, 0 = No entregado
 
         if ($status == 1) {
             // Confirm delivery without payment (mark as Pago pendiente)
             return $this->markDispatch($request->merge(['paid' => 0]), $sale);
         } else {
-            // Revert delivery (return to Credito)
+            // Revert delivery: allow re-dispatch with new guide/photo.
             DB::transaction(function() use ($sale) {
-                // Delete debt movement if it exists
+                // Remove movements and payments created during dispatch.
                 CashboxMovement::where('sale_id', $sale->id)
-                    ->where('type', 'debt')
+                    ->whereIn('type', ['paid', 'debt'])
                     ->delete();
+                Payment::where('sale_id', $sale->id)->delete();
                 
                 $sale->update([
                     'type' => $sale->type,
                     'paid' => 0,
                     'debt' => $sale->total,
-                    'payment_method_id' => null
+                    'payment_method_id' => null,
+                    'photo' => null
                 ]);
             });
 

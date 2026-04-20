@@ -275,6 +275,11 @@
 								<i class="ti ti-check icon"></i>
 							</button>
 							@endif
+							@if((auth()->user()->hasRole('despachador') || auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente'))  && $isDelivered)
+							<button class="btn btn-icon btn-reopen-delivery" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Volver a no entregado">
+								<i class="ti ti-rotate-2 icon"></i>
+							</button>
+							@endif
 							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente'))
 							<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Editar">
 								<i class="ti ti-edit icon"></i>
@@ -1334,6 +1339,30 @@
 
 	$(document).on('click', '.btn-delete-detail', function(){
 		// Method kept for other potential uses or empty
+	});
+
+	$(document).on('click', '.btn-reopen-delivery', function(){
+		var id = $(this).data('id');
+		if(!confirm('¿Volver esta venta a "No entregado"? Se quitarán pagos/movimientos del despacho y podrás subir una nueva foto.')) return;
+
+		$.ajax({
+			url: '{{ route('sales.index') }}' + '/' + id + '/delivery-status',
+			method: 'POST',
+			data: { status: 0 },
+			success: function(data){
+				if(data.status){
+					ToastMessage.fire({ text: 'Venta revertida a No entregado' })
+						.then(() => location.reload());
+				}else{
+					ToastError.fire({ text: data.error ? data.error : 'No se pudo revertir la venta.' });
+				}
+			},
+			error: function(err){
+				var msg = 'Error al revertir la venta.';
+				if(err.responseJSON && err.responseJSON.error) msg = err.responseJSON.error;
+				ToastError.fire({ text: msg });
+			}
+		});
 	});
 
 </script>
