@@ -1154,16 +1154,6 @@ class ApisunatService
         ];
     }
 
-    /** Ubigeo en dirección. */
-    private function ublUbigeoId(string $ubigeo): array
-    {
-        return [
-            '_' => $ubigeo,
-            '_text' => $ubigeo,
-            '$' => ['schemeName' => 'Ubigeo'],
-        ];
-    }
-
     /** cbc:InvoiceTypeCode (catálogo 01 SUNAT). */
     private function ublInvoiceTypeCode(string $docType): array
     {
@@ -1220,7 +1210,9 @@ class ApisunatService
 
     /**
      * Party del cliente: factura (01) y boleta (03) incluyen cac:PartyName (nombre del adquirente).
-     * Contribuyente (scheme 6): cac:PartyTaxScheme alineado a UBL SUNAT; sin él algunos PSE leen ._text sobre undefined.
+     * Factura (01) a RUC (6): mismo patrón que Greenter/SUNAT — sin PartyTaxScheme en el party cliente,
+     * sin cbc:CompanyID en PartyLegalEntity y RegistrationAddress solo AddressLine + Country (evita Client.0306).
+     * Otros esquemas: PartyTaxScheme en contribuyente si aplica; dirección completa con ubigeo.
      */
     protected function buildAccountingCustomerParty(
         string $docType,
@@ -1241,7 +1233,14 @@ class ApisunatService
                 'cbc:Name' => $this->ublText($nombreCliente),
             ];
         }
-        // Factura a RUC (6): SUNAT/UBL suele exigir PartyTaxScheme; validadores que leen ._text fallan si falta.
+        if ($docType === '01' && (string) $scheme === '6') {
+            $party['cac:PartyLegalEntity'] = [
+                'cbc:RegistrationName' => $this->ublText($nombreCliente),
+                'cac:RegistrationAddress' => $this->sunatRegistrationAddressCustomerRucFactura($dirCliente, $clienteDistrict),
+            ];
+
+            return $party;
+        }
         if ((string) $scheme === '6') {
             $party['cac:PartyTaxScheme'] = [
                 'cbc:RegistrationName' => $this->ublText($nombreCliente),
@@ -1263,6 +1262,28 @@ class ApisunatService
     }
 
     /**
+     * Dirección del adquiriente RUC en factura (01): UBL aceptado por SUNAT/OSE (ej. Greenter) — solo línea y país.
+     */
+    protected function sunatRegistrationAddressCustomerRucFactura(string $line, string $district): array
+    {
+        $line = $this->txt($line, '-');
+        $dist = $this->txt($district, '-');
+        $composed = $line;
+        if ($dist !== '' && $dist !== '-') {
+            $composed .= ' - ' . $dist;
+        }
+
+        return [
+            'cac:AddressLine' => [
+                'cbc:Line' => $this->ublText($composed),
+            ],
+            'cac:Country' => [
+                'cbc:IdentificationCode' => $this->ublText('PE'),
+            ],
+        ];
+    }
+
+    /**
      * Dirección SUNAT/UBL con ubigeo y localidad; Apisunat suele leer estos nodos (si faltan provoca TypeError en su validador).
      */
     protected function sunatRegistrationAddress(string $line, string $district, string $ubigeoRaw): array
@@ -1272,11 +1293,11 @@ class ApisunatService
         $region = $this->txt(config('apisunat.company.region'), 'LAMBAYEQUE');
         $dist = $this->txt($district, 'CHICLAYO');
 
-        // Orden UBL 2.1 (AddressType): cbc:ID del ubigeo debe ir antes que AddressTypeCode/CityName/District;
-        // si va al final, el XML no valida (SUNAT Client.0306: en RegistrationAddress encontró cbc:ID donde debía cerrar).
+        // Emisor: ubigeo como cbc:ID texto (sin schemeName), CitySubdivisionName y orden UBL 2.1 como en ejemplos Greenter/SUNAT.
         return [
-            'cbc:ID' => $this->ublUbigeoId($ubigeo),
+            'cbc:ID' => $this->ublText($ubigeo),
             'cbc:AddressTypeCode' => $this->ublText('0000'),
+            'cbc:CitySubdivisionName' => $this->ublText('-'),
             'cbc:CityName' => $this->ublText($city),
             'cbc:CountrySubentity' => $this->ublText($region),
             'cbc:District' => $this->ublText($dist),
