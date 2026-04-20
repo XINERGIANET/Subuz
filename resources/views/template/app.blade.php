@@ -139,7 +139,7 @@
 								</span>
 							</a>
 						</li>
-						@if(auth()->user()->hasRole('admin'))
+						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente'))
 						<li class="nav-item">
 							<a class="nav-link" href="{{ route('cashbox.index') }}" >
 								<span class="nav-link-icon d-md-none d-lg-inline-block">
@@ -161,7 +161,7 @@
 							</a>
 						</li>
 						@endif
-						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer'))
+						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer') || auth()->user()->hasRole('asistente'))
 						<li class="nav-item {{ request()->is('expenses*') ? 'active' : '' }}">
 							<a class="nav-link" href="{{ route('expenses.index') }}" >
 								<span class="nav-link-icon d-md-none d-lg-inline-block">
@@ -172,6 +172,8 @@
 								</span>
 							</a>
 						</li>
+						@endif
+						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer'))
 						<li class="nav-item {{ request()->is('finances*') ? 'active' : '' }}">
 							<a class="nav-link" href="{{ route('finances.index') }}" >
 								<span class="nav-link-icon d-md-none d-lg-inline-block">
@@ -207,7 +209,7 @@
 							</div>
 						</li>
 						@endif
-						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer'))
+						@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer') || auth()->user()->hasRole('asistente'))
 						<li class="nav-item dropdown">
 							<a class="nav-link dropdown-toggle" href="#navbar-charges" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button" aria-expanded="false" >
 								<span class="nav-link-icon d-md-none d-lg-inline-block">

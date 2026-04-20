@@ -129,7 +129,7 @@ Route::middleware('auth')->group(function(){
 		Route::get('clients/api', [ClientController::class, 'api'])->name('clients.api');
 	});
 
-	Route::middleware('role:admin|viewer')->group(function(){
+	Route::middleware('role:admin|viewer|asistente')->group(function(){
 		Route::get('charges/credit', [ChargeController::class, 'credit'])->name('charges.credit');
 		Route::get('charges/pending', [ChargeController::class, 'pending'])->name('charges.pending');
 		Route::get('charges/history', [ChargeController::class, 'history'])->name('charges.history');
@@ -141,21 +141,25 @@ Route::middleware('auth')->group(function(){
 		Route::get('expenses/excel', [ExpenseController::class, 'excel'])->name('expenses.excel');
 		Route::get('expenses/pdf', [ExpenseController::class, 'pdf'])->name('expenses.pdf');
 		Route::resource('expenses', ExpenseController::class);
+	});
 
+	Route::middleware('role:admin|viewer')->group(function(){
 		Route::get('finances', [FinanceController::class, 'index'])->name('finances.index');
 		Route::post('finances', [FinanceController::class, 'store'])->name('finances.store');
 		Route::get('finances/{finance}', [FinanceController::class, 'show'])->name('finances.show');
 		Route::post('finances/payment', [FinanceController::class, 'storePayment'])->name('finances.payment');
 	});
 
-	Route::middleware('role:admin|seller|viewer')->group(function(){
+	Route::middleware('role:admin|seller|viewer|asistente')->group(function(){
 		Route::get('sales/pdf', [SaleController::class, 'pdf'])->name('sales.pdf');
+		Route::get('sales/report-pdf', [SaleController::class, 'reportPdf'])->name('sales.report_pdf');
+		Route::get('sales/report-data', [SaleController::class, 'reportData'])->name('sales.report_data');
 		Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
 		Route::get('reports/liquidation', [ReportController::class, 'liquidation'])->name('reports.liquidation');
 		Route::get('reports/cashbox', [ReportController::class, 'cashbox'])->name('reports.cashbox');
 	});
 
-	Route::middleware('role:admin|despachador')->group(function(){
+	Route::middleware('role:admin|despachador|asistente')->group(function(){
 		Route::get('cashbox', [CashboxController::class, 'index'])->name('cashbox.index');
 		Route::post('cashbox/open', [CashboxController::class, 'open'])->name('cashbox.open');
 		Route::post('cashbox/close', [CashboxController::class, 'close'])->name('cashbox.close');

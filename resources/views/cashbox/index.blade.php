@@ -23,12 +23,34 @@
                     </div>
                     <div class="col text-truncate">
                         <div class="text-uppercase text-muted small fw-bold">Efectivo en Caja</div>
-                        <div class="h2 mb-0 fw-bold text-success">S/{{ number_format(($cashbox ? $cashbox->opening_amount + $total_paid + $total_manual_income - $total_expenses : 0), 2) }}</div>
+                        <div class="h2 mb-0 fw-bold text-success">S/{{ number_format($balances[1] ?? 0, 2) }}</div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+    @foreach($payment_methods as $pm)
+        @if($pm->id != 1 && ($balances[$pm->id] > 0 || (isset($cashbox->opening_balances[$pm->id]) && $cashbox->opening_balances[$pm->id] > 0)))
+        <div class="col-md-3">
+            <div class="card metric-card border-0 shadow-sm overflow-hidden">
+                <div class="card-status-start bg-azure"></div>
+                <div class="card-body p-3">
+                    <div class="row align-items-center">
+                        <div class="col-auto">
+                            <div class="bg-azure-lt text-azure avatar avatar-md">
+                                <i class="ti ti-credit-card fs-2"></i>
+                            </div>
+                        </div>
+                        <div class="col text-truncate">
+                            <div class="text-uppercase text-muted small fw-bold">{{ $pm->name }}</div>
+                            <div class="h2 mb-0 fw-bold text-azure">S/{{ number_format($balances[$pm->id], 2) }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        @endif
+    @endforeach
     <div class="col-md-3">
         <div class="card border-0 shadow-sm overflow-hidden h-100">
             <div class="card-body p-3 d-flex align-items-center justify-content-between">
@@ -220,12 +242,25 @@
   			  <h5 class="modal-title">Aperturar caja</h5>
   			  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
   			</div>
-  			<div class="modal-body">
-  				<div class="mb-3">
-  					<label class="form-label">Monto inicial</label>
-  					<input type="number" step="0.01" class="form-control" name="opening_amount" value="{{ $suggested_opening_amount }}">
-  				</div>
-  			</div>
+   			<div class="modal-body">
+   				<div class="mb-3">
+   					<label class="form-label fw-bold"><i class="ti ti-cash me-1"></i>Efectivo (Monto inicial)</label>
+   					<input type="number" step="0.01" class="form-control" name="opening_amount" value="{{ $suggested_opening_amount }}" placeholder="0.00">
+   				</div>
+                <hr class="my-3">
+                <div class="text-uppercase text-muted small fw-bold mb-3">Otros métodos de pago</div>
+                @foreach($payment_methods as $pm)
+                    @if($pm->id != 1) {{-- Saltamos efectivo porque ya está arriba --}}
+                    <div class="mb-3">
+                        <label class="form-label">{{ $pm->name }}</label>
+                        <div class="input-group">
+                            <span class="input-group-text">S/</span>
+                            <input type="number" step="0.01" class="form-control" name="opening_balances[{{ $pm->id }}]" value="0.00">
+                        </div>
+                    </div>
+                    @endif
+                @endforeach
+   			</div>
   			<div class="modal-footer">
   				<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
   				<button type="submit" class="btn btn-brand"><i class="ti ti-device-floppy icon"></i> Guardar</button>
@@ -246,13 +281,24 @@
   			</div>
   			<div class="modal-body">
   				<div class="mb-3">
-  					<label class="form-label">Monto de cierre</label>
-  					<input type="number" step="0.01" class="form-control" name="closing_amount" value="{{ $suggested_closing_amount }}">
-  					<small class="text-muted">Se calcula: apertura + ventas - gastos</small>
+  					<label class="form-label fw-bold">Efectivo (Monto de cierre)</label>
+  					<input type="number" step="0.01" class="form-control" name="closing_amount" value="{{ $balances[1] ?? 0 }}">
+  					<small class="text-muted">Sugerido: apertura + ventas - gastos</small>
   				</div>
+                <div class="bg-light p-3 rounded-3 mb-3">
+                    <div class="text-uppercase text-muted extra-small fw-bold mb-2">Otros saldos sugeridos</div>
+                    @foreach($payment_methods as $pm)
+                        @if($pm->id != 1 && (isset($balances[$pm->id]) && $balances[$pm->id] > 0))
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="small">{{ $pm->name }}:</span>
+                            <span class="small fw-bold text-azure">S/{{ number_format($balances[$pm->id], 2) }}</span>
+                        </div>
+                        @endif
+                    @endforeach
+                </div>
   				<div class="mb-3">
-  					<label class="form-label">Observacion</label>
-  					<textarea class="form-control" name="note" rows="3"></textarea>
+  					<label class="form-label">Observación</label>
+  					<textarea class="form-control" name="note" rows="3" placeholder="Opcional..."></textarea>
   				</div>
   			</div>
   			<div class="modal-footer">
