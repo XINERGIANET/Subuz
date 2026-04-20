@@ -1248,7 +1248,7 @@
 		var blob = null;
 		var tries = 0;
 
-		while(tries < 12){
+		while(tries < 20){
 			canvas.width = Math.max(1, Math.round(currentW));
 			canvas.height = Math.max(1, Math.round(currentH));
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1257,17 +1257,20 @@
 			if(blob.size <= maxBytes){
 				break;
 			}
-			if(quality > 0.45){
-				quality -= 0.1;
+			if(quality > 0.2){
+				quality -= 0.08;
 			}else{
-				currentW *= 0.85;
-				currentH *= 0.85;
+				currentW *= 0.75;
+				currentH *= 0.75;
 			}
 			tries++;
 		}
 
 		if(!blob){
-			return file;
+			throw new Error('No se pudo optimizar la imagen.');
+		}
+		if(blob.size > maxBytes){
+			throw new Error('No se pudo reducir el peso de la imagen para el servidor.');
 		}
 		var finalName = (file.name || 'evidencia.jpg').replace(/\.[^.]+$/, '') + '.jpg';
 		return new File([blob], finalName, { type: 'image/jpeg' });
@@ -1311,11 +1314,12 @@
 		var photoInput = document.getElementById('dispatch_photo');
 		if(photoInput && photoInput.files && photoInput.files[0]){
 			try{
-				// Comprime automáticamente para evitar 413 en móvil/hosting.
-				var optimized = await compressImageForUpload(photoInput.files[0], 7 * 1024 * 1024);
+				// Compresión agresiva para evitar 413 incluso con límites bajos del hosting.
+				var optimized = await compressImageForUpload(photoInput.files[0], 250 * 1024);
 				formData.set('photo', optimized, optimized.name);
 			}catch(_e){
-				// Si falla compresión, envía archivo original.
+				ToastError.fire({ text: 'No se pudo optimizar la foto para el servidor. Elija otra imagen o menor resolución.' });
+				return;
 			}
 		}
 
