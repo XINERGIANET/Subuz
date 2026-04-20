@@ -24,10 +24,16 @@ return [
     ],
 
     /*
+    | Pausa en milisegundos antes del primer POST sendBill (tras armar documentBody).
+    | APISUNAT_DELAY_MS_BEFORE_SEND_BILL=0 desactiva. Máximo 60000 en código.
+    */
+    'delay_ms_before_send_bill' => max(0, (int) env('APISUNAT_DELAY_MS_BEFORE_SEND_BILL', 2000)),
+
+    /*
     | Datos del emisor para PDF local y referencia (alinear con facturación electrónica).
     */
     'company' => [
-        'ruc' => env('COMPANY_RUC', '20100100100'),
+        'ruc' => env('COMPANY_RUC', '20615250024'),
         'legal_name' => env('COMPANY_LEGAL_NAME', 'SUBUZ SAC'),
         'address' => env('COMPANY_ADDRESS', ''),
         'ubigeo' => env('COMPANY_UBIGEO', '140101'),

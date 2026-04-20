@@ -9,6 +9,35 @@
     <li class="breadcrumb-item active">Ventas</li>
   </ol>
 </nav>
+<style>
+    .image-zoom-container {
+        position: relative;
+        cursor: zoom-in !important;
+        display: inline-block !important;
+        border-radius: 12px;
+        overflow: hidden;
+        line-height: 0;
+        border: 3px solid #e2e8f0;
+        transition: all 0.3s ease;
+    }
+    .image-zoom-container:hover {
+        border-color: #244BB3 !important;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    .image-zoom-container img {
+        transition: transform 0.15s ease-out;
+        transform-origin: center center;
+        display: block;
+        width: 100%;
+        height: auto;
+    }
+    .image-zoom-container:hover img {
+        transform: scale(2.5) !important;
+    }
+</style>
+<script>
+    console.log("Sales view loaded");
+</script>
 <div class="card">
 	<div class="card-header d-flex justify-content-between flex-column flex-sm-row gap-2">
 		<div>
@@ -19,6 +48,9 @@
 			<a class="btn btn-success" href="{{ route('sales.excel', request()->query()) }}">
 				<i class="ti ti-download icon"></i> Excel
 			</a>
+			<button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modal-sales-report">
+				<i class="ti ti-file-text icon"></i> Reportes
+			</button>
 			@endif
 			@if(auth()->user()->hasRole('admin'))
 			<div class="mt-2">
@@ -45,14 +77,15 @@
 			</div>
 			<div class="vr mx-1"></div>
 			@endforeach
+
 			<div>
-				<span class="d-block small text-muted">Crédito {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-				<span class="fs-3 fw-bold text-info">S/{{ number_format($total_credit, 2) }}</span>
+				<span class="d-block small text-muted">No Pagado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+				<span class="fs-3 fw-bold text-danger">S/{{ number_format($total_unpaid_delivered, 2) }}</span>
 			</div>
 			<div class="vr mx-1"></div>
 			<div>
-				<span class="d-block small text-muted">No Pagado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-				<span class="fs-3 fw-bold text-danger">S/{{ number_format($total_pending, 2) }}</span>
+				<span class="d-block small text-muted">No Entregado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+				<span class="fs-3 fw-bold text-warning">S/{{ number_format($total_not_delivered, 2) }}</span>
 			</div>
 		</div>
 		@endif
@@ -162,8 +195,24 @@
 					@endif
 				@endif
 			</div>
-			<button type="submit" class="btn btn-brand"><i class="ti ti-filter icon"></i> Filtrar</button>
-			<a href="{{ route('sales.index') }}" class="btn btn-outline-secondary ms-2"><i class="ti ti-rotate-clockwise icon"></i> Limpiar filtros</a>
+			<div class="mt-3 d-flex justify-content-between align-items-center">
+				<div>
+					<button type="submit" class="btn btn-brand"><i class="ti ti-filter icon"></i> Filtrar</button>
+					<a href="{{ route('sales.index') }}" class="btn btn-outline-secondary ms-2"><i class="ti ti-rotate-clockwise icon"></i> Limpiar filtros</a>
+				</div>
+				@if(isset($total_by_type) && $total_by_type !== null)
+				<div class="text-end d-flex gap-2 flex-wrap justify-content-end">
+					<div class="p-2 px-3 border rounded-2 bg-azure-lt shadow-sm">
+						<span class="text-azure small text-uppercase fw-bold">Total {{ request('type') }} Entregado:</span>
+						<span class="fs-2 fw-bold text-azure ms-2">S/{{ number_format($total_by_type_delivered, 2) }}</span>
+					</div>
+					<div class="p-2 px-3 border rounded-2 bg-warning-lt shadow-sm">
+						<span class="text-warning small text-uppercase fw-bold">Total {{ request('type') }} No Entregado:</span>
+						<span class="fs-2 fw-bold text-warning ms-2">S/{{ number_format($total_by_type_not_delivered, 2) }}</span>
+					</div>
+				</div>
+				@endif
+			</div>
 		</form>
 	</div>
 	<div class="table-responsive">
@@ -263,9 +312,11 @@
   		<div class="modal-body">
   		  <div class="mb-3 d-none" id="photo-container">
   		    <label class="form-label">Foto de evidencia</label>
-  		    <div class="text-center">
-  		      <img src="" id="show-photo" class="img-fluid rounded border shadow-sm" style="max-height: 300px;">
-  		    </div>
+   		    <div class="text-center">
+   		      <div class="image-zoom-container">
+   		        <img src="" id="show-photo" class="img-fluid" style="max-height: 400px;">
+   		      </div>
+   		    </div>
   		  </div>
   		  <table class="table">
   		  	<thead class="table-corporate-header">
@@ -472,7 +523,160 @@
   </div>
 </div>
 @endsection
+
+@section('modal')
+<div class="modal modal-blur fade" id="modal-sales-report" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="ti ti-report-analytics me-2"></i>Reporte General de Ventas</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-light-lt">
+                <div class="row g-2 mb-3 align-items-end">
+                    <div class="col-md-5">
+                        <label class="form-label small fw-bold text-muted">Desde</label>
+                        <input type="date" id="report-start-date" class="form-control" value="{{ now()->toDateString() }}">
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small fw-bold text-muted">Hasta</label>
+                        <input type="date" id="report-end-date" class="form-control" value="{{ now()->toDateString() }}">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-danger w-100" id="btn-refresh-report">
+                            <i class="ti ti-refresh icon"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="report-content">
+                    <!-- Summary Cards -->
+                    <div class="row g-2 mb-3" id="report-summary-container">
+                        <!-- Dynamic summary -->
+                    </div>
+
+                    <div class="card border-0 shadow-sm p-3 mb-3">
+                        <h4 class="fw-bold text-danger border-bottom pb-2 mb-3">Ingresos por Método (Efectivo, Yape, etc)</h4>
+                        <div class="row g-2" id="report-methods-container">
+                            <!-- Dynamic methods -->
+                        </div>
+                    </div>
+                </div>
+
+                <div id="report-loader" class="text-center py-5 d-none">
+                    <div class="spinner-border text-danger" role="status"></div>
+                    <p class="mt-2 text-muted">Generando previsualización...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cerrar</button>
+                <a href="#" id="btn-download-report-pdf" class="btn btn-danger px-4 shadow-sm">
+                    <i class="ti ti-file-type-pdf icon me-1"></i> Descargar PDF
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+
 @section('scripts')
+<script>
+	$(document).on('click', '[data-bs-target="#modal-sales-report"]', function() {
+		loadSalesReportData();
+	});
+
+	$('#btn-refresh-report').on('click', function() {
+		loadSalesReportData();
+	});
+
+	function loadSalesReportData() {
+		const start = $('#report-start-date').val();
+		const end = $('#report-end-date').val();
+
+		$('#btn-download-report-pdf').attr('href', `{{ route('sales.report_pdf') }}?start_date=${start}&end_date=${end}`);
+
+		$('#report-content').addClass('d-none');
+		$('#report-loader').removeClass('d-none');
+
+		$.ajax({
+			url: `{{ route('sales.report_data') }}`,
+			method: 'GET',
+			data: { start_date: start, end_date: end },
+			success: function(response) {
+				renderSalesReport(response);
+				$('#report-loader').addClass('d-none');
+				$('#report-content').removeClass('d-none');
+			},
+			error: function() {
+				alert('Error al cargar los datos del reporte');
+				$('#report-loader').addClass('d-none');
+			}
+		});
+	}
+
+	function renderSalesReport(data) {
+		// Render Summary Cards (Top row)
+		let summaryHtml = `
+			<div class="col-md-3">
+				<div class="card p-3 border-0 shadow-sm text-center bg-white">
+					<div class="small fw-bold text-muted text-uppercase mb-1">Total Entregado</div>
+					<div class="h3 mb-0 fw-bold text-primary">S/ ${data.summary.total_delivered}</div>
+				</div>
+			</div>
+			<div class="col-md-3">
+				<div class="card p-3 border-0 shadow-sm text-center bg-white">
+					<div class="small fw-bold text-muted text-uppercase mb-1">No Pagado</div>
+					<div class="h3 mb-0 fw-bold text-danger">S/ ${data.summary.total_unpaid_delivered}</div>
+				</div>
+			</div>
+			<div class="col-md-3">
+				<div class="card p-3 border-0 shadow-sm text-center bg-white">
+					<div class="small fw-bold text-muted text-uppercase mb-1">No Entregado</div>
+					<div class="h3 mb-0 fw-bold text-warning">S/ ${data.summary.total_not_delivered}</div>
+				</div>
+			</div>
+			<div class="col-md-3">
+				<div class="card p-3 border-0 shadow-sm text-center bg-white">
+					<div class="small fw-bold text-muted text-uppercase mb-1">Total Gastos</div>
+					<div class="h3 mb-0 fw-bold text-danger">S/ ${data.summary.total_expenses}</div>
+				</div>
+			</div>
+		`;
+		$('#report-summary-container').html(summaryHtml);
+
+		// Render Methods and Previous Payments
+		let methodsHtml = '';
+		const methods = data.summary.methods;
+		if (Object.keys(methods).length > 0) {
+			Object.keys(methods).forEach(method => {
+				methodsHtml += `
+					<div class="col-6 col-md-3">
+						<div class="p-2 border rounded bg-light">
+							<div class="small text-muted text-uppercase">${method}</div>
+							<div class="fw-bold text-success">S/ ${parseFloat(methods[method]).toFixed(2)}</div>
+						</div>
+					</div>
+				`;
+			});
+		} else {
+			methodsHtml = '<div class="col-12 text-center text-muted small py-2">No se registraron cobros en este periodo</div>';
+		}
+
+		// Add Previous Payments Info
+		if (data.summary.previous_payments_count > 0) {
+			methodsHtml += `
+				<div class="col-12 mt-2">
+					<div class="alert alert-info d-flex align-items-center mb-0 py-2">
+						<i class="ti ti-info-circle me-2 fs-2"></i>
+						<span>Se han procesado <strong>${data.summary.previous_payments_count}</strong> pagos correspondientes a ventas de días anteriores.</span>
+					</div>
+				</div>
+			`;
+		}
+
+		$('#report-methods-container').html(methodsHtml);
+	}
+</script>
 <script>
 	$(document).ready(function () {
 		$('.ts-clients').each(function(){
@@ -570,6 +774,22 @@
 
 	});
 
+
+
+	$(document).on('mousemove', '.image-zoom-container', function(e) {
+		console.log('Zoom move detected');
+		const rect = this.getBoundingClientRect();
+		const x = e.clientX - rect.left;
+		const y = e.clientY - rect.top;
+		
+		const width = rect.width;
+		const height = rect.height;
+		
+		const xPercent = (x / width) * 100;
+		const yPercent = (y / height) * 100;
+		
+		$(this).find('img').css('transform-origin', `${xPercent}% ${yPercent}%`);
+	});
 
 	$(document).on('click', '.btn-edit', function(){
 
@@ -688,28 +908,36 @@
 	});
 
 	$(document).on('click', '.btn-delete', function(){
-
 		var id = $(this).data('id');
+        var isAdmin = @json(auth()->user()->hasRole('admin'));
+        var message = isAdmin 
+            ? '¿Estás seguro que deseas ELIMINAR esta venta? Esta acción borrará permanentemente el registro y sus pagos, y restaurará el stock.' 
+            : '¿Estás seguro que deseas ANULAR esta venta?';
 
-		if(confirm('Â¿EstÃ¡s seguro que deseas borrar el registro?')){
-
+		if(confirm(message)){
 			$.ajax({
 				url: '{{ route('sales.index') }}' + '/' + id,
 				method: 'DELETE',
+                data: {
+                    _token: '{{ csrf_token() }}'
+                },
 				success: function(data){
 					if(data.status){
 						location.reload();
 					}else{
-						alert('El registro no se pudo eliminar por que tiene pagos relacionados.')
+						alert(data.error || 'Ocurrió un error al procesar la solicitud.');
 					}
 				},
 				error: function(err){
 					console.log(err);
+					var msg = 'No se pudo eliminar/anular la venta.';
+					if(err.responseJSON && err.responseJSON.error){
+						msg = err.responseJSON.error;
+					}
+					alert(msg);
 				}
 			});
-
 		}
-
 	});
 
 	var paymentMethodsHtml = `

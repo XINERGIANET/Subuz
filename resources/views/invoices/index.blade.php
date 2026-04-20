@@ -143,6 +143,15 @@
                             </button>
                         </form>
                         @endif
+                        @if($invoice->electronic_invoice_status == 'ERROR')
+                        <form action="{{ route('invoices.release_error', $invoice) }}" method="POST" class="d-inline release-error-form ms-1">
+                            @csrf
+                            <input type="hidden" name="invoice_id" value="{{ $invoice->id }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Quitar comprobante y devolver ventas a pendientes">
+                                <i class="ti ti-trash icon-inline me-1"></i> Liberar
+                            </button>
+                        </form>
+                        @endif
                     </td>
                 </tr>
                 @empty
@@ -182,6 +191,10 @@
         }
 
         // Reenvío a SUNAT vía AJAX (misma idea que emitir en pendientes: respuesta JSON, sin 302)
+        function subuzEscapeHtml(s) {
+            if (s === null || s === undefined) return '';
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
         const resendForms = document.querySelectorAll('.resend-form');
         resendForms.forEach(form => {
             form.addEventListener('submit', function(e) {
@@ -205,17 +218,34 @@
                                     icon: 'success'
                                 }).then(function() { window.location.reload(); });
                             } else {
-                                var errHtml = '<p style="text-align:left">' + (response.error || 'No se pudo reenviar.') + '</p>';
+                                var errHtml = '<p style="text-align:left">' + subuzEscapeHtml(response.error || 'No se pudo reenviar.') + '</p>';
+                                if (response.local_diagnosis) {
+                                    errHtml += '<p style="text-align:left;font-size:0.9em;margin-top:10px;color:#7a0c0c"><strong>Diagnóstico (SUBUZ):</strong> ' + subuzEscapeHtml(response.local_diagnosis) + '</p>';
+                                }
                                 if (response.hint) {
-                                    errHtml += '<p style="text-align:left;font-size:0.9em;margin-top:10px;color:#555">' + response.hint + '</p>';
+                                    errHtml += '<p style="text-align:left;font-size:0.9em;margin-top:10px;color:#555">' + subuzEscapeHtml(response.hint) + '</p>';
+                                }
+                                if (response.sendBill_http_status != null || response.sendBill_variant) {
+                                    errHtml += '<p style="text-align:left;font-size:0.85em;margin-top:8px"><strong>HTTP:</strong> ' + subuzEscapeHtml(String(response.sendBill_http_status)) + ' &nbsp; <strong>variante sendBill:</strong> ' + subuzEscapeHtml(response.sendBill_variant || '') + '</p>';
+                                }
+                                if (response.send_bill_url) {
+                                    errHtml += '<p style="text-align:left;font-size:0.8em;margin-top:6px;word-break:break-all"><strong>URL sendBill:</strong> ' + subuzEscapeHtml(response.send_bill_url) + '</p>';
+                                }
+                                if (response.escalation_apisunat) {
+                                    errHtml += '<p style="text-align:left;font-size:0.85em;margin-top:10px;color:#1a4d80"><strong>Siguiente paso (escalación):</strong> ' + subuzEscapeHtml(response.escalation_apisunat) + '</p>';
                                 }
                                 if (response.file_name) {
-                                    errHtml += '<p style="text-align:left;font-size:0.85em;margin-top:8px"><strong>fileName SUNAT:</strong> ' + response.file_name + '</p>';
+                                    errHtml += '<p style="text-align:left;font-size:0.85em;margin-top:8px"><strong>fileName SUNAT:</strong> ' + subuzEscapeHtml(response.file_name) + '</p>';
                                 }
                                 if (response.debug_file) {
-                                    errHtml += '<p style="text-align:left;font-size:0.85em"><strong>Depuración en servidor:</strong> storage/app/apisunat-debug/' + response.debug_file + '</p>';
+                                    errHtml += '<p style="text-align:left;font-size:0.85em"><strong>Depuración en servidor:</strong> storage/app/apisunat-debug/' + subuzEscapeHtml(response.debug_file) + '</p>';
                                 }
-                                Swal.fire({ title: 'Error', html: errHtml, icon: 'error', width: '36rem' });
+                                if (response.apisunat_response) {
+                                    errHtml += '<p style="text-align:left;font-size:0.85em;margin-top:8px"><strong>Respuesta JSON Apisunat (exacta):</strong></p><pre style="text-align:left;font-size:0.72em;max-height:200px;overflow:auto;background:#f4f4f4;padding:8px;border-radius:4px">' + subuzEscapeHtml(JSON.stringify(response.apisunat_response, null, 2)) + '</pre>';
+                                } else if (response.apisunat_response_raw) {
+                                    errHtml += '<p style="text-align:left;font-size:0.85em;margin-top:8px"><strong>Cuerpo crudo Apisunat:</strong></p><pre style="text-align:left;font-size:0.72em;max-height:120px;overflow:auto;background:#f4f4f4;padding:8px;border-radius:4px">' + subuzEscapeHtml(response.apisunat_response_raw) + '</pre>';
+                                }
+                                Swal.fire({ title: 'Error', html: errHtml, icon: 'error', width: '42rem' });
                                 if (btn) {
                                     btn.disabled = false;
                                     btn.innerHTML = originalHtml;
@@ -257,6 +287,68 @@
                 } else {
                     if (confirm('¿Estás seguro de que deseas reenviar este comprobante a SUNAT?')) {
                         submitResend();
+                    }
+                }
+            });
+        });
+
+        const releaseForms = document.querySelectorAll('.release-error-form');
+        releaseForms.forEach(form => {
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const submitRelease = function() {
+                    const btn = form.querySelector('button[type="submit"]');
+                    const originalHtml = btn ? btn.innerHTML : '';
+                    if (btn) {
+                        btn.disabled = true;
+                        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> ...';
+                    }
+                    $.ajax({
+                        url: form.getAttribute('action'),
+                        method: 'POST',
+                        data: $(form).serialize(),
+                        success: function(response) {
+                            if (response.status) {
+                                Swal.fire({
+                                    title: 'Listo',
+                                    text: response.message || 'Comprobante liberado.',
+                                    icon: 'success'
+                                }).then(function() { window.location.reload(); });
+                            } else {
+                                Swal.fire('Error', response.error || 'No se pudo liberar.', 'error');
+                                if (btn) {
+                                    btn.disabled = false;
+                                    btn.innerHTML = originalHtml;
+                                }
+                            }
+                        },
+                        error: function(xhr) {
+                            var err = 'Error de servidor';
+                            if (xhr.responseJSON && xhr.responseJSON.error) err = xhr.responseJSON.error;
+                            Swal.fire('Error', err, 'error');
+                            if (btn) {
+                                btn.disabled = false;
+                                btn.innerHTML = originalHtml;
+                            }
+                        }
+                    });
+                };
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        title: '¿Liberar este comprobante?',
+                        html: 'Se eliminará el registro con error SUNAT y las ventas volverán a <strong>Emitir comprobantes pendientes</strong>. El correlativo local se revierte en uno.',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: '#d63939',
+                        cancelButtonColor: '#6c757d',
+                        confirmButtonText: 'Sí, liberar',
+                        cancelButtonText: 'Cancelar'
+                    }).then(function(result) {
+                        if (result.isConfirmed) submitRelease();
+                    });
+                } else {
+                    if (confirm('¿Eliminar este comprobante con error y devolver las ventas a pendientes?')) {
+                        submitRelease();
                     }
                 }
             });

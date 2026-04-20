@@ -63,6 +63,17 @@ class ApisunatService
             }
         }
 
+        $cliDigits = preg_replace('/\D/', '', (string) ($client->document ?? ''));
+        if (!$isFactura && strlen($cliDigits) === 11) {
+            return [
+                'status' => 'ERROR',
+                'message' => 'Boleta electrónica (tipo SUNAT 03) no puede emitirse a un cliente con RUC de 11 dígitos. SUNAT exige Factura (01) entre contribuyentes; Apisunat suele responder error vacío en este caso.',
+                'fileName' => '',
+                'debug_file' => null,
+                'hint' => 'En SUBUZ cambie este comprobante a Factura o use un cliente con DNI (8 dígitos). Luego reenvíe o emita de nuevo.',
+            ];
+        }
+
         $last = $this->jsonPost($apiUrl . '/personas/lastDocument', [
             'personaId' => $personaId,
             'personaToken' => $personaToken,
@@ -95,46 +106,65 @@ class ApisunatService
             return ['status' => 'ERROR', 'message' => 'El comprobante no tiene líneas de detalle.'];
         }
 
-        $sendBillVariants = $docType === '03'
-            ? ['flat' => $documentBody]
-            : [
-                'flat' => $documentBody,
-                'invoice_root' => ['Invoice' => $documentBody],
-            ];
+        $sendBillVariants = $this->buildSendBillDocumentBodyVariants($docType, $documentBody);
+        $sendBillUrls = $this->resolveSendBillEndpoints($apiUrl);
+
+        $this->delayBeforeApisunatSendBill();
+
         $send = null;
         $sendBody = '';
         $sendJson = null;
         $usedVariant = 'flat';
+        $usedSendBillUrl = $sendBillUrls[0] ?? ($apiUrl . '/personas/v1/sendBill');
         $postedDocumentBody = $documentBody;
-        foreach ($sendBillVariants as $variantKey => $docPayload) {
-            $usedVariant = (string) $variantKey;
-            $postedDocumentBody = $docPayload;
-            $send = $this->jsonPost($apiUrl . '/personas/v1/sendBill', [
-                'personaId' => $personaId,
-                'personaToken' => $personaToken,
-                'fileName' => $fileName,
-                'documentBody' => $docPayload,
-            ], 45);
-            $sendBody = $send->body();
-            $sendJson = $send->json();
-            if ($send->ok() && is_array($sendJson) && ($sendJson['status'] ?? '') === 'PENDIENTE') {
-                break;
-            }
-            if ($variantKey === 'invoice_root') {
-                break;
+        $documentBodyEncoding = 'object';
+        $lastSendBillDocumentBody = null;
+
+        foreach ($sendBillUrls as $urlIndex => $sendBillUrl) {
+            foreach ($sendBillVariants as $variantKey => $docPayload) {
+                $encodings = [['suffix' => '', 'stringify' => false]];
+                if ($urlIndex === 0 && $variantKey === 'flat_minimal') {
+                    $encodings[] = ['suffix' => '_docbody_json_string', 'stringify' => true];
+                }
+                foreach ($encodings as $enc) {
+                    $usedVariant = (string) $variantKey . $enc['suffix'];
+                    $usedSendBillUrl = $sendBillUrl;
+                    $postedDocumentBody = $docPayload;
+                    $documentBodyEncoding = $enc['stringify'] ? 'json_string' : 'object';
+
+                    $bodyField = $docPayload;
+                    if ($enc['stringify']) {
+                        $encoded = json_encode($docPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                        $bodyField = $encoded !== false ? $encoded : $docPayload;
+                    }
+
+                    $lastSendBillDocumentBody = $bodyField;
+
+                    $send = $this->jsonPost($sendBillUrl, $this->buildSendBillRequestBody($invoice, $personaId, $personaToken, $fileName, $bodyField), 18);
+                    $sendBody = $send->body();
+                    $sendJson = $send->json();
+                    if ($send->ok() && is_array($sendJson) && ($sendJson['status'] ?? '') === 'PENDIENTE') {
+                        goto apisunat_sendbill_ok;
+                    }
+                }
             }
         }
+        apisunat_sendbill_ok:
 
         if ($send === null) {
             return ['status' => 'ERROR', 'message' => 'No se pudo contactar a Apisunat (sendBill).'];
         }
 
         if ($send->failed()) {
-            $debugFile = $this->writeApisunatDebugPayload($invoice->id, $fileName, $postedDocumentBody, $sendJson, $sendBody, $lastJson, $usedVariant);
+            $debugFile = $this->writeApisunatDebugPayload($invoice->id, $fileName, $postedDocumentBody, $sendJson, $sendBody, $lastJson, $usedVariant, $send->status(), array_merge($this->apisunatDebugMeta($invoice, $docType, $serie, $client), [
+                'sendBill_url' => $usedSendBillUrl,
+                'documentBody_encoding' => $documentBodyEncoding,
+            ]));
             Log::error('Apisunat sendBill HTTP error', [
                 'invoice_id' => $invoice->id,
                 'fileName' => $fileName,
                 'variant' => $usedVariant,
+                'sendBill_url' => $usedSendBillUrl,
                 'debug_file' => $debugFile,
                 'body' => mb_substr($sendBody, 0, 8000),
             ]);
@@ -143,20 +173,30 @@ class ApisunatService
                 'debug_disk' => $debugFile,
                 'lastDocument' => $lastJson,
                 'sendBill_variant' => $usedVariant,
+                'sendBill_url' => $usedSendBillUrl,
                 'documentBody_posted' => $postedDocumentBody,
             ]);
 
-            $msgHttp = 'Error al enviar comprobante: ' . $sendBody;
+            $msgHttp = is_array($sendJson)
+                ? $this->formatApisunatError($sendJson, $sendBody)
+                : ('Error al enviar comprobante: ' . $sendBody);
 
-            return $this->apisunatErrorResult($msgHttp, $fileName, $debugFile, $invoice->id);
+            return $this->apisunatErrorResult($msgHttp, $fileName, $debugFile, $invoice->id, array_merge(
+                $this->apisunatErrorExtras($send, $sendJson, $sendBody, $usedVariant, $usedSendBillUrl),
+                $this->apisunatEmitFailureDebugPackage($invoice, $apiUrl, $personaId, $personaToken, $ruc, $docType, $serie, $corr8, $fileName, $lastJson, $postedDocumentBody, $documentBodyEncoding, $usedSendBillUrl, $lastSendBillDocumentBody)
+            ));
         }
         if (!is_array($sendJson) || ($sendJson['status'] ?? '') !== 'PENDIENTE') {
             $msg = $this->formatApisunatError($sendJson, $sendBody);
-            $debugFile = $this->writeApisunatDebugPayload($invoice->id, $fileName, $postedDocumentBody, $sendJson, $sendBody, $lastJson, $usedVariant);
+            $debugFile = $this->writeApisunatDebugPayload($invoice->id, $fileName, $postedDocumentBody, $sendJson, $sendBody, $lastJson, $usedVariant, $send->status(), array_merge($this->apisunatDebugMeta($invoice, $docType, $serie, $client), [
+                'sendBill_url' => $usedSendBillUrl,
+                'documentBody_encoding' => $documentBodyEncoding,
+            ]));
             Log::error('Apisunat sendBill rechazado', [
                 'invoice_id' => $invoice->id,
                 'fileName' => $fileName,
                 'variant' => $usedVariant,
+                'sendBill_url' => $usedSendBillUrl,
                 'debug_file' => $debugFile,
                 'apisunat_message' => $msg,
             ]);
@@ -165,10 +205,14 @@ class ApisunatService
                 'debug_disk' => $debugFile,
                 'lastDocument' => $lastJson,
                 'sendBill_variant' => $usedVariant,
+                'sendBill_url' => $usedSendBillUrl,
                 'documentBody_posted' => $postedDocumentBody,
             ]);
 
-            return $this->apisunatErrorResult($msg, $fileName, $debugFile, $invoice->id);
+            return $this->apisunatErrorResult($msg, $fileName, $debugFile, $invoice->id, array_merge(
+                $this->apisunatErrorExtras($send, $sendJson, $sendBody, $usedVariant, $usedSendBillUrl),
+                $this->apisunatEmitFailureDebugPackage($invoice, $apiUrl, $personaId, $personaToken, $ruc, $docType, $serie, $corr8, $fileName, $lastJson, $postedDocumentBody, $documentBodyEncoding, $usedSendBillUrl, $lastSendBillDocumentBody)
+            ));
         }
 
         $documentId = isset($sendJson['documentId']) ? trim((string) $sendJson['documentId']) : '';
@@ -208,6 +252,7 @@ class ApisunatService
             'electronic_invoice_response' => [
                 'sendBill' => $sendJson,
                 'sendBill_variant' => $usedVariant,
+                'sendBill_url' => $usedSendBillUrl,
                 'getById' => $getBy->ok() ? $getBy->json() : null,
             ],
         ], $urls));
@@ -240,6 +285,44 @@ class ApisunatService
             ->post($url);
     }
 
+    /** URL sendBill: solo /personas/v1/sendBill. /api-rest/personas/… devuelve 404 en back.apisunat.com. */
+    protected function resolveSendBillEndpoints(string $apiUrl): array
+    {
+        $b = rtrim(trim((string) $apiUrl), '/');
+
+        return [$b . '/personas/v1/sendBill'];
+    }
+
+    /** Pausa opcional antes del primer sendBill (config apisunat.delay_ms_before_send_bill). */
+    private function delayBeforeApisunatSendBill(): void
+    {
+        $ms = (int) config('apisunat.delay_ms_before_send_bill', 0);
+        if ($ms < 1) {
+            return;
+        }
+        if ($ms > 60000) {
+            $ms = 60000;
+        }
+        usleep($ms * 1000);
+    }
+
+    /** Cuerpo POST sendBill; documentBody puede ser array (UBL) o string JSON según intento. */
+    protected function buildSendBillRequestBody(Invoice $invoice, string $personaId, string $personaToken, string $fileName, $documentBody): array
+    {
+        $payload = [
+            'personaId' => $personaId,
+            'personaToken' => $personaToken,
+            'fileName' => $fileName,
+            'documentBody' => $documentBody,
+        ];
+        $email = trim((string) ($invoice->client->email ?? ''));
+        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $payload['customerEmail'] = $email;
+        }
+
+        return $payload;
+    }
+
     protected function persistInvoiceError(Invoice $invoice, string $message, $payload, array $extra = []): void
     {
         try {
@@ -262,7 +345,32 @@ class ApisunatService
      *
      * @return string|null nombre del archivo creado
      */
-    protected function writeApisunatDebugPayload(int $invoiceId, string $fileName, array $documentBody, $sendJson, string $sendBody, $lastDocument, ?string $sendBillVariant = null): ?string
+    /**
+     * Metadatos para depuración (no se envían a Apisunat).
+     */
+    protected function apisunatDebugMeta(Invoice $invoice, string $docTypeSunat, string $serie, $client): array
+    {
+        $digits = preg_replace('/\D/', '', (string) ($client->document ?? ''));
+
+        return [
+            'invoice_id' => $invoice->id,
+            'invoice_document_type' => $invoice->document_type,
+            'sunat_type_code' => $docTypeSunat,
+            'serie' => $serie,
+            'client_id' => $client->id ?? null,
+            'client_document_digits_length' => strlen($digits),
+            'client_is_ruc_11' => strlen($digits) === 11,
+            'docs_apisunat' => 'https://docs.apisunat.com/api-rest/personas/documentbody',
+            'causas_tipicas_error_vacio' => [
+                'Serie (ej. B002) no habilitada en Apisunat o en ambiente producción.',
+                'Correlativo ya usado o duplicado para ese RUC + tipo + serie.',
+                'Boleta (03) con cliente RUC: SUNAT exige factura (01); bloqueado también en emitInvoice.',
+                'Token/personaId incorrectos o plan vencido (revisar panel Apisunat).',
+            ],
+        ];
+    }
+
+    protected function writeApisunatDebugPayload(int $invoiceId, string $fileName, array $documentBody, $sendJson, string $sendBody, $lastDocument, ?string $sendBillVariant = null, ?int $httpStatus = null, array $meta = []): ?string
     {
         try {
             $dir = storage_path('app/apisunat-debug');
@@ -274,9 +382,12 @@ class ApisunatService
             $dump = [
                 'fileName' => $fileName,
                 'sendBill_variant' => $sendBillVariant,
+                'sendBill_http_status' => $httpStatus,
                 'lastDocument' => $lastDocument,
                 'apisunat_response' => $sendJson,
                 'apisunat_response_raw' => $sendBody,
+                'raw_body_length' => strlen($sendBody),
+                'diagnostics' => $meta,
                 'documentBody' => $documentBody,
             ];
             file_put_contents($path, json_encode($dump, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
@@ -289,19 +400,144 @@ class ApisunatService
         }
     }
 
-    protected function apisunatErrorResult(string $message, string $fileName, ?string $debugBasename, int $invoiceId): array
+    protected function apisunatErrorResult(string $message, string $fileName, ?string $debugBasename, int $invoiceId, array $extra = []): array
     {
         $diskHint = $debugBasename
             ? 'storage/app/apisunat-debug/' . $debugBasename
             : '(no se pudo guardar archivo de depuración; revise permisos de storage/app/)';
 
-        return [
+        return array_merge([
             'status' => 'ERROR',
             'message' => $message,
             'fileName' => $fileName,
             'debug_file' => $debugBasename,
-            'hint' => 'Apisunat falló al validar el JSON enviado. (1) Archivo en el servidor: ' . $diskHint . ' — compárelo con el JSON del botón { } en el portal Apisunat. (2) Log: storage/logs/laravel.log buscando "Apisunat sendBill". (3) Confirme que fileName SUNAT ' . $fileName . ' use serie y correlativo habilitados en Apisunat. Comprobante interno id=' . $invoiceId . '.',
+            'hint' => 'Apisunat falló al validar el envío. (1) Archivo: ' . $diskHint . ' — campo diagnostics y sendBill_http_status. (2) Log: storage/logs/laravel.log "Apisunat sendBill". (3) Portal Apisunat: serie/correlativo habilitados para ' . $fileName . '. (4) Boleta con RUC: el sistema ya bloquea; si el error fue antes del cambio, use Factura. id=' . $invoiceId . '. (5) Si sendBill responde 400/TypeError, Apisunat no registra el comprobante: la lista Ventas puede quedar vacía hasta que responda status PENDIENTE.',
+        ], $extra);
+    }
+
+    /**
+     * Datos extra para la respuesta JSON (modal de reenvío) y diagnóstico local cuando Apisunat solo devuelve TypeError.
+     *
+     * @param  \Illuminate\Http\Client\Response|null  $send
+     */
+    protected function apisunatErrorExtras($send, $sendJson, string $sendBody, string $usedVariant, string $sendBillUrl = ''): array
+    {
+        $status = $send !== null ? $send->status() : null;
+        $apisunatResponse = is_array($sendJson) ? $sendJson : null;
+        $local = '';
+        $escalation = '';
+        if (is_array($sendJson)) {
+            $errMsg = '';
+            $e = $sendJson['error'] ?? null;
+            if (is_array($e) && isset($e['message'])) {
+                $errMsg = (string) $e['message'];
+            }
+            if ($errMsg !== '' && stripos($errMsg, '_text') !== false) {
+                $local = 'SUBUZ ya probó: Note/PaymentTerms en UBL, variantes solo-_text, PaymentMeans como bloque en lista, documentBody como string (flat_minimal), customerEmail si hay correo, y el resto de variantes xml2js en POST .../personas/v1/sendBill. Si el TypeError _text sigue, el fallo está en el validador Node de Apisunat (el documento no se crea en el portal hasta que sendBill responda PENDIENTE).';
+                $escalation = 'Escalación Apisunat: envíe a soporte@apisunat.com o WhatsApp del panel el archivo apisunat-debug, el URL usado (send_bill_url), la variante (sendBill_variant), y el texto literal: "sendBill devuelve TypeError reading _text con documentBody generado por su generador { } del portal". Pida corrección del endpoint /personas/v1/sendBill o revisión de su cuenta en producción.';
+            }
+        }
+
+        return [
+            'apisunat_response' => $apisunatResponse,
+            'apisunat_response_raw' => $sendBody,
+            'sendBill_http_status' => $status,
+            'sendBill_variant' => $usedVariant,
+            'send_bill_url' => $sendBillUrl !== '' ? $sendBillUrl : null,
+            'local_diagnosis' => $local,
+            'escalation_apisunat' => $escalation,
         ];
+    }
+
+    /**
+     * Datos de depuración para la respuesta JSON del reenvío (token nunca en claro).
+     *
+     * @param  array|string|null  $postedDocumentBody
+     * @param  array|string|null  $sendBillDocumentBodyField
+     */
+    protected function apisunatEmitFailureDebugPackage(
+        Invoice $invoice,
+        string $apiUrl,
+        string $personaId,
+        string $personaToken,
+        string $rucEmisor,
+        string $docTypeSunat,
+        string $serie,
+        string $corr8,
+        string $fileName,
+        $lastJson,
+        $postedDocumentBody,
+        string $documentBodyEncoding,
+        string $sendBillUrl,
+        $sendBillDocumentBodyField
+    ): array {
+        $base = rtrim(trim((string) $apiUrl), '/');
+        $docField = $sendBillDocumentBodyField !== null ? $sendBillDocumentBodyField : $postedDocumentBody;
+        $sendReq = $this->buildSendBillRequestBody($invoice, $personaId, $personaToken, $fileName, $docField);
+        $sendReq['personaToken'] = $this->maskApisunatSecret($personaToken);
+
+        $lastReq = [
+            'personaId' => $personaId,
+            'personaToken' => $this->maskApisunatSecret($personaToken),
+            'type' => $docTypeSunat,
+            'serie' => $serie,
+        ];
+
+        $postedEnc = json_encode($postedDocumentBody, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $postedBytes = is_string($postedEnc) ? strlen($postedEnc) : 0;
+
+        $client = $invoice->client;
+
+        return [
+            'subuz_diagnostics' => $this->apisunatDebugMeta($invoice, $docTypeSunat, $serie, $client),
+            'apisunat_api_base_url' => $base,
+            'apisunat_last_document_post_url' => $base . '/personas/lastDocument',
+            'apisunat_send_bill_post_url' => $sendBillUrl,
+            'apisunat_enabled' => filter_var(config('apisunat.enabled', true), FILTER_VALIDATE_BOOLEAN),
+            'apisunat_delay_ms_before_send_bill' => (int) config('apisunat.delay_ms_before_send_bill', 0),
+            'persona_id' => $personaId,
+            'persona_token_preview' => $this->maskApisunatSecret($personaToken),
+            'persona_token_length' => strlen($personaToken),
+            'emisor_ruc' => $rucEmisor,
+            'emisor_legal_name' => $this->txt(config('apisunat.company.legal_name'), ''),
+            'sunat_type_code' => $docTypeSunat,
+            'serie' => $serie,
+            'correlativo_8' => $corr8,
+            'file_name_sunat' => $fileName,
+            'last_document_request_redacted' => $lastReq,
+            'last_document_response' => is_array($lastJson) ? $lastJson : $lastJson,
+            'send_bill_request_redacted' => $sendReq,
+            'document_body_encoding' => $documentBodyEncoding,
+            'document_body_posted_is_string' => is_string($docField),
+            'document_body_posted' => $postedDocumentBody,
+            'document_body_posted_json_bytes' => $postedBytes,
+            'invoice' => [
+                'id' => $invoice->id,
+                'date' => $invoice->date ? $invoice->date->format('Y-m-d') : null,
+                'document_type' => $invoice->document_type,
+            ],
+            'client' => [
+                'id' => $client->id ?? null,
+                'document' => $client->document ?? null,
+                'business_name' => $client->business_name ?? null,
+                'name' => $client->name ?? null,
+                'email' => $client->email ?? null,
+            ],
+        ];
+    }
+
+    /** Vista del token para JSON (no exponer secreto completo). */
+    private function maskApisunatSecret(string $secret): string
+    {
+        $len = strlen($secret);
+        if ($len === 0) {
+            return '(vacío)';
+        }
+        if ($len <= 6) {
+            return '*** (len=' . $len . ')';
+        }
+
+        return substr($secret, 0, 3) . '…' . substr($secret, -4) . ' (len=' . $len . ')';
     }
 
     protected function formatApisunatError($sendJson, string $rawBody): string
@@ -319,7 +555,7 @@ class ApisunatService
             }
             $errFlat = is_array($err) ? $err : (is_object($err) ? (array) $err : null);
             if ($err !== null && $err !== '' && is_array($errFlat) && $errFlat === []) {
-                return 'Apisunat: rechazo sin detalle (error vacío). Revise serie/correlativo en el portal y que el JSON coincida con el generador { } de Apisunat.';
+                return 'Apisunat: rechazo sin detalle (error vacío). Revise en el portal: serie habilitada, correlativo no duplicado, token/persona. Si era boleta con cliente RUC, use factura o DNI. Compare documentBody del archivo apisunat-debug con el botón { } del portal.';
             }
             if (is_array($errFlat) && $errFlat !== []) {
                 $enc = json_encode($errFlat, JSON_UNESCAPED_UNICODE);
@@ -423,6 +659,146 @@ class ApisunatService
     }
 
     /**
+     * Variantes sendBill solo en formato xml2js (_/_text/$). Las variantes #text/@_ hacían que Apisunat
+     * siguiera leyendo ._text y fallara siempre.
+     */
+    protected function buildSendBillDocumentBodyVariants(string $docType, array $documentBody): array
+    {
+        $strip = $this->stripUblDuplicateText($documentBody);
+        $linesArray = $this->forceInvoiceLineAsArray($documentBody);
+        $dropUnderscore = $this->stripUblDropUnderscoreWhenTextPresent($documentBody);
+        $pmBlocks = $this->documentBodyPaymentMeansAsBlocks($documentBody);
+        $minimal = $this->documentBodyCloneWithoutKeys($documentBody, ['cac:PaymentMeans', 'cac:PaymentTerms']);
+        $minimalNoStax = $this->documentBodyWithoutSupplierPartyTaxScheme($minimal);
+
+        $variants = [];
+        $variants['flat_drop_underscore'] = $dropUnderscore;
+        $variants['flat_pm_block_array'] = $pmBlocks;
+        if ($docType !== '03') {
+            $variants['invoice_root_drop_underscore'] = ['Invoice' => $dropUnderscore];
+            $variants['invoice_root_pm_block_array'] = ['Invoice' => $pmBlocks];
+        }
+        $variants['flat_minimal'] = $minimal;
+        $variants['flat_minimal_no_supplier_taxscheme'] = $minimalNoStax;
+        $variants['flat'] = $documentBody;
+        if ($docType !== '03') {
+            $variants['invoice_root_minimal'] = ['Invoice' => $minimal];
+            $variants['invoice_root'] = ['Invoice' => $documentBody];
+        }
+        $variants['flat_strip_dup_text'] = $strip;
+        $variants['flat_lines_array'] = $linesArray;
+        if ($docType !== '03') {
+            $variants['invoice_root_strip'] = ['Invoice' => $strip];
+            $variants['invoice_root_lines_array'] = ['Invoice' => $linesArray];
+        }
+
+        return $variants;
+    }
+
+    /** Copia profunda y elimina claves de primer nivel. */
+    protected function documentBodyCloneWithoutKeys(array $documentBody, array $keysToRemove): array
+    {
+        $json = json_encode($documentBody, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $copy = is_string($json) ? json_decode($json, true) : null;
+        if (!is_array($copy)) {
+            return $documentBody;
+        }
+        foreach ($keysToRemove as $k) {
+            unset($copy[$k]);
+        }
+
+        return $copy;
+    }
+
+    /** Quita cac:PartyTaxScheme del emisor (placeholders "-" a veces rompen validadores). */
+    protected function documentBodyWithoutSupplierPartyTaxScheme(array $documentBody): array
+    {
+        $json = json_encode($documentBody, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $copy = is_string($json) ? json_decode($json, true) : null;
+        if (!is_array($copy)) {
+            return $documentBody;
+        }
+        unset($copy['cac:AccountingSupplierParty']['cac:Party']['cac:PartyTaxScheme']);
+
+        return $copy;
+    }
+
+    /** Una sola línea puede ir como objeto; algunos validadores exigen siempre arreglo de líneas. */
+    protected function forceInvoiceLineAsArray(array $body): array
+    {
+        $il = $body['cac:InvoiceLine'] ?? null;
+        if ($il !== null && is_array($il) && isset($il['cbc:ID'])) {
+            $body['cac:InvoiceLine'] = [$il];
+        }
+
+        return $body;
+    }
+
+    /** Quita _text cuando duplica _ (algunos parsers de Apisunat solo leen uno de los dos). */
+    protected function stripUblDuplicateText(array $data): array
+    {
+        if (isset($data['_'], $data['_text']) && (string) $data['_'] === (string) $data['_text']) {
+            unset($data['_text']);
+        }
+        foreach ($data as $k => $v) {
+            if ($k === '_' || $k === '_text' || $k === '$') {
+                continue;
+            }
+            if (is_array($v)) {
+                $data[$k] = array_is_list($v)
+                    ? array_map(function ($item) {
+                        return is_array($item) ? $this->stripUblDuplicateText($item) : $item;
+                    }, $v)
+                    : $this->stripUblDuplicateText($v);
+            }
+        }
+
+        return $data;
+    }
+
+    /** Deja solo `_text` (y `$`) en nodos hoja; algunos validadores Node esperan exclusivamente `_text`. */
+    protected function stripUblDropUnderscoreWhenTextPresent(array $data): array
+    {
+        if (isset($data['_'], $data['_text'])) {
+            unset($data['_']);
+        }
+        foreach ($data as $k => $v) {
+            if ($k === '_' || $k === '_text' || $k === '$') {
+                continue;
+            }
+            if (is_array($v)) {
+                $data[$k] = array_is_list($v)
+                    ? array_map(function ($item) {
+                        return is_array($item) ? $this->stripUblDropUnderscoreWhenTextPresent($item) : $item;
+                    }, $v)
+                    : $this->stripUblDropUnderscoreWhenTextPresent($v);
+            }
+        }
+
+        return $data;
+    }
+
+    /** Medio de pago como lista de un bloque (xml2js con explicitArray en cac:PaymentMeans). */
+    protected function documentBodyPaymentMeansAsBlocks(array $documentBody): array
+    {
+        $json = json_encode($documentBody, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $copy = is_string($json) ? json_decode($json, true) : null;
+        if (!is_array($copy)) {
+            return $documentBody;
+        }
+        $pm = $copy['cac:PaymentMeans'] ?? null;
+        if (is_array($pm) && isset($pm['cbc:PaymentMeansCode'])) {
+            $copy['cac:PaymentMeans'] = [
+                [
+                    'cbc:PaymentMeansCode' => $pm['cbc:PaymentMeansCode'],
+                ],
+            ];
+        }
+
+        return $copy;
+    }
+
+    /**
      * Cuerpo UBL 2.1 en JSON para Apisunat.
      * Catálogo tipo de documento según guía SUNAT (catalogo01); importes/cantidades como texto decimal.
      */
@@ -509,6 +885,7 @@ class ApisunatService
                     ],
                     'cac:Price' => [
                         'cbc:PriceAmount' => $this->ublAmt('PEN', $this->decStr($vu, 6)),
+                        'cbc:BaseQuantity' => $this->ublQty('NIU', $this->decStr($qty, 4)),
                     ],
                 ];
                 $i++;
@@ -533,6 +910,16 @@ class ApisunatService
             'cbc:InvoiceTypeCode' => $this->ublInvoiceTypeCode($docType),
             'cbc:DocumentCurrencyCode' => $this->ublText('PEN'),
             'cbc:LineCountNumeric' => $this->ublText((string) count($lines)),
+            'cbc:Note' => [
+                $this->ublText('-'),
+            ],
+            'cac:PaymentTerms' => [
+                [
+                    'cbc:ID' => $this->ublText('FormaPago'),
+                    'cbc:PaymentMeansID' => $this->ublText('Contado'),
+                    'cbc:Amount' => $this->ublAmt('PEN', $this->decStr($total, 2)),
+                ],
+            ],
             'cac:AccountingSupplierParty' => [
                 'cac:Party' => [
                     'cac:PartyIdentification' => [
@@ -545,9 +932,9 @@ class ApisunatService
                         'cbc:RegistrationName' => $this->ublText($razonEmisor),
                         'cbc:CompanyID' => $this->ublSchemeId('6', $rucEmisor),
                         'cac:TaxScheme' => [
-                            'cbc:ID' => $this->ublText('-'),
-                            'cbc:Name' => $this->ublText('-'),
-                            'cbc:TaxTypeCode' => $this->ublText('-'),
+                            'cbc:ID' => $this->ublSunatTaxSchemeCatalogId('1000'),
+                            'cbc:Name' => $this->ublText('IGV'),
+                            'cbc:TaxTypeCode' => $this->ublText('VAT'),
                         ],
                     ],
                     'cac:PartyLegalEntity' => [
@@ -568,21 +955,24 @@ class ApisunatService
                     $dirClienteUbigeo
                 ),
             ],
+            // Apisunat sendBill: un solo medio de pago como objeto (no [ { … } ]); si es array, su Node lee
+            // paymentMeans.cbc:PaymentMeansCode y queda undefined → TypeError _text.
+            'cac:PaymentMeans' => [
+                'cbc:PaymentMeansCode' => $this->ublPaymentMeansCode('009'),
+            ],
             'cac:TaxTotal' => [
-                [
-                    'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($sumIgv, 2)),
-                    'cac:TaxSubtotal' => [
-                        [
-                            'cbc:TaxableAmount' => $this->ublAmt('PEN', $this->decStr($sumOpGravada, 2)),
-                            'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($sumIgv, 2)),
-                            'cac:TaxCategory' => [
-                                'cbc:Percent' => $this->ublText($this->decStr(18.0, 2)),
-                                'cbc:TaxExemptionReasonCode' => $this->ublText('10'),
-                                'cac:TaxScheme' => [
-                                    'cbc:ID' => $this->ublSunatTaxSchemeCatalogId('1000'),
-                                    'cbc:Name' => $this->ublText('IGV'),
-                                    'cbc:TaxTypeCode' => $this->ublText('VAT'),
-                                ],
+                'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($sumIgv, 2)),
+                'cac:TaxSubtotal' => [
+                    [
+                        'cbc:TaxableAmount' => $this->ublAmt('PEN', $this->decStr($sumOpGravada, 2)),
+                        'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($sumIgv, 2)),
+                        'cac:TaxCategory' => [
+                            'cbc:Percent' => $this->ublText($this->decStr(18.0, 2)),
+                            'cbc:TaxExemptionReasonCode' => $this->ublText('10'),
+                            'cac:TaxScheme' => [
+                                'cbc:ID' => $this->ublSunatTaxSchemeCatalogId('1000'),
+                                'cbc:Name' => $this->ublText('IGV'),
+                                'cbc:TaxTypeCode' => $this->ublText('VAT'),
                             ],
                         ],
                     ],
@@ -596,7 +986,7 @@ class ApisunatService
                 'cbc:ChargeTotalAmount' => $this->ublAmt('PEN', $this->decStr(0.0, 2)),
                 'cbc:PayableAmount' => $this->ublAmt('PEN', $this->decStr($total, 2)),
             ],
-            'cac:InvoiceLine' => $lines,
+            'cac:InvoiceLine' => count($lines) === 1 ? $lines[0] : $lines,
         ];
     }
 
@@ -668,6 +1058,21 @@ class ApisunatService
         ];
     }
 
+    /** cbc:PaymentMeansCode (catálogo 59 SUNAT — medios de pago). */
+    private function ublPaymentMeansCode(string $code): array
+    {
+        return [
+            '_' => $code,
+            '_text' => $code,
+            '$' => [
+                'listID' => '59',
+                'listAgencyName' => 'PE:SUNAT',
+                'listName' => 'SUNAT:Medios de pago',
+                'listURI' => 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo59',
+            ],
+        ];
+    }
+
     /** cbc:ID del TaxScheme (catálogo SUNAT 05). */
     private function ublSunatTaxSchemeCatalogId(string $code): array
     {
@@ -693,7 +1098,8 @@ class ApisunatService
     }
 
     /**
-     * Party del cliente: boleta (03) incluye cac:PartyName (nombre del adquirente), requerido en varios validadores SUNAT/Apisunat.
+     * Party del cliente: factura (01) y boleta (03) incluyen cac:PartyName (nombre del adquirente).
+     * Contribuyente (scheme 6): cac:PartyTaxScheme alineado a UBL SUNAT; sin él algunos PSE leen ._text sobre undefined.
      */
     protected function buildAccountingCustomerParty(
         string $docType,
@@ -709,9 +1115,21 @@ class ApisunatService
                 'cbc:ID' => $this->ublSchemeId((string) $scheme, (string) $docVal),
             ],
         ];
-        if ($docType === '03') {
+        if ($docType === '01' || $docType === '03') {
             $party['cac:PartyName'] = [
                 'cbc:Name' => $this->ublText($nombreCliente),
+            ];
+        }
+        // Factura a RUC (6): SUNAT/UBL suele exigir PartyTaxScheme; validadores que leen ._text fallan si falta.
+        if ((string) $scheme === '6') {
+            $party['cac:PartyTaxScheme'] = [
+                'cbc:RegistrationName' => $this->ublText($nombreCliente),
+                'cbc:CompanyID' => $this->ublSchemeId((string) $scheme, (string) $docVal),
+                'cac:TaxScheme' => [
+                    'cbc:ID' => $this->ublSunatTaxSchemeCatalogId('1000'),
+                    'cbc:Name' => $this->ublText('IGV'),
+                    'cbc:TaxTypeCode' => $this->ublText('VAT'),
+                ],
             ];
         }
         $party['cac:PartyLegalEntity'] = [

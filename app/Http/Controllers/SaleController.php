@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Exports\SalesExport;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Models\Sale;
 use App\Models\SaleDetail;
+use App\Models\Expense;
 use App\Models\Product;
 use App\Models\PaymentMethod;
 use App\Models\Week;
@@ -139,16 +141,55 @@ class SaleController extends Controller
                   });
         }
 
-        // Total Credit for the filtered period
-        $total_credit = (clone $query)
-            ->where('status', '!=', 'Anulado')
-            ->where('type', 'Credito')
-            ->sum('total');
-
-        $total_pending = (clone $query)
+        // Total No Entregado (Not annulled, unpaid, not 'Pago pendiente', and no debt movement)
+        $total_not_delivered = (clone $query)
             ->where('status', '!=', 'Anulado')
             ->where('paid', 0)
+            ->where('type', '!=', 'Pago pendiente')
+            ->whereDoesntHave('movements', function($mq){
+                $mq->where('type', 'debt');
+            })
             ->sum('total');
+
+        // Total No Pagado (Not annulled, unpaid, but delivered via 'Pago pendiente' or debt movement)
+        $total_unpaid_delivered = (clone $query)
+            ->where('status', '!=', 'Anulado')
+            ->where('paid', 0)
+            ->where(function($sq){
+                $sq->where('type', 'Pago pendiente')
+                ->orWhereHas('movements', function($mq){
+                    $mq->where('type', 'debt');
+                });
+            })
+            ->sum('total');
+
+        // Total by selected type (Breakdown)
+        $total_by_type = null;
+        $total_by_type_delivered = 0;
+        $total_by_type_not_delivered = 0;
+
+        if($request->type){
+            $type_query = (clone $query)->where('status', '!=', 'Anulado');
+            $total_by_type = (clone $type_query)->sum('total');
+
+            // Delivered of this type
+            $total_by_type_delivered = (clone $type_query)
+                ->where(function($q) {
+                    $q->where('paid', 1)
+                    ->orWhere('type', 'Pago pendiente')
+                    ->orWhereHas('movements', function($mq) {
+                        $mq->where('type', 'debt');
+                    });
+                })->sum('total');
+
+            // Not Delivered of this type
+            $total_by_type_not_delivered = (clone $type_query)
+                ->where('paid', 0)
+                ->where('type', '!=', 'Pago pendiente')
+                ->whereDoesntHave('movements', function($mq){
+                    $mq->where('type', 'debt');
+                })->sum('total');
+        }
 
         $sales = $query->latest('date')->paginate(10);
 
@@ -157,7 +198,7 @@ class SaleController extends Controller
         $selected_client = $request->client_id ? Client::find($request->client_id) : null;
 
         $products = Product::all();
-        return view('sales.index', compact('sales', 'total_sales', 'total_cash', 'payment_totals', 'total_credit', 'total_pending', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox', 'products', 'selected_client', 'delivered_count'));
+        return view('sales.index', compact('sales', 'total_sales', 'total_cash', 'payment_totals', 'total_not_delivered', 'total_unpaid_delivered', 'total_by_type', 'total_by_type_delivered', 'total_by_type_not_delivered', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox', 'products', 'selected_client', 'delivered_count'));
     }
 
     public function create(){
@@ -340,6 +381,38 @@ class SaleController extends Controller
     }
 
     public function destroy(Request $request, Sale $sale){
+        $isAdmin = auth()->user()->hasRole('admin');
+        
+        if ($isAdmin) {
+            try {
+                DB::transaction(function() use ($sale) {
+                    // Restore stock
+                    foreach($sale->details as $detail){
+                        $product = $detail->product;
+                        if($product && $product->stock !== null && $product->reduces_stock){
+                            $product->increment('stock', $detail->quantity);
+                        }
+                    }
+                    
+                    // Delete related records
+                    $sale->details()->delete();
+                    $sale->payments()->delete();
+                    $sale->movements()->delete();
+                    if (Schema::hasTable('invoice_sale')) {
+                        $sale->invoices()->detach();
+                    }
+                    $sale->delete();
+                });
+
+                return response()->json(['status' => true]);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Error al eliminar la venta: ' . $e->getMessage()
+                ]);
+            }
+        }
+
         $isDelivered = $sale->paid || $sale->type == 'Pago pendiente' || $sale->movements->where('type', 'debt')->isNotEmpty();
 
         if($isDelivered){
@@ -349,11 +422,24 @@ class SaleController extends Controller
             ]);
         }
 
-        $sale->update(['status' => 'Anulado']);
+        try {
+            DB::transaction(function() use ($sale) {
+                foreach($sale->details as $detail){
+                    $product = $detail->product;
+                    if($product && $product->stock !== null && $product->reduces_stock){
+                        $product->increment('stock', $detail->quantity);
+                    }
+                }
+                $sale->update(['status' => 'Anulado']);
+            });
 
-        return response()->json([
-            'status' => true
-        ]);
+            return response()->json(['status' => true]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error' => 'Error al anular la venta: ' . $e->getMessage()
+            ]);
+        }
     }
 
     public function excel(Request $request){
@@ -807,6 +893,272 @@ class SaleController extends Controller
         });
 
         return response()->json(['status' => true]);
+    }
+    public function reportData(Request $request) {
+        $start_date = $request->start_date ?? now()->toDateString();
+        $end_date = $request->end_date ?? now()->toDateString();
+
+        // Base query for sales in period
+        $sales_period = Sale::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
+            ->where('status', '!=', 'Anulado');
+
+        // 1. Total Entregado (Sum of total for sales delivered in period)
+        $total_delivered = (clone $sales_period)
+            ->where(function($q){
+                $q->where('paid', 1)
+                ->orWhere('type', 'Pago pendiente')
+                ->orWhereHas('movements', function($mq){
+                    $mq->where('type', 'debt');
+                });
+            })->sum('total');
+
+        // 2. No Pagado (Unpaid but delivered)
+        $total_unpaid_delivered = (clone $sales_period)
+            ->where('paid', 0)
+            ->where(function($sq){
+                $sq->where('type', 'Pago pendiente')
+                ->orWhereHas('movements', function($mq){
+                    $mq->where('type', 'debt');
+                });
+            })
+            ->sum('total');
+
+        // 3. No Entregado (Unpaid and not delivered)
+        $total_not_delivered = (clone $sales_period)
+            ->where('paid', 0)
+            ->where('type', '!=', 'Pago pendiente')
+            ->whereDoesntHave('movements', function($mq){
+                $mq->where('type', 'debt');
+            })
+            ->sum('total');
+
+        // 4. Movements in period (including payments for previous sales)
+        $movements = CashboxMovement::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
+            ->with(['payment_method', 'sale'])
+            ->get();
+
+        $methods_totals = [];
+        $previous_days_payments_count = 0;
+        $processed_sales = [];
+
+        foreach ($movements as $mov) {
+            if ($mov->type == 'paid' || $mov->type == 'income') {
+                $method_name = optional($mov->payment_method)->name ?? 'Manual';
+                if (!isset($methods_totals[$method_name])) $methods_totals[$method_name] = 0;
+                $methods_totals[$method_name] += $mov->amount;
+
+                // Check if it's a payment for a sale from previous days
+                if ($mov->sale_id && $mov->sale) {
+                    $sale_date = $mov->sale->date->toDateString();
+                    if ($sale_date < $start_date && !isset($processed_sales[$mov->sale_id])) {
+                        $previous_days_payments_count++;
+                        $processed_sales[$mov->sale_id] = true;
+                    }
+                }
+            }
+        }
+
+        // 5. Expenses in period
+        $expenses = Expense::whereBetween('date', [$start_date, $end_date])->get();
+        $total_expenses = $expenses->sum('amount');
+
+        return response()->json([
+            'status' => true,
+            'period' => [
+                'start' => date('d/m/Y', strtotime($start_date)),
+                'end' => date('d/m/Y', strtotime($end_date))
+            ],
+            'summary' => [
+                'total_delivered' => number_format($total_delivered, 2, '.', ''),
+                'total_unpaid_delivered' => number_format($total_unpaid_delivered, 2, '.', ''),
+                'total_not_delivered' => number_format($total_not_delivered, 2, '.', ''),
+                'total_expenses' => number_format($total_expenses, 2, '.', ''),
+                'methods' => $methods_totals,
+                'previous_payments_count' => $previous_days_payments_count
+            ]
+        ]);
+    }
+
+    public function reportPdf(Request $request) {
+        $start_date = $request->start_date ?? now()->toDateString();
+        $end_date = $request->end_date ?? now()->toDateString();
+
+        // Base query for sales in period
+        $sales_period = Sale::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
+            ->where('status', '!=', 'Anulado');
+
+        $total_delivered = (clone $sales_period)
+            ->where(function($q){
+                $q->where('paid', 1)
+                ->orWhere('type', 'Pago pendiente')
+                ->orWhereHas('movements', function($mq){
+                    $mq->where('type', 'debt');
+                });
+            })->sum('total');
+
+        $total_unpaid_delivered = (clone $sales_period)
+            ->where('paid', 0)
+            ->where(function($sq){
+                $sq->where('type', 'Pago pendiente')
+                ->orWhereHas('movements', function($mq){
+                    $mq->where('type', 'debt');
+                });
+            })
+            ->sum('total');
+
+        $total_not_delivered = (clone $sales_period)
+            ->where('paid', 0)
+            ->where('type', '!=', 'Pago pendiente')
+            ->whereDoesntHave('movements', function($mq){
+                $mq->where('type', 'debt');
+            })
+            ->sum('total');
+
+        $movements = CashboxMovement::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
+            ->with(['payment_method', 'sale'])
+            ->get();
+
+        $expenses = Expense::whereBetween('date', [$start_date, $end_date])->get();
+
+        $fpdf = new Fpdf;
+        $fpdf->AddPage();
+        
+        $fpdf->AddFont('Montserrat', '');
+        $fpdf->AddFont('Montserrat', 'B');
+        
+        if(file_exists(public_path('assets/images/logo.jpg'))){
+            $fpdf->Image(public_path('assets/images/logo.jpg'), 10, 10, 30);
+        }
+        
+        $fpdf->SetFont('Montserrat', 'B', 16);
+        $fpdf->SetTextColor(2, 93, 166);
+        $fpdf->Cell(190, 10, utf8_decode('REPORTE GENERAL DE VENTAS'), 0, 1, 'C');
+        
+        $period = "Periodo: " . date('d/m/Y', strtotime($start_date)) . " al " . date('d/m/Y', strtotime($end_date));
+        $fpdf->SetFont('Montserrat', '', 10);
+        $fpdf->SetTextColor(80, 80, 80);
+        $fpdf->Cell(190, 8, utf8_decode($period), 0, 1, 'C');
+        $fpdf->Ln(5);
+
+        // Summary Section
+        $fpdf->SetFont('Montserrat', 'B', 12);
+        $fpdf->SetTextColor(2, 93, 166);
+        $fpdf->Cell(190, 10, utf8_decode('RESUMEN GENERAL'), 0, 1, 'L');
+        
+        $fpdf->SetFont('Montserrat', '', 11);
+        $fpdf->SetTextColor(0, 0, 0);
+        
+        $fpdf->Cell(60, 8, utf8_decode('Total Entregado:'), 0, 0, 'L');
+        $fpdf->Cell(30, 8, 'S/ '.number_format($total_delivered, 2), 0, 1, 'R');
+
+        $fpdf->Cell(60, 8, utf8_decode('No Pagado:'), 0, 0, 'L');
+        $fpdf->Cell(30, 8, 'S/ '.number_format($total_unpaid_delivered, 2), 0, 1, 'R');
+
+        $fpdf->Cell(60, 8, utf8_decode('No Entregado:'), 0, 0, 'L');
+        $fpdf->Cell(30, 8, 'S/ '.number_format($total_not_delivered, 2), 0, 1, 'R');
+        
+        $fpdf->Cell(60, 8, utf8_decode('Total Gastos:'), 0, 0, 'L');
+        $fpdf->Cell(30, 8, 'S/ '.number_format($expenses->sum('amount'), 2), 0, 1, 'R');
+        $fpdf->Ln(5);
+
+        // Ingresos por método de pago
+        $fpdf->SetFont('Montserrat', 'B', 12);
+        $fpdf->SetTextColor(2, 93, 166);
+        $fpdf->Cell(190, 10, utf8_decode('INGRESOS POR MÉTODO DE PAGO'), 0, 1, 'L');
+        
+        $methods_totals = [];
+        $prev_payments_count = 0;
+        $processed_sales = [];
+        foreach ($movements as $mov) {
+            if ($mov->type == 'paid' || $mov->type == 'income') {
+                $method_name = optional($mov->payment_method)->name ?? 'Manual';
+                if (!isset($methods_totals[$method_name])) $methods_totals[$method_name] = 0;
+                $methods_totals[$method_name] += $mov->amount;
+
+                if ($mov->sale_id && $mov->sale) {
+                    $sale_date = $mov->sale->date->toDateString();
+                    if ($sale_date < $start_date && !isset($processed_sales[$mov->sale_id])) {
+                        $prev_payments_count++;
+                        $processed_sales[$mov->sale_id] = true;
+                    }
+                }
+            }
+        }
+
+        $fpdf->SetFont('Montserrat', '', 11);
+        $fpdf->SetTextColor(0, 0, 0);
+        foreach($methods_totals as $name => $amount){
+            $fpdf->Cell(60, 8, utf8_decode($name . ':'), 0, 0, 'L');
+            $fpdf->Cell(30, 8, 'S/ '.number_format($amount, 2), 0, 1, 'R');
+        }
+
+        if ($prev_payments_count > 0) {
+            $fpdf->Ln(2);
+            $fpdf->SetFont('Montserrat', '', 10);
+            $fpdf->SetTextColor(80, 80, 80);
+            $fpdf->Cell(190, 8, utf8_decode("* Incluye {$prev_payments_count} pagos de ventas de días anteriores."), 0, 1, 'L');
+        }
+        $fpdf->Ln(10);
+
+        // Detailed Sales Table (Sales GENERATED in period)
+        $sales_generated = (clone $sales_period)->with(['client', 'payment_method'])->get();
+        $fpdf->SetFont('Montserrat', 'B', 12);
+        $fpdf->SetTextColor(2, 93, 166);
+        $fpdf->Cell(190, 10, utf8_decode('DETALLE DE VENTAS GENERADAS EN EL PERIODO'), 0, 1, 'L');
+
+        $fpdf->SetFillColor(2, 93, 166);
+        $fpdf->SetTextColor(255, 255, 255);
+        $fpdf->SetFont('Montserrat', 'B', 10);
+        
+        $fpdf->Cell(25, 10, utf8_decode('GUÍA'), 1, 0, 'C', true);
+        $fpdf->Cell(25, 10, utf8_decode('FECHA'), 1, 0, 'C', true);
+        $fpdf->Cell(70, 10, utf8_decode('CLIENTE'), 1, 0, 'C', true);
+        $fpdf->Cell(35, 10, utf8_decode('TIPO'), 1, 0, 'C', true);
+        $fpdf->Cell(35, 10, utf8_decode('TOTAL'), 1, 1, 'C', true);
+
+        $fpdf->SetTextColor(0, 0, 0);
+        $fpdf->SetFont('Montserrat', '', 9);
+        
+        foreach($sales_generated as $sale){
+            $clientName = utf8_decode(optional($sale->client)->name ?? 'Consumidor Final');
+            
+            $x = $fpdf->GetX();
+            $y = $fpdf->GetY();
+            $rowHeight = 12; // Fixed height to accommodate long names
+
+            // Page break check
+            if($y + $rowHeight > 275) {
+                $fpdf->AddPage();
+                $y = $fpdf->GetY();
+                $x = $fpdf->GetX();
+                
+                // Redraw header if needed? Usually FPDF handles this if set, but we didn't set a header method.
+                // For now, just continue.
+            }
+
+            $fpdf->Cell(25, $rowHeight, utf8_decode($sale->guide), 1, 0, 'C');
+            $fpdf->Cell(25, $rowHeight, $sale->date->format('d/m/Y'), 1, 0, 'C');
+            
+            // MultiCell for client name with smaller line height
+            $fpdf->SetXY($x + 50, $y);
+            $fpdf->MultiCell(70, 4, $clientName, 0, 'L');
+            
+            // Draw the border for the client cell manually to cover the full rowHeight
+            $fpdf->SetXY($x + 50, $y);
+            $fpdf->Cell(70, $rowHeight, '', 1, 0);
+
+            $fpdf->SetXY($x + 120, $y);
+            $fpdf->Cell(35, $rowHeight, utf8_decode($sale->type), 1, 0, 'C');
+            $fpdf->Cell(35, $rowHeight, 'S/ '.number_format($sale->total, 2), 1, 1, 'R');
+        }
+
+        $fpdf->Ln(10);
+        $fpdf->SetFont('Montserrat', '', 8);
+        $fpdf->Cell(190, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i')), 0, 1, 'R');
+
+        $name = "ReporteGeneral_" . now()->format('dm') . ".pdf";
+        if (ob_get_level() > 0) ob_end_clean();
+        $fpdf->Output('D', $name);
     }
 }
 

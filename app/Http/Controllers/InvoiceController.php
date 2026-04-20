@@ -201,13 +201,15 @@ class InvoiceController extends Controller
 
             $msg = 'Error al reenviar: ' . ($result['message'] ?? 'Respuesta desconocida');
             if ($request->ajax()) {
-                return response()->json([
+                $payload = array_merge([
                     'status' => false,
                     'error' => $msg,
-                    'hint' => $result['hint'] ?? null,
-                    'file_name' => $result['fileName'] ?? null,
-                    'debug_file' => $result['debug_file'] ?? null,
-                ]);
+                ], array_diff_key($result, array_flip(['status', 'message'])));
+                if (isset($payload['fileName']) && !isset($payload['file_name'])) {
+                    $payload['file_name'] = $payload['fileName'];
+                }
+
+                return response()->json($payload);
             }
             $flash = $msg;
             if (!empty($result['hint'])) {
@@ -219,6 +221,61 @@ class InvoiceController extends Controller
                 return response()->json(['status' => false, 'error' => 'Error al procesar el reenvío: ' . $e->getMessage()]);
             }
             return back()->with('error', 'Error al procesar el reenvío: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Elimina un comprobante que falló en SUNAT, desvincula las ventas y revierte el correlativo
+     * para que vuelvan a "Emitir comprobantes pendientes".
+     */
+    public function releaseErrorSunat(Request $request, Invoice $invoice)
+    {
+        $request->validate([
+            'invoice_id' => 'required|integer|in:'.$invoice->id,
+        ], [
+            'invoice_id.required' => 'Falta el identificador del comprobante.',
+            'invoice_id.in' => 'El comprobante no coincide con la solicitud.',
+        ]);
+
+        if (strtoupper((string) ($invoice->electronic_invoice_status ?? '')) !== 'ERROR') {
+            $msg = 'Solo se puede liberar comprobantes con error SUNAT (no aceptados por el PSE).';
+            if ($request->ajax()) {
+                return response()->json(['status' => false, 'error' => $msg], 422);
+            }
+
+            return back()->with('error', $msg);
+        }
+
+        try {
+            DB::transaction(function () use ($invoice) {
+                $this->ensureSettingsRowExists();
+                $docType = strtolower((string) ($invoice->document_type ?? 'boleta'));
+                $counterColumn = $docType === 'factura' ? 'factura_count' : 'boleta_count';
+
+                $invoice->sales()->detach();
+
+                $settings = DB::table('settings')->lockForUpdate()->first();
+                if ($settings !== null && (int) ($settings->{$counterColumn} ?? 0) > 0) {
+                    DB::table('settings')->where('id', $settings->id)->decrement($counterColumn);
+                }
+
+                $invoice->delete();
+            });
+
+            if ($request->ajax()) {
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Comprobante eliminado. Las ventas vuelven a estar pendientes de facturación.',
+                ]);
+            }
+
+            return redirect()->route('invoices.index')->with('message', 'Comprobante liberado. Puede emitir de nuevo desde pendientes.');
+        } catch (\Exception $e) {
+            if ($request->ajax()) {
+                return response()->json(['status' => false, 'error' => $e->getMessage()]);
+            }
+
+            return back()->with('error', 'No se pudo liberar: '.$e->getMessage());
         }
     }
 
