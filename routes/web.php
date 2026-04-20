@@ -82,6 +82,7 @@ Route::middleware('auth')->group(function(){
 		Route::get('invoices/{invoice}/xml', [InvoiceController::class, 'downloadXml'])->name('invoices.xml');
 		Route::get('invoices/{invoice}/cdr', [InvoiceController::class, 'downloadCdr'])->name('invoices.cdr');
 		Route::post('invoices/{invoice}/resend', [InvoiceController::class, 'resend'])->name('invoices.resend');
+		Route::post('invoices/{invoice}/release-error', [InvoiceController::class, 'releaseErrorSunat'])->name('invoices.release_error');
 	});
 
 	Route::middleware('role:admin')->group(function(){
