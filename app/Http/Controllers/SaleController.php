@@ -564,11 +564,12 @@ class SaleController extends Controller
         $validator = Validator::make($request->all(), [
             'paid' => 'required|boolean',
             'guide' => 'required|string|max:255',
-            'photo' => 'required|image|mimes:jpeg,png,jpg|max:51200'
+            'photo' => 'required|image|mimes:jpeg,png,jpg|max:204800'
         ],[
             'guide.required' => 'El número de guía es obligatorio para despachar.',
             'photo.required' => 'La foto de evidencia es obligatoria para despachar.',
             'photo.image' => 'El archivo debe ser una imagen válida.',
+            'photo.max' => 'La foto excede el límite permitido (200 MB).',
         ]);
 
         if($validator->fails()){

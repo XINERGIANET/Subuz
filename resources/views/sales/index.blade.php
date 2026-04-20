@@ -394,6 +394,7 @@
   <div class="modal-dialog modal-dialog-centered" role="document">
   	<div class="modal-content">
   		<form id="dispatchForm" method="POST">
+			@csrf
   			<div class="modal-header">
   			  <h5 class="modal-title">Confirmar pago</h5>
   			  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -1238,7 +1239,15 @@
 			},
 			error: function(err){
                 var errMsg = 'Error de conexión con el servidor.';
-                if(err.responseJSON && err.responseJSON.error) errMsg = err.responseJSON.error;
+                if(err.status === 413){
+                    errMsg = 'La foto es demasiado pesada para el servidor (HTTP 413). Pruebe con una imagen más ligera.';
+                }else if(err.status === 419){
+                    errMsg = 'La sesión expiró (HTTP 419). Recargue la página e intente nuevamente.';
+                }else if(err.responseJSON && err.responseJSON.error){
+                    errMsg = err.responseJSON.error;
+                }else if(err.status){
+                    errMsg = 'Error HTTP ' + err.status + '.';
+                }
 				ToastError.fire({ text: errMsg });
 			}
 		});
