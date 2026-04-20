@@ -930,6 +930,11 @@
 				},
 				error: function(err){
 					console.log(err);
+					var msg = 'No se pudo eliminar/anular la venta.';
+					if(err.responseJSON && err.responseJSON.error){
+						msg = err.responseJSON.error;
+					}
+					alert(msg);
 				}
 			});
 		}

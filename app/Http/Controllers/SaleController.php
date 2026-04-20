@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Exports\SalesExport;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Models\Sale;
@@ -397,7 +398,9 @@ class SaleController extends Controller
                     $sale->details()->delete();
                     $sale->payments()->delete();
                     $sale->movements()->delete();
-                    $sale->invoices()->detach();
+                    if (Schema::hasTable('invoice_sale')) {
+                        $sale->invoices()->detach();
+                    }
                     $sale->delete();
                 });
 
