@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Invoice;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 
 /**
  * Integración Apisunat (SUNAT vía https://back.apisunat.com).
@@ -969,45 +968,40 @@ class ApisunatService
             $sumIgv += $igvLinea;
             $desc = $this->txt($item['description'], 'Producto');
 
+            $qtyStr = abs($qty - round($qty, 4)) < 0.00001
+                ? (string) (int) round($qty)
+                : $this->decStr($qty, 4);
             $lines[] = [
                 'cbc:ID' => $this->ublText((string) $i),
-                'cbc:InvoicedQuantity' => $this->ublQty('NIU', $this->decStr($qty, 4)),
+                'cbc:InvoicedQuantity' => $this->ublQty('NIU', $qtyStr),
                 'cbc:LineExtensionAmount' => $this->ublAmt('PEN', $this->decStr($valorVenta, 2)),
                 'cac:PricingReference' => [
                     'cac:AlternativeConditionPrice' => [
-                        [
-                            'cbc:PriceAmount' => $this->ublAmt('PEN', $this->decStr($pu, 2)),
-                            'cbc:PriceTypeCode' => $this->ublText('01'),
-                        ],
+                        'cbc:PriceAmount' => $this->ublAmt('PEN', $this->decStr($pu, 2)),
+                        'cbc:PriceTypeCode' => $this->ublText('01'),
                     ],
                 ],
                 'cac:TaxTotal' => [
                     'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($igvLinea, 2)),
                     'cac:TaxSubtotal' => [
-                        [
-                            'cbc:TaxableAmount' => $this->ublAmt('PEN', $this->decStr($valorVenta, 2)),
-                            'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($igvLinea, 2)),
-                            'cac:TaxCategory' => [
-                                'cbc:Percent' => $this->ublText($this->decStr(18.0, 2)),
-                                'cbc:TaxExemptionReasonCode' => $this->ublText('10'),
-                                'cac:TaxScheme' => [
-                                    'cbc:ID' => $this->ublSunatTaxSchemeCatalogId('1000'),
-                                    'cbc:Name' => $this->ublText('IGV'),
-                                    'cbc:TaxTypeCode' => $this->ublText('VAT'),
-                                ],
+                        'cbc:TaxableAmount' => $this->ublAmt('PEN', $this->decStr($valorVenta, 2)),
+                        'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($igvLinea, 2)),
+                        'cac:TaxCategory' => [
+                            'cbc:Percent' => $this->ublText('18'),
+                            'cbc:TaxExemptionReasonCode' => $this->ublText('10'),
+                            'cac:TaxScheme' => [
+                                'cbc:ID' => $this->ublTaxSchemeIdPortal('1000'),
+                                'cbc:Name' => $this->ublText('IGV'),
+                                'cbc:TaxTypeCode' => $this->ublText('VAT'),
                             ],
                         ],
                     ],
                 ],
                 'cac:Item' => [
                     'cbc:Description' => $this->ublText($desc),
-                    'cac:SellersItemIdentification' => [
-                        'cbc:ID' => $this->ublSellersItemId((string) ($item['product_id'] ?? $i)),
-                    ],
                 ],
                 'cac:Price' => [
-                    'cbc:PriceAmount' => $this->ublAmt('PEN', $this->decStr($vu, 6)),
-                    'cbc:BaseQuantity' => $this->ublQty('NIU', $this->decStr($qty, 4)),
+                    'cbc:PriceAmount' => $this->ublAmt('PEN', $this->decStr($vu, 2)),
                 ],
             ];
             $i++;
@@ -1018,50 +1012,23 @@ class ApisunatService
         $total = round($sumOpGravada + $sumIgv, 2);
 
         $idComprobante = $serie . '-' . $corr8;
-        $uuid = (string) Str::uuid();
 
         return [
             'cbc:UBLVersionID' => $this->ublText('2.1'),
             'cbc:CustomizationID' => $this->ublText('2.0'),
-            'cbc:ProfileID' => $this->ublText('0101'),
             'cbc:ID' => $this->ublText($idComprobante),
-            'cbc:UUID' => $this->ublText($uuid),
             'cbc:IssueDate' => $this->ublText($invoice->date->format('Y-m-d')),
             'cbc:IssueTime' => $this->ublText(now()->timezone('America/Lima')->format('H:i:s')),
             'cbc:InvoiceTypeCode' => $this->ublInvoiceTypeCode($docType),
             'cbc:DocumentCurrencyCode' => $this->ublText('PEN'),
-            'cbc:LineCountNumeric' => $this->ublText((string) count($lines)),
-            'cbc:Note' => [
-                $this->ublText('-'),
-            ],
-            'cac:PaymentTerms' => [
-                [
-                    'cbc:ID' => $this->ublText('FormaPago'),
-                    'cbc:PaymentMeansID' => $this->ublText('Contado'),
-                    'cbc:Amount' => $this->ublAmt('PEN', $this->decStr($total, 2)),
-                ],
-            ],
             'cac:AccountingSupplierParty' => [
                 'cac:Party' => [
                     'cac:PartyIdentification' => [
                         'cbc:ID' => $this->ublSchemeId('6', $rucEmisor),
                     ],
-                    'cac:PartyName' => [
-                        'cbc:Name' => $this->ublText($razonEmisor),
-                    ],
-                    'cac:PartyTaxScheme' => [
-                        'cbc:RegistrationName' => $this->ublText($razonEmisor),
-                        'cbc:CompanyID' => $this->ublSchemeId('6', $rucEmisor),
-                        'cac:TaxScheme' => [
-                            'cbc:ID' => $this->ublSunatTaxSchemeCatalogId('1000'),
-                            'cbc:Name' => $this->ublText('IGV'),
-                            'cbc:TaxTypeCode' => $this->ublText('VAT'),
-                        ],
-                    ],
                     'cac:PartyLegalEntity' => [
                         'cbc:RegistrationName' => $this->ublText($razonEmisor),
-                        'cbc:CompanyID' => $this->ublSchemeId('6', $rucEmisor),
-                        'cac:RegistrationAddress' => $this->sunatRegistrationAddress($dirEmisor, $emisorDistrict, $dirEmisorUbigeo),
+                        'cac:RegistrationAddress' => $this->sunatRegistrationAddressPortalMinimal($dirEmisor),
                     ],
                 ],
             ],
@@ -1076,11 +1043,6 @@ class ApisunatService
                     $dirClienteUbigeo
                 ),
             ],
-            // Apisunat sendBill: un solo medio de pago como objeto (no [ { … } ]); si es array, su Node lee
-            // paymentMeans.cbc:PaymentMeansCode y queda undefined → TypeError _text.
-            'cac:PaymentMeans' => [
-                'cbc:PaymentMeansCode' => $this->ublPaymentMeansCode('009'),
-            ],
             'cac:TaxTotal' => [
                 'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($sumIgv, 2)),
                 'cac:TaxSubtotal' => [
@@ -1088,10 +1050,8 @@ class ApisunatService
                         'cbc:TaxableAmount' => $this->ublAmt('PEN', $this->decStr($sumOpGravada, 2)),
                         'cbc:TaxAmount' => $this->ublAmt('PEN', $this->decStr($sumIgv, 2)),
                         'cac:TaxCategory' => [
-                            'cbc:Percent' => $this->ublText($this->decStr(18.0, 2)),
-                            'cbc:TaxExemptionReasonCode' => $this->ublText('10'),
                             'cac:TaxScheme' => [
-                                'cbc:ID' => $this->ublSunatTaxSchemeCatalogId('1000'),
+                                'cbc:ID' => $this->ublTaxSchemeIdPortal('1000'),
                                 'cbc:Name' => $this->ublText('IGV'),
                                 'cbc:TaxTypeCode' => $this->ublText('VAT'),
                             ],
@@ -1101,10 +1061,7 @@ class ApisunatService
             ],
             'cac:LegalMonetaryTotal' => [
                 'cbc:LineExtensionAmount' => $this->ublAmt('PEN', $this->decStr($sumOpGravada, 2)),
-                'cbc:TaxExclusiveAmount' => $this->ublAmt('PEN', $this->decStr($sumOpGravada, 2)),
                 'cbc:TaxInclusiveAmount' => $this->ublAmt('PEN', $this->decStr($total, 2)),
-                'cbc:AllowanceTotalAmount' => $this->ublAmt('PEN', $this->decStr(0.0, 2)),
-                'cbc:ChargeTotalAmount' => $this->ublAmt('PEN', $this->decStr(0.0, 2)),
                 'cbc:PayableAmount' => $this->ublAmt('PEN', $this->decStr($total, 2)),
             ],
             'cac:InvoiceLine' => count($lines) === 1 ? $lines[0] : $lines,
@@ -1154,7 +1111,7 @@ class ApisunatService
         ];
     }
 
-    /** cbc:InvoiceTypeCode (catálogo 01 SUNAT). */
+    /** cbc:InvoiceTypeCode (catálogo 01 SUNAT), forma corta como XML del portal Apisunat. */
     private function ublInvoiceTypeCode(string $docType): array
     {
         return [
@@ -1162,11 +1119,14 @@ class ApisunatService
             '_text' => $docType,
             '$' => [
                 'listID' => '0101',
-                'listAgencyName' => 'PE:SUNAT',
-                'listName' => 'SUNAT:Identificador de Tipo de Documento',
-                'listURI' => 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01',
             ],
         ];
+    }
+
+    /** cbc:ID del tributo en TaxScheme sin atributos de catálogo (XML portal Apisunat). */
+    private function ublTaxSchemeIdPortal(string $code): array
+    {
+        return $this->ublText($code);
     }
 
     /** cbc:PaymentMeansCode (catálogo 59 SUNAT — medios de pago). */
@@ -1209,10 +1169,10 @@ class ApisunatService
     }
 
     /**
-     * Party del cliente: factura (01) y boleta (03) incluyen cac:PartyName (nombre del adquirente).
-     * Factura (01) a RUC (6): mismo patrón que Greenter/SUNAT — sin PartyTaxScheme en el party cliente,
-     * sin cbc:CompanyID en PartyLegalEntity y RegistrationAddress solo AddressLine + Country (evita Client.0306).
-     * Otros esquemas: PartyTaxScheme en contribuyente si aplica; dirección completa con ubigeo.
+     * Party del cliente alineado al XML del portal Apisunat:
+     * - Boleta (03) doc. 0: solo identificación + razón social (sin PartyName ni dirección).
+     * - Boleta (03) DNI (1): razón social + CompanyID + dirección mínima (tipo + línea).
+     * - Factura (01) RUC (6): PartyName + legal entity con dirección texto + país (Greenter/SUNAT).
      */
     protected function buildAccountingCustomerParty(
         string $docType,
@@ -1228,12 +1188,25 @@ class ApisunatService
                 'cbc:ID' => $this->ublSchemeId((string) $scheme, (string) $docVal),
             ],
         ];
-        if ($docType === '01' || $docType === '03') {
+        if ($docType === '03') {
+            if ((string) $scheme === '1') {
+                $party['cac:PartyLegalEntity'] = [
+                    'cbc:RegistrationName' => $this->ublText($nombreCliente),
+                    'cbc:CompanyID' => $this->ublSchemeId((string) $scheme, (string) $docVal),
+                    'cac:RegistrationAddress' => $this->sunatRegistrationAddressPortalMinimal($dirCliente),
+                ];
+            } else {
+                $party['cac:PartyLegalEntity'] = [
+                    'cbc:RegistrationName' => $this->ublText($nombreCliente),
+                ];
+            }
+
+            return $party;
+        }
+        if ($docType === '01' && (string) $scheme === '6') {
             $party['cac:PartyName'] = [
                 'cbc:Name' => $this->ublText($nombreCliente),
             ];
-        }
-        if ($docType === '01' && (string) $scheme === '6') {
             $party['cac:PartyLegalEntity'] = [
                 'cbc:RegistrationName' => $this->ublText($nombreCliente),
                 'cac:RegistrationAddress' => $this->sunatRegistrationAddressCustomerRucFactura($dirCliente, $clienteDistrict),
@@ -1284,7 +1257,20 @@ class ApisunatService
     }
 
     /**
-     * Dirección SUNAT/UBL con ubigeo y localidad; Apisunat suele leer estos nodos (si faltan provoca TypeError en su validador).
+     * Dirección emisor/cliente al estilo XML que genera el portal Apisunat (solo tipo establecimiento + línea).
+     */
+    protected function sunatRegistrationAddressPortalMinimal(string $line): array
+    {
+        return [
+            'cbc:AddressTypeCode' => $this->ublText('0000'),
+            'cac:AddressLine' => [
+                'cbc:Line' => $this->ublText($this->txt($line, '-')),
+            ],
+        ];
+    }
+
+    /**
+     * Dirección extendida (ubigeo, ciudad, etc.) por si se reutiliza fuera del flujo portal mínimo.
      */
     protected function sunatRegistrationAddress(string $line, string $district, string $ubigeoRaw): array
     {
@@ -1293,7 +1279,6 @@ class ApisunatService
         $region = $this->txt(config('apisunat.company.region'), 'LAMBAYEQUE');
         $dist = $this->txt($district, 'CHICLAYO');
 
-        // Emisor: ubigeo como cbc:ID texto (sin schemeName), CitySubdivisionName y orden UBL 2.1 como en ejemplos Greenter/SUNAT.
         return [
             'cbc:ID' => $this->ublText($ubigeo),
             'cbc:AddressTypeCode' => $this->ublText('0000'),
