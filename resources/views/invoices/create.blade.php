@@ -260,11 +260,13 @@
             if ($(this).is(':checked')) {
                 $('#container-product').addClass('d-none');
                 $('#container-glose').removeClass('d-none');
+                $('#manual_description').val('Por consumo');
                 tsProducts.clear();
                 $('#item_price').val('0.00');
             } else {
                 $('#container-product').removeClass('d-none');
                 $('#container-glose').addClass('d-none');
+                $('#manual_description').val('');
             }
         });
 
