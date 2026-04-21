@@ -27,11 +27,7 @@
                 <a href="{{ route('invoices.create') }}" class="btn btn-azure">
                     <i class="ti ti-plus icon"></i> Nueva Factura Manual
                 </a>
-                @if(auth()->user()->role == 'admin' || auth()->user()->role == 'asistente')
-                    <a href="{{ route('reports.deleted_invoices') }}" class="btn btn-azure">
-                        <i class="ti ti-trash icon"></i> Ver comprobantes eliminados
-                    </a>
-                @endif
+
             </div>
         </div>
         <div class="card-body border-bottom">
