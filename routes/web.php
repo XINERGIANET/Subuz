@@ -23,27 +23,27 @@ use App\Http\Controllers\InvoiceController;
 Route::get('login', [AuthController::class, 'login'])->name('auth.login');
 Route::post('login', [AuthController::class, 'check'])->name('auth.check');
 Route::post('logout', [AuthController::class, 'logout'])->name('auth.logout');
-Route::get('clear-cache', function() {
-    $cached = base_path('bootstrap/cache/config.php');
-    if (is_file($cached)) {
-        @unlink($cached);
-    }
-    Artisan::call('config:clear');
-    Artisan::call('cache:clear');
-    Artisan::call('view:clear');
-    return "Caché y configuración limpias con éxito.";
+Route::get('clear-cache', function () {
+	$cached = base_path('bootstrap/cache/config.php');
+	if (is_file($cached)) {
+		@unlink($cached);
+	}
+	Artisan::call('config:clear');
+	Artisan::call('cache:clear');
+	Artisan::call('view:clear');
+	return "Caché y configuración limpias con éxito.";
 });
 
 Route::get('photo-view/{path}', function ($path) {
-    $fullPath = storage_path('app/public/' . $path);
+	$fullPath = storage_path('app/public/' . $path);
 
-    if (!file_exists($fullPath)) {
-        // Debugging: return the path as text if not found instead of 404/redirect
-        return "ERROR: File not found at " . $fullPath;
-    }
+	if (!file_exists($fullPath)) {
+		// Debugging: return the path as text if not found instead of 404/redirect
+		return "ERROR: File not found at " . $fullPath;
+	}
 
-    if (ob_get_level()) ob_end_clean();
-    return response()->file($fullPath);
+	if (ob_get_level()) ob_end_clean();
+	return response()->file($fullPath);
 })->where('path', '.*');
 
 Route::get('reports/pdf', [ReportController::class, 'pdf'])->name('reports.pdf');
@@ -52,9 +52,9 @@ Route::get('comprobante/{invoice}', [InvoiceController::class, 'publicDetail'])
 	->name('invoices.public_detail')
 	->middleware('signed');
 
-Route::middleware('auth')->group(function(){
+Route::middleware('auth')->group(function () {
 
-	Route::get('/',[WebController::class, 'index']);
+	Route::get('/', [WebController::class, 'index']);
 
 	Route::get('sales', [SaleController::class, 'index'])->name('sales.index');
 	Route::get('sales/{sale}/details', [SaleController::class, 'details'])->name('sales.details');
@@ -68,7 +68,7 @@ Route::middleware('auth')->group(function(){
 	Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
 	Route::post('settings', [SettingController::class, 'update'])->name('settings.update');
 
-	Route::middleware('role:admin|asistente')->group(function(){
+	Route::middleware('role:admin|asistente')->group(function () {
 		Route::get('dashboard/api', [WebController::class, 'dashboard'])->name('dashboard.api');
 		Route::get('dashboard/daily/api', [WebController::class, 'dashboardDaily'])->name('dashboard.daily.api');
 		Route::get('dashboard/product/api', [WebController::class, 'dashboardProduct'])->name('dashboard.product.api');
@@ -85,9 +85,11 @@ Route::middleware('auth')->group(function(){
 		Route::get('invoices/{invoice}/cdr', [InvoiceController::class, 'downloadCdr'])->name('invoices.cdr');
 		Route::post('invoices/{invoice}/resend', [InvoiceController::class, 'resend'])->name('invoices.resend');
 		Route::post('invoices/{invoice}/release-error', [InvoiceController::class, 'releaseErrorSunat'])->name('invoices.release_error');
+		Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy'])->name('invoices.destroy');
+		Route::get('invoices/deleted', [InvoiceController::class, 'indexDeleted'])->name('reports.deleted_invoices');
 	});
 
-	Route::middleware('role:admin')->group(function(){
+	Route::middleware('role:admin')->group(function () {
 		Route::get('dispatchers', [UserController::class, 'indexDispatchers'])->name('users.dispatchers.index');
 		Route::get('dispatchers/create', [UserController::class, 'createDispatcher'])->name('users.dispatchers.create');
 		Route::post('dispatchers', [UserController::class, 'storeDispatcher'])->name('users.dispatchers.store');
@@ -105,7 +107,7 @@ Route::middleware('auth')->group(function(){
 		Route::delete('assistants/{assistant}', [UserController::class, 'destroyAssistant'])->name('users.assistants.destroy');
 	});
 
-	Route::middleware('role:admin|seller|asistente')->group(function(){
+	Route::middleware('role:admin|seller|asistente')->group(function () {
 		Route::get('products/api', [ProductController::class, 'api'])->name('products.api');
 		Route::resource('products', ProductController::class);
 
@@ -126,12 +128,12 @@ Route::middleware('auth')->group(function(){
 		Route::post('cart/update-prices', [CartController::class, 'updatePricesByClient'])->name('cart.updatePrices');
 	});
 
-	Route::middleware('role:admin|seller|despachador|asistente')->group(function(){
+	Route::middleware('role:admin|seller|despachador|asistente')->group(function () {
 		Route::resource('sales', SaleController::class)->except(['index', 'show']);
 		Route::get('clients/api', [ClientController::class, 'api'])->name('clients.api');
 	});
 
-	Route::middleware('role:admin|viewer|asistente')->group(function(){
+	Route::middleware('role:admin|viewer|asistente')->group(function () {
 		Route::get('charges/credit', [ChargeController::class, 'credit'])->name('charges.credit');
 		Route::get('charges/pending', [ChargeController::class, 'pending'])->name('charges.pending');
 		Route::get('charges/history', [ChargeController::class, 'history'])->name('charges.history');
@@ -145,14 +147,14 @@ Route::middleware('auth')->group(function(){
 		Route::resource('expenses', ExpenseController::class);
 	});
 
-	Route::middleware('role:admin|viewer')->group(function(){
+	Route::middleware('role:admin|viewer')->group(function () {
 		Route::get('finances', [FinanceController::class, 'index'])->name('finances.index');
 		Route::post('finances', [FinanceController::class, 'store'])->name('finances.store');
 		Route::get('finances/{finance}', [FinanceController::class, 'show'])->name('finances.show');
 		Route::post('finances/payment', [FinanceController::class, 'storePayment'])->name('finances.payment');
 	});
 
-	Route::middleware('role:admin|seller|viewer|asistente')->group(function(){
+	Route::middleware('role:admin|seller|viewer|asistente')->group(function () {
 		Route::get('sales/pdf', [SaleController::class, 'pdf'])->name('sales.pdf');
 		Route::get('sales/report-pdf', [SaleController::class, 'reportPdf'])->name('sales.report_pdf');
 		Route::get('sales/report-data', [SaleController::class, 'reportData'])->name('sales.report_data');
@@ -161,13 +163,10 @@ Route::middleware('auth')->group(function(){
 		Route::get('reports/cashbox', [ReportController::class, 'cashbox'])->name('reports.cashbox');
 	});
 
-	Route::middleware('role:admin|despachador|asistente')->group(function(){
+	Route::middleware('role:admin|despachador|asistente')->group(function () {
 		Route::get('cashbox', [CashboxController::class, 'index'])->name('cashbox.index');
 		Route::post('cashbox/open', [CashboxController::class, 'open'])->name('cashbox.open');
 		Route::post('cashbox/close', [CashboxController::class, 'close'])->name('cashbox.close');
 		Route::post('cashbox/income', [CashboxController::class, 'storeIncome'])->name('cashbox.income');
 	});
-
 });
-
-

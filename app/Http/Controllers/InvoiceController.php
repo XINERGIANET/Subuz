@@ -29,7 +29,7 @@ class InvoiceController extends Controller
 
     public function index(Request $request)
     {
-        $query = Invoice::query();
+        $query = Invoice::where('status', '!=', 'Anulado');
 
         if ($request->client_id) {
             $query->where('client_id', $request->client_id);
@@ -65,7 +65,7 @@ class InvoiceController extends Controller
         }
 
         if ($request->type && !$request->client_id) {
-            $query->whereHas('client', function($q) use ($request) {
+            $query->whereHas('client', function ($q) use ($request) {
                 if ($request->type == 'factura') {
                     $q->whereRaw('LENGTH(document) = 11');
                 } elseif ($request->type == 'boleta') {
@@ -112,7 +112,7 @@ class InvoiceController extends Controller
         ]);
 
         try {
-            DB::transaction(function() use ($request) {
+            DB::transaction(function () use ($request) {
                 $sales = Sale::whereIn('id', $request->sales)->with('client')->get();
                 $total = $sales->sum('total');
                 $client = $sales->first()->client;
@@ -151,7 +151,7 @@ class InvoiceController extends Controller
 
                 // Emitir comprobante electrónico
                 $this->apisunatService->emitInvoice($invoice);
-                
+
                 $request->merge(['new_invoice_id' => $invoice->id]);
             });
 
@@ -175,7 +175,7 @@ class InvoiceController extends Controller
     public function resend(Request $request, Invoice $invoice)
     {
         $request->validate([
-            'invoice_id' => 'required|integer|in:'.$invoice->id,
+            'invoice_id' => 'required|integer|in:' . $invoice->id,
         ], [
             'invoice_id.required' => 'Falta el identificador del comprobante en el formulario.',
             'invoice_id.in' => 'El comprobante no coincide con la solicitud de reenvío.',
@@ -233,7 +233,7 @@ class InvoiceController extends Controller
     public function releaseErrorSunat(Request $request, Invoice $invoice)
     {
         $request->validate([
-            'invoice_id' => 'required|integer|in:'.$invoice->id,
+            'invoice_id' => 'required|integer|in:' . $invoice->id,
         ], [
             'invoice_id.required' => 'Falta el identificador del comprobante.',
             'invoice_id.in' => 'El comprobante no coincide con la solicitud.',
@@ -277,7 +277,7 @@ class InvoiceController extends Controller
                 return response()->json(['status' => false, 'error' => $e->getMessage()]);
             }
 
-            return back()->with('error', 'No se pudo liberar: '.$e->getMessage());
+            return back()->with('error', 'No se pudo liberar: ' . $e->getMessage());
         }
     }
 
@@ -653,7 +653,7 @@ class InvoiceController extends Controller
     {
         $products = Product::all();
         $clients = Client::all();
-        
+
         $this->ensureSettingsRowExists();
         $settings = DB::table('settings')->first();
         $next_factura = str_pad(($settings->factura_count ?? 0) + 1, 8, "0", STR_PAD_LEFT);
@@ -675,7 +675,7 @@ class InvoiceController extends Controller
         ]);
 
         try {
-            $invoiceId = DB::transaction(function() use ($request) {
+            $invoiceId = DB::transaction(function () use ($request) {
                 $total = 0;
                 foreach ($request->items as $item) {
                     $total += $item['quantity'] * $item['price'];
@@ -723,7 +723,7 @@ class InvoiceController extends Controller
 
                 // Emitir comprobante electrónico
                 $this->apisunatService->emitInvoice($invoice);
-                
+
                 return $invoice->id;
             });
 
@@ -732,7 +732,6 @@ class InvoiceController extends Controller
                 'message' => 'Comprobante manual emitido con éxito.',
                 'pdf_url' => route('invoices.local_pdf', ['invoice' => $invoiceId])
             ]);
-
         } catch (\Exception $e) {
             return response()->json(['status' => false, 'error' => $e->getMessage()], 422);
         }
@@ -754,5 +753,23 @@ class InvoiceController extends Controller
             'factura_count' => 0,
             'boleta_count' => 0,
         ]);
+    }
+    //Eliminar factura solo en base de datos
+    public function destroy(Invoice $invoice)
+    {
+        // Desvinculamos las ventas para que vuelvan a estar disponibles para facturar
+        $invoice->sales()->detach();
+
+        $invoice->update([
+            'status' => 'Anulado'
+        ]);
+
+        return redirect()->route('invoices.index')->with('message', 'Comprobante eliminado con éxito.');
+    }
+    //Vista de comprobantes eliminados
+    public function indexDeleted()
+    {
+        $invoices = Invoice::where('status', 'Anulado')->get();
+        return view('reports.deleted_invoices', compact('invoices'));
     }
 }
