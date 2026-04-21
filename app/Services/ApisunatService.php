@@ -1144,9 +1144,6 @@ class ApisunatService
             '_text' => $code,
             '$' => [
                 'listID' => '59',
-                'listAgencyName' => 'PE:SUNAT',
-                'listName' => 'SUNAT:Medios de pago',
-                'listURI' => 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo59',
             ],
         ];
     }
