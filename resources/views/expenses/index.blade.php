@@ -32,9 +32,9 @@
     </div>
 
     <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header border-0 py-3 d-flex justify-content-between align-items-center">
-            <h3 class="card-title fw-bold"><i class="ti ti-filter me-2"></i>Filtros de Búsqueda</h3>
-            <div class="d-flex gap-2">
+        <div class="card-header border-0 py-3 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+            <h3 class="card-title fw-bold mb-0"><i class="ti ti-filter me-2"></i>Filtros de Búsqueda</h3>
+            <div class="d-flex flex-wrap gap-2">
                 @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente'))
                     <button class="btn btn-brand btn-pill px-4 shadow-sm" data-bs-toggle="modal"
                         data-bs-target="#createModal">
