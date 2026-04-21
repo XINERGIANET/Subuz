@@ -22,8 +22,8 @@
 <div class="card card-filter-container">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h3 class="card-title">Comprobantes Emitidos</h3>
-        <a href="{{ route('invoices.pending') }}" class="btn btn-brand">
-            <i class="ti ti-plus icon"></i> Emitir Comprobantes Pendientes
+        <a href="{{ route('invoices.create') }}" class="btn btn-azure">
+            <i class="ti ti-plus icon"></i> Nueva Factura Manual
         </a>
     </div>
     <div class="card-body border-bottom">

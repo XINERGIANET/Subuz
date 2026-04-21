@@ -76,7 +76,9 @@ Route::middleware('auth')->group(function(){
 
 		Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index');
 		Route::get('invoices/pending', [InvoiceController::class, 'pending'])->name('invoices.pending');
+		Route::get('invoices/create', [InvoiceController::class, 'create'])->name('invoices.create');
 		Route::post('invoices', [InvoiceController::class, 'store'])->name('invoices.store');
+		Route::post('invoices/manual', [InvoiceController::class, 'storeManual'])->name('invoices.store_manual');
 		Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'showPdf'])->name('invoices.pdf');
 		Route::get('invoices/{invoice}/local-pdf', [InvoiceController::class, 'localPdf'])->name('invoices.local_pdf');
 		Route::get('invoices/{invoice}/xml', [InvoiceController::class, 'downloadXml'])->name('invoices.xml');

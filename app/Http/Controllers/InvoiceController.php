@@ -6,7 +6,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Sale;
 use App\Models\Invoice;
+use App\Models\InvoiceDetail;
 use App\Models\Client;
+use App\Models\Product;
 use App\Services\ApisunatService;
 use App\Support\SolesEnLetras;
 use chillerlan\QRCode\Common\EccLevel;
@@ -281,7 +283,7 @@ class InvoiceController extends Controller
 
     public function localPdf(Invoice $invoice)
     {
-        $invoice->load(['sales.details.product', 'client']);
+        $invoice->load(['sales.details.product', 'client', 'details.product']);
 
         $igvRate = 0.18;
         $client = $invoice->client;
@@ -310,24 +312,43 @@ class InvoiceController extends Controller
 
         $lines = [];
         $idx = 1;
-        foreach ($invoice->sales as $sale) {
-            foreach ($sale->details as $detail) {
-                $pu = (float) $detail->price;
-                $qty = (float) $detail->quantity;
-                $importeConIgv = round($pu * $qty, 2);
-                $valorVenta = round($importeConIgv / (1 + $igvRate), 2);
-                $vu = $qty > 0 ? round($valorVenta / $qty, 3) : 0;
-                $lines[] = [
-                    'n' => $idx++,
-                    'desc' => $detail->product->name ?? 'Producto',
-                    'um' => 'NIU',
-                    'qty' => $qty,
-                    'vu' => $vu,
-                    'pu' => $pu,
-                    'dto' => 0.0,
-                    'vv' => $valorVenta,
+        $items = [];
+        if ($invoice->details()->count() > 0) {
+            foreach ($invoice->details as $detail) {
+                $items[] = [
+                    'price' => $detail->price,
+                    'quantity' => $detail->quantity,
+                    'description' => $detail->description,
                 ];
             }
+        } else {
+            foreach ($invoice->sales as $sale) {
+                foreach ($sale->details as $detail) {
+                    $items[] = [
+                        'price' => $detail->price,
+                        'quantity' => $detail->quantity,
+                        'description' => $detail->product->name ?? 'Producto',
+                    ];
+                }
+            }
+        }
+
+        foreach ($items as $item) {
+            $pu = (float) $item['price'];
+            $qty = (float) $item['quantity'];
+            $importeConIgv = round($pu * $qty, 2);
+            $valorVenta = round($importeConIgv / (1 + $igvRate), 2);
+            $vu = $qty > 0 ? round($valorVenta / $qty, 3) : 0;
+            $lines[] = [
+                'n' => $idx++,
+                'desc' => $item['description'],
+                'um' => 'NIU',
+                'qty' => $qty,
+                'vu' => $vu,
+                'pu' => $pu,
+                'dto' => 0.0,
+                'vv' => $valorVenta,
+            ];
         }
 
         $opGravada = round((float) $invoice->total / (1 + $igvRate), 2);
@@ -533,11 +554,13 @@ class InvoiceController extends Controller
         if ($hasQr) {
             $fpdf->SetX(10);
             $fpdf->Cell($qrSize, 4, $pdf($serieNumero), 0, 0, 'C');
-            $fpdf->Cell(190 - $qrSize, 4, $pdf('Pedidos: ' . $invoice->sales->pluck('order')->filter()->implode(', ')), 0, 1, 'R');
+            $pedidosStr = $invoice->sales->count() > 0 ? $invoice->sales->pluck('order')->filter()->implode(', ') : 'N/A';
+            $fpdf->Cell(190 - $qrSize, 4, $pdf('Pedidos: ' . $pedidosStr), 0, 1, 'R');
         } else {
             $fpdf->SetX(10);
             $fpdf->Cell(95, 4, $pdf($serieNumero), 0, 0, 'L');
-            $fpdf->Cell(95, 4, $pdf('Pedidos: ' . $invoice->sales->pluck('order')->filter()->implode(', ')), 0, 1, 'R');
+            $pedidosStr = $invoice->sales->count() > 0 ? $invoice->sales->pluck('order')->filter()->implode(', ') : 'N/A';
+            $fpdf->Cell(95, 4, $pdf('Pedidos: ' . $pedidosStr), 0, 1, 'R');
         }
 
         $fpdf->Ln(2);
@@ -624,6 +647,95 @@ class InvoiceController extends Controller
             return back()->with('error', 'El CDR no está disponible.');
         }
         return redirect()->away($invoice->electronic_invoice_cdr_url);
+    }
+
+    public function create()
+    {
+        $products = Product::all();
+        $clients = Client::all();
+        
+        $this->ensureSettingsRowExists();
+        $settings = DB::table('settings')->first();
+        $next_factura = str_pad(($settings->factura_count ?? 0) + 1, 8, "0", STR_PAD_LEFT);
+        $next_boleta = str_pad(($settings->boleta_count ?? 0) + 1, 8, "0", STR_PAD_LEFT);
+
+        return view('invoices.create', compact('products', 'clients', 'next_factura', 'next_boleta'));
+    }
+
+    public function storeManual(Request $request)
+    {
+        $request->validate([
+            'date' => 'required|date',
+            'client_id' => 'required|exists:clients,id',
+            'document_type' => 'required|in:factura,boleta',
+            'items' => 'required|array|min:1',
+            'items.*.description' => 'required|string',
+            'items.*.quantity' => 'required|numeric|min:0.0001',
+            'items.*.price' => 'required|numeric|min:0'
+        ]);
+
+        try {
+            $invoiceId = DB::transaction(function() use ($request) {
+                $total = 0;
+                foreach ($request->items as $item) {
+                    $total += $item['quantity'] * $item['price'];
+                }
+
+                $client = Client::find($request->client_id);
+                $documentType = $request->document_type;
+
+                // SUNAT Validations
+                if ($documentType === 'factura' && strlen($client->document) !== 11) {
+                    throw new \Exception('No se puede emitir una Factura a un cliente sin RUC (11 dígitos).');
+                }
+
+                if ($documentType === 'boleta' && ($client->document === '0' || $client->document === '' || $client->document === '00000000') && $total > 700) {
+                    throw new \Exception('No se puede emitir una Boleta sin identificación que supere los S/ 700.00.');
+                }
+
+                $this->ensureSettingsRowExists();
+                $counter_column = ($documentType === 'factura') ? 'factura_count' : 'boleta_count';
+                $current_count = DB::table('settings')->lockForUpdate()->value($counter_column) ?? 0;
+                $next_number = str_pad($current_count + 1, 8, "0", STR_PAD_LEFT);
+
+                $invoice = Invoice::create([
+                    'number' => $next_number,
+                    'client_id' => $request->client_id,
+                    'document_type' => $documentType,
+                    'date' => $request->date,
+                    'total' => $total,
+                    'status' => 'Emitida',
+                    'notes' => $request->notes
+                ]);
+
+                foreach ($request->items as $item) {
+                    InvoiceDetail::create([
+                        'invoice_id' => $invoice->id,
+                        'product_id' => $item['product_id'] ?? null,
+                        'description' => $item['description'],
+                        'quantity' => $item['quantity'],
+                        'price' => $item['price'],
+                        'subtotal' => $item['quantity'] * $item['price']
+                    ]);
+                }
+
+                DB::table('settings')->increment($counter_column);
+
+                // Emitir comprobante electrónico
+                $this->apisunatService->emitInvoice($invoice);
+                
+                return $invoice->id;
+            });
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Comprobante manual emitido con éxito.',
+                'pdf_url' => route('invoices.local_pdf', ['invoice' => $invoiceId])
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'error' => $e->getMessage()], 422);
+        }
     }
 
     /**
