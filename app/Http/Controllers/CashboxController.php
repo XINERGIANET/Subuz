@@ -122,7 +122,7 @@ class CashboxController extends Controller
 
     public function close(Request $request){
         $request->validate([
-            'closing_amount' => 'nullable|numeric|min:0',
+            'closing_amount' => 'nullable|numeric',
             'note' => 'nullable|string'
         ]);
 

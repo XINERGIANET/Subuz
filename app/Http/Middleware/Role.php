@@ -22,9 +22,13 @@ class Role
         }
 
         $roles = preg_split('/[|,]/', $role);
-        $roles = array_filter(array_map('trim', $roles));
+        $roles = array_filter(array_map(static function ($r) {
+            return strtolower(trim((string) $r));
+        }, $roles));
 
-        if(!in_array(auth()->user()->role, $roles, true)){
+        $userRole = strtolower(trim((string) auth()->user()->role));
+
+        if(!in_array($userRole, $roles, true)){
             return redirect()->route('auth.login');
         }
         

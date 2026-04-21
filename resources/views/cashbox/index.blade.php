@@ -273,7 +273,7 @@
 <div class="modal modal-blur fade" id="closeModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" role="document">
   	<div class="modal-content">
-  		<form method="POST" action="{{ route('cashbox.close') }}">
+  		<form id="closeCashboxForm" method="POST" action="{{ route('cashbox.close') }}">
   			@csrf
   			<div class="modal-header">
   			  <h5 class="modal-title">Cerrar caja</h5>
@@ -325,6 +325,31 @@
 		$(document).on('click', '.remove-payment-row', function(){
 			$(this).closest('.payment-row').remove();
 		});
+
+        // Permitir cerrar caja aunque el efectivo sea negativo, con confirmación.
+        $('#closeCashboxForm').on('submit', function(e){
+            var $form = $(this);
+            var raw = $form.find('input[name="closing_amount"]').val();
+            var amount = parseFloat(raw);
+
+            if(!isNaN(amount) && amount < 0){
+                e.preventDefault();
+
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Efectivo de cierre en negativo',
+                    text: 'El efectivo de cierre es S/ ' + amount.toFixed(2) + '. ¿Deseas cerrar la caja de todas formas?',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, cerrar',
+                    cancelButtonText: 'Cancelar',
+                }).then(function(result){
+                    if(result.isConfirmed){
+                        $form.off('submit');
+                        $form.trigger('submit');
+                    }
+                });
+            }
+        });
 	});
 </script>
 @endsection

@@ -26,6 +26,6 @@ class User extends Authenticatable
     public $timestamps = false;
 
     public function hasRole($role){
-        return $this->role == $role;
+        return strtolower(trim((string) $this->role)) === strtolower(trim((string) $role));
     }
 }
