@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\PaymentsExport;
 use App\Models\Week;
@@ -59,17 +60,17 @@ class PaymentController extends Controller
             ]);
         }
 
-        $sale = Sale::findOrFail($request->sale_id);
-
-        // Handle Photo Upload
-        $photoPath = null;
-        if ($request->hasFile('photo')) {
-            $file = $request->file('photo');
-            $filename = 'payment_' . $sale->id . '_' . time() . '.' . $file->getClientOriginalExtension();
-            $photoPath = $file->storeAs('dispatches', $filename, 'public');
-        }
-
         try {
+            $sale = Sale::findOrFail($request->sale_id);
+
+            // Handle Photo Upload
+            $photoPath = null;
+            if ($request->hasFile('photo')) {
+                $file = $request->file('photo');
+                $filename = 'payment_' . $sale->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+                $photoPath = $file->storeAs('dispatches', $filename, 'public');
+            }
+
             DB::transaction(function() use ($request, $sale, $cashbox, $photoPath){
                 
                 if($request->type == 'Credito'){
@@ -154,9 +155,14 @@ class PaymentController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            Log::error("Error al registrar pago: " . $e->getMessage(), [
+                'sale_id' => $request->sale_id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'status' => false,
-                'error' => $e->getMessage()
+                'error' => 'Error: ' . $e->getMessage()
             ]);
         }
     }

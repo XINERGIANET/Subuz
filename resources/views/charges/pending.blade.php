@@ -390,7 +390,9 @@
 			},
 			error: function(err){
 				console.log(err);
-				ToastError.fire({ text: 'Ocurrió un error en el servidor' });
+                var msg = 'Ocurrió un error en el servidor';
+                if(err.responseJSON && err.responseJSON.error) msg = err.responseJSON.error;
+				ToastError.fire({ text: msg });
 			}
 		});
 
