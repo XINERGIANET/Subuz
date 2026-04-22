@@ -33,16 +33,16 @@
 </div>
 
 <div class="card border-0 shadow-sm mb-4">
-    <div class="card-header border-0 py-3 d-flex justify-content-between align-items-center">
-        <h3 class="card-title fw-bold"><i class="ti ti-history me-2"></i>Acciones</h3>
-        <div class="d-flex gap-2">
-            <a href="{{ route('charges.history', ['type' => 'Contado']) }}" class="btn btn-outline-primary btn-pill px-4">
-                <i class="ti ti-history icon me-1"></i> Ver historial de contado
+    <div class="card-header border-0 py-3 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+        <h3 class="card-title fw-bold mb-0"><i class="ti ti-history me-2"></i>Acciones</h3>
+        <div class="d-flex flex-wrap gap-2 justify-content-center justify-content-md-end w-100 w-md-auto">
+            <a href="{{ route('charges.history', ['type' => 'Contado']) }}" class="btn btn-outline-primary btn-pill px-3 py-2 flex-grow-1 flex-md-grow-0">
+                <i class="ti ti-history icon me-1"></i> <span class="d-none d-sm-inline">Historial</span><span class="d-inline d-sm-none">Historial</span>
             </a>
-            <a href="{{ route('sales.excel', ['is_pending' => 1] + request()->all()) }}" class="btn btn-success btn-pill px-4 shadow-sm">
+            <a href="{{ route('sales.excel', ['is_pending' => 1] + request()->all()) }}" class="btn btn-success btn-pill px-3 py-2 flex-grow-1 flex-md-grow-0 shadow-sm">
                 <i class="ti ti-file-spreadsheet icon me-1"></i> Excel
             </a>
-            <a href="{{ route('sales.pdf', ['is_pending' => 1] + request()->all()) }}" class="btn btn-danger btn-pill px-4 shadow-sm">
+            <a href="{{ route('sales.pdf', ['is_pending' => 1] + request()->all()) }}" class="btn btn-danger btn-pill px-3 py-2 flex-grow-1 flex-md-grow-0 shadow-sm">
                 <i class="ti ti-file-type-pdf icon me-1"></i> PDF
             </a>
         </div>
@@ -83,9 +83,9 @@
 		<table class="table card-table table-vcenter">
 			<thead class="table-corporate-header">
 				<tr>
-					<th width="50">#</th>
-					<th>Guía de remisión</th>
-					<th>Fecha</th>
+					<th width="40" class="d-none d-sm-table-cell">#</th>
+					<th>Guía</th>
+					<th class="d-none d-md-table-cell">Fecha</th>
 					<th>Cliente</th>
 					<th class="text-center">Total</th>
 					<th class="text-end">Acciones</th>
@@ -94,10 +94,13 @@
 			<tbody>
 				@forelse($sales as $sale)
 				<tr>
-					<td class="text-muted">{{ $loop->iteration }}</td>
-					<td class="fw-bold">{{ $sale->guide }}</td>
-					<td>{{ $sale->date->format('d/m/Y') }}</td>
-					<td>{{ optional($sale->client)->name ?? 'Consumidor Final' }}</td>
+					<td class="text-muted d-none d-sm-table-cell">{{ $loop->iteration }}</td>
+					<td class="fw-bold">
+                        {{ $sale->guide }}
+                        <div class="d-block d-md-none text-muted small fw-normal">{{ $sale->date->format('d/m/Y') }}</div>
+                    </td>
+					<td class="d-none d-md-table-cell">{{ $sale->date->format('d/m/Y') }}</td>
+					<td class="small">{{ optional($sale->client)->name ?? 'Consumidor Final' }}</td>
 					<td class="text-center fw-bold text-primary">S/{{ number_format($sale->total, 2) }}</td>
 					<td class="text-end">
 						<div class="d-flex gap-2 justify-content-end">

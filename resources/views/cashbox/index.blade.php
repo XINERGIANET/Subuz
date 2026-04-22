@@ -132,9 +132,9 @@
 				@forelse($movements as $movement)
 				<tr>
 					<td class="small text-muted">{{ $movement->date->format('d/m/Y H:i') }}</td>
-					<td class="fw-bold text-dark">{{ optional($movement->sale)->guide ?? 'Ingreso de Caja' }}</td>
+					<td class="fw-bold text-dark">{{ $movement->sale ? $movement->sale->guide : ($movement->type == 'expense' ? 'Egreso' : 'Ingreso de Caja') }}</td>
 					<td>
-						@if($movement->type == 'income')
+						@if($movement->type == 'income' || $movement->type == 'expense')
 							<span class="text-muted italic">{{ $movement->note }}</span>
 						@else
 							<span class="fw-medium text-dark">{{ optional(optional($movement->sale)->client)->name ?? 'Consumidor Final' }}</span>
@@ -143,6 +143,8 @@
 					<td class="text-center">
 						@if($movement->type == 'paid' || $movement->type == 'income')
 						    <span class="badge bg-success-lt px-2 py-1">Pagado</span>
+						@elseif($movement->type == 'expense')
+						    <span class="badge bg-red-lt px-2 py-1">Gasto</span>
 						@else
 						    <span class="badge bg-warning-lt px-2 py-1">Deuda</span>
 						@endif

@@ -22,8 +22,27 @@ class CashboxController extends Controller
         if($cashbox){
             $movements = CashboxMovement::with(['sale.client', 'payment_method', 'user'])
                 ->where('cashbox_id', $cashbox->id)
-                ->latest('date')
                 ->get();
+
+            // Combinamos con los gastos realizados durante la sesión de caja
+            $session_expenses = Expense::with('payment_method')
+                ->whereBetween('date', [$cashbox->opened_at, now()])
+                ->get()
+                ->map(function($e) {
+                    return (object)[
+                        'id' => null,
+                        'date' => $e->date,
+                        'type' => 'expense',
+                        'amount' => $e->amount,
+                        'note' => $e->description,
+                        'payment_method_id' => $e->payment_method_id,
+                        'payment_method' => $e->payment_method,
+                        'sale' => null,
+                        'user' => null
+                    ];
+                });
+
+            $movements = $movements->concat($session_expenses)->sortByDesc('date');
 
             $total_paid = $movements->where('type', 'paid')->sum('amount');
             $total_debt = $movements->where('type', 'debt')->sum('amount');
@@ -55,11 +74,10 @@ class CashboxController extends Controller
                 $paid = $movements->where('payment_method_id', $pm->id)->where('type', 'paid')->sum('amount');
                 $income = $movements->where('payment_method_id', $pm->id)->where('type', 'income')->sum('amount');
                 
-                // Los gastos usualmente son en efectivo, pero si hay movimientos de gasto vinculados a un método, los restamos.
-                $expense = 0;
-                if($pm->id == 1){
-                    $expense = $total_expenses; // Asumimos que los gastos generales son en efectivo
-                }
+                // Calculamos los egresos específicos de este método de pago
+                $expense = Expense::where('payment_method_id', $pm->id)
+                    ->whereBetween('date', [$cashbox->opened_at, now()])
+                    ->sum('amount');
 
                 $balances[$pm->id] = $opening + $paid + $income - $expense;
             } else {
@@ -154,7 +172,9 @@ class CashboxController extends Controller
             $opening = ($pm->id == 1) ? $cashbox->opening_amount : ($cashbox->opening_balances[$pm->id] ?? 0);
             $paid = $movements->where('payment_method_id', $pm->id)->where('type', 'paid')->sum('amount');
             $income = $movements->where('payment_method_id', $pm->id)->where('type', 'income')->sum('amount');
-            $expense = ($pm->id == 1) ? $total_expenses : 0;
+            $expense = Expense::where('payment_method_id', $pm->id)
+                ->whereBetween('date', [$cashbox->opened_at, now()])
+                ->sum('amount');
             
             $closing_balances[$pm->id] = ($opening + $paid + $income) - $expense;
         }
