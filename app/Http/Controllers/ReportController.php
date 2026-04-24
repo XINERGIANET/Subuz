@@ -30,6 +30,15 @@ class ReportController extends Controller
             ->orWhereDate('closed_at', $date)
             ->get();
 
+        foreach($cashboxes as $cb){
+            $start = $cb->opened_at;
+            $end = $cb->is_open ? now() : $cb->closed_at;
+            
+            $cb->expenses_list = \App\Models\Expense::whereBetween('date', [$start, $end])
+                ->with('payment_method')
+                ->get();
+        }
+
         return view('reports.cashbox', compact('cashboxes', 'date'));
     }
 

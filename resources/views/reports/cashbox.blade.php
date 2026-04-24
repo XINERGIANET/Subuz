@@ -69,15 +69,37 @@
                                     $movs = $cb->movements;
                                     $total_paid = $movs->where('type', 'paid')->sum('amount');
                                     $total_income = $movs->where('type', 'income')->sum('amount');
-                                    
-                                    // Los egresos no están en movements?
-                                    // Según CashboxController, se calculan por fecha de Expense.
-                                    // Vamos a replicar esa lógica.
-                                    $start = $cb->opened_at;
-                                    $end = $cb->is_open ? now() : $cb->closed_at;
-                                    
-                                    $total_expenses = \App\Models\Expense::whereBetween('date', [$start, $end])->sum('amount');
+                                    $total_expenses = $cb->expenses_list->sum('amount');
                                     $expected = ($cb->opening_amount + $total_paid + $total_income) - $total_expenses;
+
+                                    // Preparar lista combinada para la tabla de abajo
+                                    $display_list = $movs->map(function($m) {
+                                        return (object)[
+                                            'date' => $m->date,
+                                            'type_label' => $m->type == 'paid' ? 'Venta' : ($m->type == 'income' ? 'Ingreso Manual' : 'Deuda'),
+                                            'type_class' => $m->type == 'paid' ? 'bg-green-lt' : ($m->type == 'income' ? 'bg-blue-lt' : 'bg-yellow-lt'),
+                                            'method' => optional($m->payment_method)->name ?? 'Sin método',
+                                            'amount' => $m->amount,
+                                            'amount_color' => 'text-primary',
+                                            'user' => $m->user->name ?? 'Sistema',
+                                            'note' => $m->note
+                                        ];
+                                    });
+
+                                    $expense_display = $cb->expenses_list->map(function($e) {
+                                        return (object)[
+                                            'date' => $e->date,
+                                            'type_label' => 'Egreso / Gasto',
+                                            'type_class' => 'bg-red-lt',
+                                            'method' => optional($e->payment_method)->name ?? 'Sin método',
+                                            'amount' => $e->amount,
+                                            'amount_color' => 'text-danger',
+                                            'user' => 'N/A',
+                                            'note' => $e->description
+                                        ];
+                                    });
+
+                                    $combined = $display_list->concat($expense_display)->sortByDesc('date');
                                 @endphp
                                 <tr>
                                     <td class="ps-4 fw-bold">S/{{ number_format($cb->opening_amount, 2) }}</td>
@@ -109,21 +131,15 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach($movs as $movement)
+                                    @foreach($combined as $movement)
                                     <tr>
-                                        <td class="ps-4 text-muted">{{ $movement->date ? $movement->date->format('d/m/Y H:i') : 'N/A' }}</td>
+                                        <td class="ps-4 text-muted">{{ $movement->date ? \Carbon\Carbon::parse($movement->date)->format('d/m/Y H:i') : 'N/A' }}</td>
                                         <td>
-                                            @if($movement->type == 'paid')
-                                                <span class="badge bg-green-lt">Venta</span>
-                                            @elseif($movement->type == 'income')
-                                                <span class="badge bg-blue-lt">Ingreso Manual</span>
-                                            @elseif($movement->type == 'debt')
-                                                <span class="badge bg-yellow-lt">Deuda</span>
-                                            @endif
+                                            <span class="badge {{ $movement->type_class }}">{{ $movement->type_label }}</span>
                                         </td>
-                                        <td>{{ optional($movement->payment_method)->name ?? 'Sin método' }}</td>
-                                        <td class="fw-bold text-primary">S/{{ number_format($movement->amount, 2) }}</td>
-                                        <td>{{ $movement->user->name ?? 'Sistema' }}</td>
+                                        <td>{{ $movement->method }}</td>
+                                        <td class="fw-bold {{ $movement->amount_color }}">S/{{ number_format($movement->amount, 2) }}</td>
+                                        <td>{{ $movement->user }}</td>
                                         <td class="pe-4 text-muted small">{{ $movement->note }}</td>
                                     </tr>
                                     @endforeach
