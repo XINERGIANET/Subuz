@@ -987,7 +987,7 @@ class SaleController extends Controller
         }
 
         // 5. Expenses in period
-        $expenses = Expense::whereBetween('date', [$start_date, $end_date])
+        $expenses = Expense::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
             ->with('payment_method')
             ->get();
         
@@ -1058,7 +1058,7 @@ class SaleController extends Controller
             ->with(['payment_method', 'sale'])
             ->get();
 
-        $expenses = Expense::whereBetween('date', [$start_date, $end_date])
+        $expenses = Expense::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
             ->with('payment_method')
             ->get();
         $total_expenses = $expenses->sum('amount');
