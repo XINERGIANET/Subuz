@@ -213,9 +213,7 @@
 												<a class="dropdown-item" href="{{ route('reports.cashbox') }}">
 													<i class="ti ti-cash icon me-2"></i> Cierres de caja
 												</a>
-												<a class="dropdown-item" href="{{ route('reports.deleted_invoices') }}">
-													<i class="ti ti-file-x icon me-2"></i> Comprobantes eliminados
-												</a>
+
 											</div>
 										</div>
 									</div>
