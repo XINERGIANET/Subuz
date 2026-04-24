@@ -51,13 +51,23 @@
                                 @if($ins->status == 'Pagado')
                                     <div class="d-flex flex-column gap-1">
                                         @foreach($ins->payments as $p)
-                                        <div class="d-flex align-items-center gap-2">
-                                            <div class="avatar avatar-xs bg-green-lt p-1" style="width: 1.2rem; height: 1.2rem;">
-                                                <i class="ti ti-check fs-5"></i>
+                                        <div class="d-flex align-items-center justify-content-between mb-1">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="avatar avatar-xs bg-green-lt p-1" style="width: 1.2rem; height: 1.2rem;">
+                                                    <i class="ti ti-check fs-5"></i>
+                                                </div>
+                                                <div class="small">
+                                                    <span class="fw-bold">S/{{ number_format($p->amount, 2) }}</span>
+                                                    <span class="text-muted">({{ $p->payment_method->name ?? 'Externo' }})</span>
+                                                </div>
                                             </div>
-                                            <div class="small">
-                                                <span class="fw-bold">S/{{ number_format($p->amount, 2) }}</span>
-                                                <span class="text-muted">({{ $p->payment_method->name ?? 'Externo' }})</span>
+                                            <div class="d-flex gap-1">
+                                                <button class="btn btn-icon btn-ghost-info btn-xs btn-edit-payment" data-id="{{ $p->id }}" data-bs-toggle="tooltip" title="Editar Pago">
+                                                    <i class="ti ti-pencil fs-4"></i>
+                                                </button>
+                                                <button class="btn btn-icon btn-ghost-danger btn-xs btn-delete-payment" data-id="{{ $p->id }}" data-bs-toggle="tooltip" title="Eliminar Pago">
+                                                    <i class="ti ti-trash fs-4"></i>
+                                                </button>
                                             </div>
                                         </div>
                                         @endforeach
@@ -196,6 +206,54 @@
             </form>
     </div>
 </div>
+</div>
+
+<!-- Modal Editar Pago -->
+<div class="modal modal-blur fade" id="editPaymentModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <form id="editPaymentForm" method="POST">
+                @csrf
+                @method('PATCH')
+                <div class="modal-header">
+                    <h5 class="modal-title">Editar Pago de Cuota</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Monto</label>
+                        <div class="input-group">
+                            <span class="input-group-text">S/</span>
+                            <input type="number" step="0.01" class="form-control" name="amount" id="edit_p_amount" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Fecha de Pago</label>
+                        <input type="date" class="form-control" name="payment_date" id="edit_p_date" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Método de Pago</label>
+                        <select class="form-select" name="payment_method_id" id="edit_p_method">
+                            <option value="">Externo (No afecta caja)</option>
+                            @foreach($payment_methods as $pm)
+                                <option value="{{ $pm->id }}">{{ $pm->name }}</option>
+                            @endforeach
+                        </select>
+                        <small class="text-muted">Si cambias el método o monto, el gasto asociado en caja se actualizará automáticamente.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notas / Observaciones</label>
+                        <textarea class="form-control" name="notes" id="edit_p_notes" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-brand">Actualizar Pago</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 @endsection
 
@@ -283,5 +341,63 @@
         }
     });
 
+    $(document).on('click', '.btn-edit-payment', function() {
+        let id = $(this).data('id');
+        // Hide tooltip
+        $(this).tooltip('hide');
+        $.get(`/finances/payment/${id}/edit`, function(data) {
+            $('#edit_p_amount').val(data.amount);
+            if (data.payment_date) {
+                $('#edit_p_date').val(data.payment_date.split('T')[0]);
+            }
+            $('#edit_p_method').val(data.payment_method_id);
+            $('#edit_p_notes').val(data.notes);
+            
+            $('#editPaymentForm').attr('action', `/finances/payment/${id}`);
+            $('#editPaymentModal').modal('show');
+        });
+    });
+
+    $('#editPaymentForm').submit(function(e) {
+        e.preventDefault();
+        let url = $(this).attr('action');
+        $.ajax({
+            url: url,
+            type: 'PATCH',
+            data: $(this).serialize(),
+            success: function(data) {
+                if (data.status) {
+                    $('#editPaymentModal').modal('hide');
+                    ToastMessage.fire({ text: 'Pago actualizado correctamente.' }).then(() => {
+                        location.reload();
+                    });
+                }
+            }
+        });
+    });
+
+    $(document).on('click', '.btn-delete-payment', function() {
+        let id = $(this).data('id');
+        ToastConfirm.fire({
+            text: '¿Estás seguro de eliminar este pago? Si fue un pago interno, el gasto asociado en caja también será eliminado.',
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: `/finances/payment/${id}`,
+                    type: 'DELETE',
+                    data: {
+                        _token: '{{ csrf_token() }}'
+                    },
+                    success: function(data) {
+                        if (data.status) {
+                            ToastMessage.fire({ text: 'Pago eliminado correctamente.' }).then(() => {
+                                location.reload();
+                            });
+                        }
+                    }
+                });
+            }
+        });
+    });
 </script>
 @endsection

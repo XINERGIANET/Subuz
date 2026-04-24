@@ -148,10 +148,11 @@ Route::middleware('auth')->group(function () {
 	});
 
 	Route::middleware('role:admin|viewer')->group(function () {
-		Route::get('finances', [FinanceController::class, 'index'])->name('finances.index');
-		Route::post('finances', [FinanceController::class, 'store'])->name('finances.store');
-		Route::get('finances/{finance}', [FinanceController::class, 'show'])->name('finances.show');
+		Route::resource('finances', FinanceController::class)->except(['create']);
 		Route::post('finances/payment', [FinanceController::class, 'storePayment'])->name('finances.payment');
+		Route::get('finances/payment/{payment}/edit', [FinanceController::class, 'editPayment'])->name('finances.payment.edit');
+		Route::patch('finances/payment/{payment}', [FinanceController::class, 'updatePayment'])->name('finances.payment.update');
+		Route::delete('finances/payment/{payment}', [FinanceController::class, 'destroyPayment'])->name('finances.payment.destroy');
 	});
 
 	Route::middleware('role:admin|seller|viewer|asistente')->group(function () {

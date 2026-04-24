@@ -561,9 +561,17 @@
                         <!-- Dynamic summary -->
                     </div>
 
+
+
                     <div class="card border-0 shadow-sm p-3 mb-3">
                         <h4 class="fw-bold text-danger border-bottom pb-2 mb-3">Ingresos por Método (Efectivo, Yape, etc)</h4>
                         <div class="row g-2" id="report-methods-container">
+                            <!-- Dynamic methods -->
+                        </div>
+                    </div>
+                    <div class="card border-0 shadow-sm p-3 mb-3 d-none" id="report-expenses-card">
+                        <h4 class="fw-bold text-danger border-bottom pb-2 mb-3">Egresos por Método (Gastos)</h4>
+                        <div class="row g-2" id="report-expenses-methods-container">
                             <!-- Dynamic methods -->
                         </div>
                     </div>
@@ -681,6 +689,26 @@
 		}
 
 		$('#report-methods-container').html(methodsHtml);
+
+		// Render Expenses Methods
+		let expensesMethodsHtml = '';
+		const expensesMethods = data.summary.expenses_methods;
+		if (expensesMethods && Object.keys(expensesMethods).length > 0) {
+			Object.keys(expensesMethods).forEach(method => {
+				expensesMethodsHtml += `
+					<div class="col-6 col-md-3">
+						<div class="p-2 border rounded bg-light">
+							<div class="small text-muted text-uppercase">${method}</div>
+							<div class="fw-bold text-danger">S/ ${parseFloat(expensesMethods[method]).toFixed(2)}</div>
+						</div>
+					</div>
+				`;
+			});
+			$('#report-expenses-methods-container').html(expensesMethodsHtml);
+			$('#report-expenses-card').removeClass('d-none');
+		} else {
+			$('#report-expenses-card').addClass('d-none');
+		}
 	}
 </script>
 <script>

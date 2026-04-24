@@ -33,7 +33,7 @@ class CashboxMovement extends Model
     }
 
     public function payment_method(){
-        return $this->belongsTo(PaymentMethod::class);
+        return $this->belongsTo(PaymentMethod::class)->withTrashed();
     }
 
     public function user(){

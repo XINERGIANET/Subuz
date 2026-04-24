@@ -29,6 +29,18 @@ class SaleController extends Controller
                 return $q->where('client_id', $client_id);
             })
             ->when($request->type, function($q, $type){
+                if ($type == 'Pago pendiente') {
+                    return $q->where(function($sq) {
+                        $sq->where('type', 'Pago pendiente')
+                          ->orWhere(function($ssq) {
+                              $ssq->where('type', 'Contado')
+                                  ->where('paid', 0)
+                                  ->whereHas('movements', function($mq) {
+                                      $mq->where('type', 'debt');
+                                  });
+                          });
+                    });
+                }
                 return $q->where('type', $type);
             })
             ->when($request->start_date, function($q, $start_date){
@@ -948,8 +960,8 @@ class SaleController extends Controller
             ->get();
 
         $methods_totals = [];
+        $previous_days_payments = [];
         $previous_days_payments_count = 0;
-        $processed_sales = [];
 
         foreach ($movements as $mov) {
             if ($mov->type == 'paid' || $mov->type == 'income') {
@@ -958,19 +970,35 @@ class SaleController extends Controller
                 $methods_totals[$method_name] += $mov->amount;
 
                 // Check if it's a payment for a sale from previous days
-                if ($mov->sale_id && $mov->sale) {
+                if ($mov->type == 'paid' && $mov->sale_id && $mov->sale) {
                     $sale_date = $mov->sale->date->toDateString();
-                    if ($sale_date < $start_date && !isset($processed_sales[$mov->sale_id])) {
+                    if ($sale_date < $start_date) {
                         $previous_days_payments_count++;
-                        $processed_sales[$mov->sale_id] = true;
+                        $previous_days_payments[] = [
+                            'client' => optional($mov->sale->client)->name ?? 'Consumidor Final',
+                            'guide' => $mov->sale->guide ?? $mov->sale->order,
+                            'sale_date' => $mov->sale->date->format('d/m/Y'),
+                            'amount' => number_format($mov->amount, 2, '.', ''),
+                            'method' => $method_name
+                        ];
                     }
                 }
             }
         }
 
         // 5. Expenses in period
-        $expenses = Expense::whereBetween('date', [$start_date, $end_date])->get();
+        $expenses = Expense::whereBetween('date', [$start_date, $end_date])
+            ->with('payment_method')
+            ->get();
+        
         $total_expenses = $expenses->sum('amount');
+        $expenses_methods_totals = [];
+
+        foreach ($expenses as $exp) {
+            $method_name = optional($exp->payment_method)->name ?? 'S/M';
+            if (!isset($expenses_methods_totals[$method_name])) $expenses_methods_totals[$method_name] = 0;
+            $expenses_methods_totals[$method_name] += $exp->amount;
+        }
 
         return response()->json([
             'status' => true,
@@ -984,7 +1012,9 @@ class SaleController extends Controller
                 'total_not_delivered' => number_format($total_not_delivered, 2, '.', ''),
                 'total_expenses' => number_format($total_expenses, 2, '.', ''),
                 'methods' => $methods_totals,
-                'previous_payments_count' => $previous_days_payments_count
+                'expenses_methods' => $expenses_methods_totals,
+                'previous_payments_count' => $previous_days_payments_count,
+                'previous_payments' => $previous_days_payments
             ]
         ]);
     }
@@ -1028,7 +1058,17 @@ class SaleController extends Controller
             ->with(['payment_method', 'sale'])
             ->get();
 
-        $expenses = Expense::whereBetween('date', [$start_date, $end_date])->get();
+        $expenses = Expense::whereBetween('date', [$start_date, $end_date])
+            ->with('payment_method')
+            ->get();
+        $total_expenses = $expenses->sum('amount');
+
+        $expenses_methods_totals = [];
+        foreach ($expenses as $exp) {
+            $method_name = optional($exp->payment_method)->name ?? 'S/M';
+            if (!isset($expenses_methods_totals[$method_name])) $expenses_methods_totals[$method_name] = 0;
+            $expenses_methods_totals[$method_name] += $exp->amount;
+        }
 
         $fpdf = new Fpdf;
         $fpdf->AddPage();
@@ -1068,7 +1108,7 @@ class SaleController extends Controller
         $fpdf->Cell(30, 8, 'S/ '.number_format($total_not_delivered, 2), 0, 1, 'R');
         
         $fpdf->Cell(60, 8, utf8_decode('Total Gastos:'), 0, 0, 'L');
-        $fpdf->Cell(30, 8, 'S/ '.number_format($expenses->sum('amount'), 2), 0, 1, 'R');
+        $fpdf->Cell(30, 8, 'S/ '.number_format($total_expenses, 2), 0, 1, 'R');
         $fpdf->Ln(5);
 
         // Ingresos por método de pago
@@ -1077,19 +1117,23 @@ class SaleController extends Controller
         $fpdf->Cell(190, 10, utf8_decode('INGRESOS POR MÉTODO DE PAGO'), 0, 1, 'L');
         
         $methods_totals = [];
-        $prev_payments_count = 0;
-        $processed_sales = [];
+        $prev_payments_data = [];
         foreach ($movements as $mov) {
             if ($mov->type == 'paid' || $mov->type == 'income') {
                 $method_name = optional($mov->payment_method)->name ?? 'Manual';
                 if (!isset($methods_totals[$method_name])) $methods_totals[$method_name] = 0;
                 $methods_totals[$method_name] += $mov->amount;
 
-                if ($mov->sale_id && $mov->sale) {
+                if ($mov->type == 'paid' && $mov->sale_id && $mov->sale) {
                     $sale_date = $mov->sale->date->toDateString();
-                    if ($sale_date < $start_date && !isset($processed_sales[$mov->sale_id])) {
-                        $prev_payments_count++;
-                        $processed_sales[$mov->sale_id] = true;
+                    if ($sale_date < $start_date) {
+                        $prev_payments_data[] = [
+                            'client' => optional($mov->sale->client)->name ?? 'Consumidor Final',
+                            'guide' => $mov->sale->guide ?? $mov->sale->order,
+                            'sale_date' => $mov->sale->date->format('d/m/Y'),
+                            'amount' => $mov->amount,
+                            'method' => $method_name
+                        ];
                     }
                 }
             }
@@ -1102,19 +1146,65 @@ class SaleController extends Controller
             $fpdf->Cell(30, 8, 'S/ '.number_format($amount, 2), 0, 1, 'R');
         }
 
-        if ($prev_payments_count > 0) {
-            $fpdf->Ln(2);
-            $fpdf->SetFont('Montserrat', '', 10);
-            $fpdf->SetTextColor(80, 80, 80);
-            $fpdf->Cell(190, 8, utf8_decode("* Incluye {$prev_payments_count} pagos de ventas de días anteriores."), 0, 1, 'L');
+        // Egresos por método de pago
+        if (count($expenses_methods_totals) > 0) {
+            $fpdf->Ln(5);
+            $fpdf->SetFont('Montserrat', 'B', 12);
+            $fpdf->SetTextColor(166, 2, 2);
+            $fpdf->Cell(190, 10, utf8_decode('EGRESOS POR MÉTODO DE PAGO'), 0, 1, 'L');
+            
+            $fpdf->SetFont('Montserrat', '', 11);
+            $fpdf->SetTextColor(0, 0, 0);
+            foreach($expenses_methods_totals as $name => $amount){
+                $fpdf->Cell(60, 8, utf8_decode($name . ':'), 0, 0, 'L');
+                $fpdf->Cell(30, 8, 'S/ '.number_format($amount, 2), 0, 1, 'R');
+            }
+        }
+
+        if (count($prev_payments_data) > 0) {
+            $fpdf->Ln(5);
+            $fpdf->SetFont('Montserrat', 'B', 12);
+            $fpdf->SetTextColor(28, 115, 71);
+            $fpdf->Cell(190, 10, utf8_decode('DETALLE DE PAGOS DE VENTAS ANTERIORES'), 0, 1, 'L');
+
+            $fpdf->SetFillColor(230, 245, 235);
+            $fpdf->SetTextColor(0, 0, 0);
+            $fpdf->SetFont('Montserrat', 'B', 9);
+            
+            $fpdf->Cell(25, 8, utf8_decode('GUÍA'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 8, utf8_decode('F. VENTA'), 1, 0, 'C', true);
+            $fpdf->Cell(70, 8, utf8_decode('CLIENTE'), 1, 0, 'C', true);
+            $fpdf->Cell(35, 8, utf8_decode('MÉTODO'), 1, 0, 'C', true);
+            $fpdf->Cell(35, 8, utf8_decode('MONTO'), 1, 1, 'C', true);
+
+            $fpdf->SetFont('Montserrat', '', 8);
+            foreach($prev_payments_data as $pp) {
+                $fpdf->Cell(25, 7, utf8_decode($pp['guide']), 1, 0, 'C');
+                $fpdf->Cell(25, 7, $pp['sale_date'], 1, 0, 'C');
+                $fpdf->Cell(70, 7, utf8_decode(substr($pp['client'], 0, 40)), 1, 0, 'L');
+                $fpdf->Cell(35, 7, utf8_decode($pp['method']), 1, 0, 'C');
+                $fpdf->Cell(35, 7, 'S/ '.number_format($pp['amount'], 2), 1, 1, 'R');
+            }
         }
         $fpdf->Ln(10);
 
-        // Detailed Sales Table (Sales GENERATED in period)
-        $sales_generated = (clone $sales_period)->with(['client', 'payment_method'])->get();
+
+        
+        // Detailed Sales Table (Sales DELIVERED in period)
+        $sales_generated = (clone $sales_period)
+            ->where(function($q){
+                $q->where('paid', 1)
+                ->orWhere('type', 'Pago pendiente')
+                ->orWhereHas('movements', function($mq){
+                    $mq->where('type', 'debt');
+                });
+            })
+            ->with(['client', 'payments.payment_method'])
+            ->get();
+
         $fpdf->SetFont('Montserrat', 'B', 12);
         $fpdf->SetTextColor(2, 93, 166);
-        $fpdf->Cell(190, 10, utf8_decode('DETALLE DE VENTAS GENERADAS EN EL PERIODO'), 0, 1, 'L');
+        $fpdf->Cell(190, 10, utf8_decode('DETALLE DE VENTAS ENTREGADAS EN EL PERIODO'), 0, 1, 'L');
 
         $fpdf->SetFillColor(2, 93, 166);
         $fpdf->SetTextColor(255, 255, 255);
@@ -1132,6 +1222,19 @@ class SaleController extends Controller
         foreach($sales_generated as $sale){
             $clientName = utf8_decode(optional($sale->client)->name ?? 'Consumidor Final');
             
+            // Determine type text based on payment status and methods
+            $typeText = $sale->type;
+            if ($sale->type == 'Contado' || $sale->type == 'Pago pendiente') {
+                if ($sale->paid) {
+                    $methods = $sale->payments->map(function($p) {
+                        return optional($p->payment_method)->name;
+                    })->filter()->unique()->implode(', ');
+                    $typeText = $methods ?: 'Contado';
+                } else {
+                    $typeText = 'Pago pendiente';
+                }
+            }
+
             $x = $fpdf->GetX();
             $y = $fpdf->GetY();
             $rowHeight = 12; // Fixed height to accommodate long names
@@ -1141,24 +1244,21 @@ class SaleController extends Controller
                 $fpdf->AddPage();
                 $y = $fpdf->GetY();
                 $x = $fpdf->GetX();
-                
-                // Redraw header if needed? Usually FPDF handles this if set, but we didn't set a header method.
-                // For now, just continue.
             }
 
             $fpdf->Cell(25, $rowHeight, utf8_decode($sale->guide), 1, 0, 'C');
             $fpdf->Cell(25, $rowHeight, $sale->date->format('d/m/Y'), 1, 0, 'C');
             
-            // MultiCell for client name with smaller line height
+            // MultiCell for client name
             $fpdf->SetXY($x + 50, $y);
             $fpdf->MultiCell(70, 4, $clientName, 0, 'L');
             
-            // Draw the border for the client cell manually to cover the full rowHeight
+            // Draw the border for the client cell manually
             $fpdf->SetXY($x + 50, $y);
             $fpdf->Cell(70, $rowHeight, '', 1, 0);
 
             $fpdf->SetXY($x + 120, $y);
-            $fpdf->Cell(35, $rowHeight, utf8_decode($sale->type), 1, 0, 'C');
+            $fpdf->Cell(35, $rowHeight, utf8_decode($typeText), 1, 0, 'C');
             $fpdf->Cell(35, $rowHeight, 'S/ '.number_format($sale->total, 2), 1, 1, 'R');
         }
 

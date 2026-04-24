@@ -21,6 +21,6 @@ class Expense extends Model
     public $timestamps = false;
 
     public function payment_method(){
-        return $this->belongsTo(PaymentMethod::class);
+        return $this->belongsTo(PaymentMethod::class)->withTrashed();
     }
 }

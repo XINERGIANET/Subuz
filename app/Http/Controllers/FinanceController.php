@@ -118,4 +118,128 @@ class FinanceController extends Controller
 
         return redirect()->back()->with('success', 'Pago registrado correctamente.');
     }
+
+    public function edit($id)
+    {
+        $loan = BankLoan::findOrFail($id);
+        return response()->json($loan);
+    }
+
+    public function update(Request $request, $id)
+    {
+        $loan = BankLoan::findOrFail($id);
+        $data = $request->validate([
+            'bank_name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'total_amount' => 'required|numeric|min:0',
+            'installments_total' => 'required|integer|min:1',
+            'monthly_amount' => 'nullable|numeric|min:0',
+            'start_date' => 'required|date',
+            'status' => 'required|string'
+        ]);
+
+        $loan->update($data);
+
+        return redirect()->route('finances.index')->with('success', 'Crédito actualizado correctamente.');
+    }
+
+    public function destroy($id)
+    {
+        $loan = BankLoan::findOrFail($id);
+        $loan->delete();
+
+        return response()->json(['status' => true]);
+    }
+
+    public function editPayment($id)
+    {
+        $payment = LoanPayment::with('payment_method')->findOrFail($id);
+        return response()->json($payment);
+    }
+
+    public function updatePayment(Request $request, $id)
+    {
+        $payment = LoanPayment::findOrFail($id);
+        $old_amount = $payment->amount;
+        $old_method = $payment->payment_method_id;
+        $old_date = $payment->payment_date->toDateString();
+
+        $data = $request->validate([
+            'amount' => 'required|numeric|min:0',
+            'payment_date' => 'required|date',
+            'payment_method_id' => 'nullable|exists:payment_methods,id',
+            'notes' => 'nullable|string'
+        ]);
+
+        // Find associated expense
+        $loan = $payment->loan;
+        $description = 'Pago de Cuota ' . $payment->installment_number . ' - Crédito Banco ' . $loan->bank_name;
+        
+        $expense = Expense::where('description', $description)
+            ->where('amount', $old_amount)
+            ->where('payment_method_id', $old_method)
+            // Using whereDate because 'date' column might be date or datetime
+            ->whereDate('date', $old_date)
+            ->first();
+
+        $payment->update($data);
+
+        if ($expense) {
+            if ($data['payment_method_id']) {
+                $expense->update([
+                    'amount' => $data['amount'],
+                    'payment_method_id' => $data['payment_method_id'],
+                    'date' => $data['payment_date']
+                ]);
+            } else {
+                // If it became external, remove expense
+                $expense->delete();
+            }
+        } elseif ($data['payment_method_id']) {
+            // If it wasn't internal but now it is, create expense
+            Expense::create([
+                'description' => $description,
+                'amount' => $data['amount'],
+                'payment_method_id' => $data['payment_method_id'],
+                'date' => $data['payment_date']
+            ]);
+        }
+
+        // Check loan status
+        if ($loan->fresh()->remaining_balance <= 0.1) {
+            $loan->update(['status' => 'Pagado']);
+        } else {
+            $loan->update(['status' => 'Activo']);
+        }
+
+        return response()->json(['status' => true]);
+    }
+
+    public function destroyPayment($id)
+    {
+        $payment = LoanPayment::findOrFail($id);
+        
+        // Find associated expense
+        $loan = $payment->loan;
+        $description = 'Pago de Cuota ' . $payment->installment_number . ' - Crédito Banco ' . $loan->bank_name;
+        
+        $expense = Expense::where('description', $description)
+            ->where('amount', $payment->amount)
+            ->where('payment_method_id', $payment->payment_method_id)
+            ->whereDate('date', $payment->payment_date->toDateString())
+            ->first();
+
+        if ($expense) {
+            $expense->delete();
+        }
+
+        $payment->delete();
+
+        // Check loan status
+        if ($loan->fresh()->remaining_balance > 0.1) {
+            $loan->update(['status' => 'Activo']);
+        }
+
+        return response()->json(['status' => true]);
+    }
 }

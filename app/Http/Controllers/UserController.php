@@ -189,7 +189,8 @@ class UserController extends Controller
         // Payment Method Breakdown
         $methods_totals = [];
         $total_delivered = 0;
-        $total_credit = 0;
+        $total_actual_credit = 0;
+        $total_pending_cash = 0;
 
         foreach($movements as $mov){
             if($mov->type == 'paid'){
@@ -198,7 +199,11 @@ class UserController extends Controller
                 $methods_totals[$method_name] += $mov->amount;
                 $total_delivered += $mov->amount;
             } elseif($mov->type == 'debt'){
-                $total_credit += $mov->amount;
+                if(optional($mov->sale)->type == 'Contado'){
+                    $total_pending_cash += $mov->amount;
+                } else {
+                    $total_actual_credit += $mov->amount;
+                }
                 $total_delivered += $mov->amount;
             }
         }
@@ -214,7 +219,9 @@ class UserController extends Controller
             $fpdf->Cell(30, 8, 'S/ '.number_format($amount, 2), 0, 1, 'R');
         }
         $fpdf->Cell(60, 8, utf8_decode('Ventas a Crédito:'), 0, 0, 'L');
-        $fpdf->Cell(30, 8, 'S/ '.number_format($total_credit, 2), 0, 1, 'R');
+        $fpdf->Cell(30, 8, 'S/ '.number_format($total_actual_credit, 2), 0, 1, 'R');
+        $fpdf->Cell(60, 8, utf8_decode('Pendientes de Pago:'), 0, 0, 'L');
+        $fpdf->Cell(30, 8, 'S/ '.number_format($total_pending_cash, 2), 0, 1, 'R');
         
         $fpdf->SetFont('Montserrat', 'B', 11);
         $fpdf->Cell(60, 10, utf8_decode('TOTAL ENTREGADO:'), 0, 0, 'L');
@@ -229,7 +236,7 @@ class UserController extends Controller
         $fpdf->Cell(25, 10, utf8_decode('GUÍA'), 1, 0, 'C', true);
         $fpdf->Cell(25, 10, utf8_decode('FECHA'), 1, 0, 'C', true);
         $fpdf->Cell(60, 10, utf8_decode('CLIENTE'), 1, 0, 'C', true);
-        $fpdf->Cell(30, 10, utf8_decode('TIPO'), 1, 0, 'C', true);
+        $fpdf->Cell(30, 10, utf8_decode('MÉTODO'), 1, 0, 'C', true);
         $fpdf->Cell(25, 10, utf8_decode('PAGO'), 1, 0, 'C', true);
         $fpdf->Cell(25, 10, utf8_decode('MONTO'), 1, 1, 'C', true);
 
@@ -239,11 +246,28 @@ class UserController extends Controller
         foreach($movements as $mov){
             $sale = $mov->sale;
             if(!$sale) continue;
+
+            $method_name = '';
+            $payment_status = '';
+
+            if($mov->type == 'paid'){
+                $method_name = optional($mov->payment_method)->name ?? 'Manual';
+                $payment_status = 'PAGADO';
+            } else {
+                if($sale->type == 'Contado'){
+                    $method_name = 'PENDIENTE';
+                    $payment_status = 'CONTADO';
+                } else {
+                    $method_name = 'N/A';
+                    $payment_status = utf8_decode('CRÉDITO');
+                }
+            }
+
             $fpdf->Cell(25, 8, utf8_decode($sale->guide), 1, 0, 'C');
             $fpdf->Cell(25, 8, date('d/m/Y', strtotime($mov->date)), 1, 0, 'C');
             $fpdf->Cell(60, 8, utf8_decode(optional($sale->client)->name ?? 'Consumidor Final'), 1, 0, 'L');
-            $fpdf->Cell(30, 8, utf8_decode($sale->type), 1, 0, 'C');
-            $fpdf->Cell(25, 8, $mov->type == 'paid' ? 'PAGADO' : utf8_decode('CRÉDITO'), 1, 0, 'C');
+            $fpdf->Cell(30, 8, utf8_decode($method_name), 1, 0, 'C');
+            $fpdf->Cell(25, 8, $payment_status, 1, 0, 'C');
             $fpdf->Cell(25, 8, 'S/ '.number_format($mov->amount, 2), 1, 1, 'R');
         }
 
@@ -272,7 +296,8 @@ class UserController extends Controller
 
         $methods_totals = [];
         $total_delivered = 0;
-        $total_credit = 0;
+        $total_actual_credit = 0;
+        $total_pending_cash = 0;
 
         foreach ($movements as $mov) {
             if ($mov->type == 'paid') {
@@ -281,18 +306,35 @@ class UserController extends Controller
                 $methods_totals[$method_name] += $mov->amount;
                 $total_delivered += $mov->amount;
             } elseif ($mov->type == 'debt') {
-                $total_credit += $mov->amount;
+                if(optional($mov->sale)->type == 'Contado'){
+                    $total_pending_cash += $mov->amount;
+                } else {
+                    $total_actual_credit += $mov->amount;
+                }
                 $total_delivered += $mov->amount;
             }
         }
 
         $formatted_movements = $movements->map(function ($mov) {
+            $sale = $mov->sale;
+            $method_name = 'N/A';
+            $payment_status = $mov->type == 'paid' ? 'PAGADO' : 'CRÉDITO';
+
+            if($mov->type == 'paid'){
+                $method_name = optional($mov->payment_method)->name ?? 'Manual';
+            } else {
+                if(optional($sale)->type == 'Contado'){
+                    $method_name = 'PENDIENTE';
+                    $payment_status = 'CONTADO';
+                }
+            }
+
             return [
-                'guide' => optional($mov->sale)->guide ?? 'N/A',
+                'guide' => optional($sale)->guide ?? 'N/A',
                 'date' => date('d/m/Y H:i', strtotime($mov->date)),
-                'client' => optional(optional($mov->sale)->client)->name ?? 'Consumidor Final',
-                'type' => optional($mov->sale)->type ?? 'N/A',
-                'payment_status' => $mov->type == 'paid' ? 'PAGADO' : 'CRÉDITO',
+                'client' => optional(optional($sale)->client)->name ?? 'Consumidor Final',
+                'type' => $method_name,
+                'payment_status' => $payment_status,
                 'amount' => number_format($mov->amount, 2, '.', '')
             ];
         });
@@ -306,7 +348,8 @@ class UserController extends Controller
             ],
             'summary' => [
                 'methods' => $methods_totals,
-                'credit' => number_format($total_credit, 2, '.', ''),
+                'credit' => number_format($total_actual_credit, 2, '.', ''),
+                'pending' => number_format($total_pending_cash, 2, '.', ''),
                 'total' => number_format($total_delivered, 2, '.', '')
             ],
             'movements' => $formatted_movements

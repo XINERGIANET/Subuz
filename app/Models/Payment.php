@@ -25,6 +25,6 @@ class Payment extends Model
     }
 
     public function payment_method(){
-        return $this->belongsTo(PaymentMethod::class);
+        return $this->belongsTo(PaymentMethod::class)->withTrashed();
     }
 }

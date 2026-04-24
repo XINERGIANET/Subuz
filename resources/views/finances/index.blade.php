@@ -75,9 +75,17 @@
                         </span>
                     </td>
                     <td class="text-end">
-                        <a href="{{ route('finances.show', $loan->id) }}" class="btn btn-icon btn-outline-primary" data-bs-toggle="tooltip" title="Ver Detalles / Pagos">
-                            <i class="ti ti-eye fs-2"></i>
-                        </a>
+                        <div class="d-flex justify-content-end gap-1">
+                            <a href="{{ route('finances.show', $loan->id) }}" class="btn btn-icon btn-outline-primary" data-bs-toggle="tooltip" title="Ver Detalles / Pagos">
+                                <i class="ti ti-eye fs-2"></i>
+                            </a>
+                            <button class="btn btn-icon btn-outline-info btn-edit" data-id="{{ $loan->id }}" data-bs-toggle="tooltip" title="Editar">
+                                <i class="ti ti-pencil fs-2"></i>
+                            </button>
+                            <button class="btn btn-icon btn-outline-danger btn-delete" data-id="{{ $loan->id }}" data-bs-toggle="tooltip" title="Eliminar">
+                                <i class="ti ti-trash fs-2"></i>
+                            </button>
+                        </div>
                     </td>
                 </tr>
                 @empty
@@ -147,4 +155,110 @@
     </div>
   </div>
 </div>
+<!-- Modal Edit Loan -->
+<div class="modal modal-blur fade" id="editLoanModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+        <form id="editLoanForm" method="POST">
+            @csrf
+            @method('PATCH')
+            <div class="modal-header">
+              <h5 class="modal-title">Editar Crédito</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">Banco / Entidad</label>
+                <input type="text" class="form-control" name="bank_name" id="edit_bank_name" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Descripción / Motivo</label>
+                <textarea class="form-control" name="description" id="edit_description" rows="2"></textarea>
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Monto Total</label>
+                    <div class="input-group">
+                        <span class="input-group-text">S/</span>
+                        <input type="number" step="0.01" class="form-control" name="total_amount" id="edit_total_amount" required>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">N° de Cuotas</label>
+                    <input type="number" class="form-control" name="installments_total" id="edit_installments_total" required min="1">
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Monto Cuota (Estimado)</label>
+                    <div class="input-group">
+                        <span class="input-group-text">S/</span>
+                        <input type="number" step="0.01" class="form-control" name="monthly_amount" id="edit_monthly_amount">
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Fecha de Inicio</label>
+                    <input type="date" class="form-control" name="start_date" id="edit_start_date" required>
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Estado</label>
+                <select class="form-select" name="status" id="edit_status">
+                    <option value="Activo">Activo</option>
+                    <option value="Pagado">Pagado</option>
+                </select>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn me-auto" data-bs-dismiss="modal">Cerrar</button>
+              <button type="submit" class="btn btn-brand">Actualizar Crédito</button>
+            </div>
+        </form>
+    </div>
+  </div>
+</div>
+
+@section('scripts')
+<script>
+    $(document).on('click', '.btn-edit', function() {
+        let id = $(this).data('id');
+        $.get(`/finances/${id}/edit`, function(data) {
+            $('#edit_bank_name').val(data.bank_name);
+            $('#edit_description').val(data.description);
+            $('#edit_total_amount').val(data.total_amount);
+            $('#edit_installments_total').val(data.installments_total);
+            $('#edit_monthly_amount').val(data.monthly_amount);
+            $('#edit_start_date').val(data.start_date.split('T')[0]);
+            $('#edit_status').val(data.status);
+            
+            $('#editLoanForm').attr('action', `/finances/${id}`);
+            $('#editLoanModal').modal('show');
+        });
+    });
+
+    $(document).on('click', '.btn-delete', function() {
+        let id = $(this).data('id');
+        ToastConfirm.fire({
+            text: '¿Estás seguro de eliminar este crédito? Esta acción no se puede deshacer.',
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: `/finances/${id}`,
+                    type: 'DELETE',
+                    data: {
+                        _token: '{{ csrf_token() }}'
+                    },
+                    success: function(data) {
+                        if (data.status) {
+                            ToastMessage.fire({ text: 'Crédito eliminado correctamente.' }).then(() => {
+                                location.reload();
+                            });
+                        }
+                    }
+                });
+            }
+        });
+    });
+</script>
+@endsection
 @endsection

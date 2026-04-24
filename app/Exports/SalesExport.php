@@ -30,6 +30,18 @@ class SalesExport implements FromCollection, WithHeadings, WithMapping, WithStyl
                 return $q->where('client_id', $client_id);
             })
             ->when($this->request->type, function($q, $type){
+                if ($type == 'Pago pendiente') {
+                    return $q->where(function($sq) {
+                        $sq->where('type', 'Pago pendiente')
+                          ->orWhere(function($ssq) {
+                              $ssq->where('type', 'Contado')
+                                  ->where('paid', 0)
+                                  ->whereHas('movements', function($mq) {
+                                      $mq->where('type', 'debt');
+                                  });
+                          });
+                    });
+                }
                 return $q->where('type', $type);
             })
             ->when($this->request->start_date, function($q, $start_date){
