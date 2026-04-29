@@ -108,8 +108,13 @@
 					<div class="row">
 						<div class="col-lg-6">
 							<div class="mb-3">
-								<label class="form-label">RUC o DNI</label>
-								<input type="text" class="form-control" name="document">
+								<label class="form-label">RUC o DNI <span class="text-danger">*</span></label>
+								<div class="input-group">
+									<input type="text" class="form-control" name="document" id="createDocument" required>
+									<button class="btn btn-primary" type="button" id="btnSearchDocument" title="Buscar en RENIEC/SUNAT">
+										<i class="ti ti-search"></i>
+									</button>
+								</div>
 							</div>
 						</div>
 						<div class="col-lg-6">
@@ -260,6 +265,51 @@
 
 @section('scripts')
 <script>
+
+	$('#btnSearchDocument').click(function() {
+		let documentNumber = $('#createDocument').val().trim();
+		if (documentNumber.length === 8) {
+			searchDocument(documentNumber, 'reniec');
+		} else if (documentNumber.length === 11) {
+			searchDocument(documentNumber, 'ruc');
+		} else {
+			ToastError.fire({ text: 'El documento debe tener 8 (DNI) o 11 (RUC) dígitos.' });
+		}
+	});
+
+	function searchDocument(documentNumber, type) {
+		let url = type === 'reniec' ? '/api/reniec?dni=' + documentNumber : '/api/ruc?ruc=' + documentNumber;
+		let btn = $('#btnSearchDocument');
+		let originalIcon = btn.html();
+		btn.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>').prop('disabled', true);
+
+		$.ajax({
+			url: url,
+			method: 'GET',
+			success: function(data) {
+				btn.html(originalIcon).prop('disabled', false);
+				if (data.status) {
+					if (type === 'reniec') {
+						$('input[name="name"]').val(data.nombre_completo);
+						$('input[name="business_name"]').val('');
+						$('input[name="address"]').val('');
+						ToastMessage.fire({ text: 'DNI encontrado' });
+					} else {
+						$('input[name="name"]').val(data.trade_name || data.legal_name);
+						$('input[name="business_name"]').val(data.legal_name);
+						$('input[name="address"]').val(data.address);
+						ToastMessage.fire({ text: 'RUC encontrado' });
+					}
+				} else {
+					ToastError.fire({ text: data.message || 'No se encontró información' });
+				}
+			},
+			error: function(err) {
+				btn.html(originalIcon).prop('disabled', false);
+				ToastError.fire({ text: err.responseJSON?.message || 'Error al buscar el documento' });
+			}
+		});
+	}
 
 	$('#storeForm').submit(function(e){
 		e.preventDefault();

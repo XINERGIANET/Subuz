@@ -54,6 +54,9 @@ Route::get('comprobante/{invoice}', [InvoiceController::class, 'publicDetail'])
 
 Route::middleware('auth')->group(function () {
 
+	Route::get('api/reniec', [\App\Http\Controllers\ApiDocumentController::class, 'apiReniec'])->name('api.reniec');
+	Route::get('api/ruc', [\App\Http\Controllers\ApiDocumentController::class, 'apiRuc'])->name('api.ruc');
+
 	Route::get('/', [WebController::class, 'index']);
 
 	Route::get('sales', [SaleController::class, 'index'])->name('sales.index');
