@@ -173,27 +173,70 @@
         <div class="modal-content">
             <form id="storeClientForm">
                 <div class="modal-header">
-                    <h5 class="modal-title">Crear nuevo cliente</h5>
+                    <h5 class="modal-title">Crear nuevo</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row">
                         <div class="col-lg-6">
                             <div class="mb-3">
-                                <label class="form-label">RUC o DNI</label>
-                                <input type="text" class="form-control" name="document" required>
+                                <label class="form-label">RUC o DNI <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" name="document" id="createClientDocument" required>
+                                    <button class="btn btn-primary" type="button" id="btnSearchClientDocument" title="Buscar en RENIEC/SUNAT">
+                                        <i class="ti ti-search"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div class="col-lg-6">
                             <div class="mb-3">
-                                <label class="form-label">Nombre o Razón Social</label>
-                                <input type="text" class="form-control" name="name" required>
+                                <label class="form-label">Nombre comercial <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="name" id="createClientName" required>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="mb-3">
+                                <label class="form-label">Razón social</label>
+                                <input type="text" class="form-control" name="business_name" id="createClientBusinessName">
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="mb-3">
+                                <label class="form-label">Dirección <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="address" id="createClientAddress">
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="mb-3">
+                                <label class="form-label">Distrito <span class="text-danger">*</span></label>
+                                <select class="form-select" name="district" id="createClientDistrict">
+                                    <option value="">Seleccionar</option>
+                                    <option value="Chiclayo">Chiclayo</option>
+                                    <option value="Lambayeque">Lambayeque</option>
+                                    <option value="Pimentel">Pimentel</option>
+                                    <option value="La Victoria">La Victoria</option>
+                                    <option value="Reque">Reque</option>
+                                    <option value="Puerto Eten">Puerto Eten</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="mb-3">
+                                <label class="form-label">Correo electrónico</label>
+                                <input type="text" class="form-control" name="email" id="createClientEmail">
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="mb-3">
+                                <label class="form-label">Teléfono</label>
+                                <input type="text" class="form-control" name="phone" id="createClientPhone">
                             </div>
                         </div>
                         <div class="col-lg-12">
                             <div class="mb-3">
-                                <label class="form-label">Tipo de cliente</label>
-                                <select class="form-select" name="type">
+                                <label class="form-label">Tipo de cliente <span class="text-danger">*</span></label>
+                                <select class="form-select" name="type" required>
                                     <option value="Contado">Contado</option>
                                     <option value="Credito">Crédito</option>
                                 </select>
@@ -202,8 +245,8 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn me-auto" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Guardar Cliente</button>
+                    <button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
+                    <button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy icon"></i> Guardar</button>
                 </div>
             </form>
         </div>
@@ -402,12 +445,61 @@
             });
         });
 
+        // Buscar DNI/RUC para modal crear cliente
+        $('#btnSearchClientDocument').click(function() {
+            const documentNumber = $('#createClientDocument').val().trim();
+            if (documentNumber.length === 8) {
+                searchClientDocument(documentNumber, 'reniec');
+            } else if (documentNumber.length === 11) {
+                searchClientDocument(documentNumber, 'ruc');
+            } else {
+                ToastError.fire({ text: 'El documento debe tener 8 (DNI) o 11 (RUC) dígitos.' });
+            }
+        });
+
+        function searchClientDocument(documentNumber, type) {
+            const url = type === 'reniec' ? '/api/reniec?dni=' + documentNumber : '/api/ruc?ruc=' + documentNumber;
+            const btn = $('#btnSearchClientDocument');
+            const originalIcon = btn.html();
+            btn.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>').prop('disabled', true);
+
+            $.ajax({
+                url: url,
+                method: 'GET',
+                success: function(data) {
+                    btn.html(originalIcon).prop('disabled', false);
+                    if (data.status) {
+                        if (type === 'reniec') {
+                            $('#createClientName').val(data.nombre_completo || '');
+                            $('#createClientBusinessName').val('');
+                            if (!$('#createClientAddress').val()) {
+                                $('#createClientAddress').val('Chiclayo');
+                            }
+                            ToastMessage.fire({ text: 'DNI encontrado' });
+                        } else {
+                            $('#createClientName').val(data.trade_name || data.legal_name || '');
+                            $('#createClientBusinessName').val(data.legal_name || '');
+                            $('#createClientAddress').val(data.address || '');
+                            ToastMessage.fire({ text: 'RUC encontrado' });
+                        }
+                    } else {
+                        ToastError.fire({ text: data.message || 'No se encontró información' });
+                    }
+                },
+                error: function(err) {
+                    btn.html(originalIcon).prop('disabled', false);
+                    ToastError.fire({ text: err.responseJSON?.message || 'Error al buscar el documento' });
+                }
+            });
+        }
+
         // Store Client Ajax
         $('#storeClientForm').submit(function(e) {
             e.preventDefault();
             $.post('{{ route('clients.storeInSale') }}', $(this).serialize() + '&_token={{ csrf_token() }}', function(data) {
                 if (data.status) {
                     $('#createClientModal').modal('hide');
+                    $('#storeClientForm')[0].reset();
                     Swal.fire('Listo', 'Cliente creado', 'success');
                     tsClients.load(''); // Refresh search
                 } else {
