@@ -158,7 +158,7 @@
 										</span>
 									</a>
 								</li>
-								<li class="nav-item {{ request()->is('invoices*') ? 'active' : '' }}">
+								{{-- <li class="nav-item {{ request()->is('invoices*') ? 'active' : '' }}">
 									<a class="nav-link" href="{{ route('invoices.index') }}">
 										<span class="nav-link-icon d-md-none d-lg-inline-block">
 											<i class="ti ti-file-text icon"></i>
@@ -167,7 +167,7 @@
 											Facturación
 										</span>
 									</a>
-								</li>
+								</li> --}}
 							@endif
 							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer') || auth()->user()->hasRole('asistente'))
 								<li class="nav-item {{ request()->is('expenses*') ? 'active' : '' }}">

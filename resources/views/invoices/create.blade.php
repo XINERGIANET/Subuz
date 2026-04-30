@@ -498,10 +498,19 @@
             e.preventDefault();
             $.post('{{ route('clients.storeInSale') }}', $(this).serialize() + '&_token={{ csrf_token() }}', function(data) {
                 if (data.status) {
+                    if (data.client && data.client.id) {
+                        const option = {
+                            id: String(data.client.id),
+                            name: data.client.name || '',
+                            document: data.client.document || '',
+                            type: data.client.type || 'Contado'
+                        };
+                        tsClients.addOption(option);
+                        tsClients.addItem(String(data.client.id), true);
+                    }
                     $('#createClientModal').modal('hide');
                     $('#storeClientForm')[0].reset();
                     Swal.fire('Listo', 'Cliente creado', 'success');
-                    tsClients.load(''); // Refresh search
                 } else {
                     Swal.fire('Error', data.error, 'error');
                 }

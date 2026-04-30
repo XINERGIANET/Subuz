@@ -41,10 +41,17 @@ class ClientController extends Controller
             ]);
         }
 
-        Client::create($request->all());
+        $client = Client::create($request->all());
 
         return response()->json([
-            'status' => true
+            'status' => true,
+            'client' => [
+                'id' => $client->id,
+                'name' => $client->name,
+                'business_name' => $client->business_name,
+                'document' => $client->document,
+                'type' => $client->type,
+            ],
         ]);
     }
 
