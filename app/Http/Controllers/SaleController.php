@@ -681,15 +681,21 @@ class SaleController extends Controller
                         'paid' => 0
                     ]));
 
-                    CashboxMovement::create([
-                        'cashbox_id' => $cashbox->id,
-                        'sale_id' => $sale->id,
-                        'user_id' => auth()->id(),
-                        'payment_method_id' => null,
-                        'type' => 'debt',
-                        'amount' => $sale->total,
-                        'date' => now()
-                    ]);
+                    $hasDebt = CashboxMovement::where('sale_id', $sale->id)
+                        ->where('type', 'debt')
+                        ->exists();
+
+                    if (!$hasDebt) {
+                        CashboxMovement::create([
+                            'cashbox_id' => $cashbox->id,
+                            'sale_id' => $sale->id,
+                            'user_id' => auth()->id(),
+                            'payment_method_id' => null,
+                            'type' => 'debt',
+                            'amount' => $sale->total,
+                            'date' => now()
+                        ]);
+                    }
                 }
             });
 
@@ -922,7 +928,49 @@ class SaleController extends Controller
 
         // Base query for sales in period
         $sales_period = Sale::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
-            ->where('status', '!=', 'Anulado');
+            ->where('status', '!=', 'Anulado')
+            ->when($request->client_id, function($q, $client_id){
+                return $q->where('client_id', $client_id);
+            })
+            ->when($request->type, function($q, $type){
+                if ($type == 'Pago pendiente') {
+                    return $q->where(function($sq) {
+                        $sq->where('type', 'Pago pendiente')
+                          ->orWhere(function($ssq) {
+                              $ssq->where('type', 'Contado')
+                                  ->where('paid', 0)
+                                  ->whereHas('movements', function($mq) {
+                                      $mq->where('type', 'debt');
+                                  });
+                          });
+                    });
+                }
+                return $q->where('type', $type);
+            })
+            ->when($request->payment_method_id, function($q, $pm_id){
+                if($pm_id == 'credit'){
+                    return $q->where('type', 'Credito');
+                }
+                return $q->where('payment_method_id', $pm_id);
+            })
+            ->when($request->delivery_status, function($q, $delivery_status){
+                if($delivery_status == 'delivered'){
+                    return $q->where(function($sq){
+                        $sq->where('paid', 1)
+                        ->orWhere('type', 'Pago pendiente')
+                        ->orWhereHas('movements', function($mq){
+                            $mq->where('type', 'debt');
+                        });
+                    });
+                }elseif($delivery_status == 'pending'){
+                    return $q->where('status', '!=', 'Anulado')
+                        ->where('paid', 0)
+                        ->where('type', '!=', 'Pago pendiente')
+                        ->whereDoesntHave('movements', function($mq){
+                            $mq->where('type', 'debt');
+                        });
+                }
+            });
 
         // 1. Total Entregado (Sum of total for sales delivered in period)
         $total_delivered = (clone $sales_period)
@@ -955,9 +1003,13 @@ class SaleController extends Controller
             ->sum('total');
 
         // 4. Movements in period (including payments for previous sales)
-        $movements = CashboxMovement::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
-            ->with(['payment_method', 'sale'])
-            ->get();
+        $movements_query = CashboxMovement::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
+            ->with(['payment_method', 'sale']);
+            
+        if ($request->client_id || $request->type || $request->payment_method_id || $request->delivery_status) {
+            $movements_query->whereIn('sale_id', (clone $sales_period)->pluck('id'));
+        }
+        $movements = $movements_query->get();
 
         $methods_totals = [];
         $previous_days_payments = [];
@@ -987,9 +1039,13 @@ class SaleController extends Controller
         }
 
         // 5. Expenses in period
-        $expenses = Expense::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
-            ->with('payment_method')
-            ->get();
+        $expenses_query = Expense::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
+            ->with('payment_method');
+            
+        if ($request->client_id || $request->type || $request->payment_method_id || $request->delivery_status) {
+            $expenses_query->whereId(0); // Ignore expenses if filtering
+        }
+        $expenses = $expenses_query->get();
         
         $total_expenses = $expenses->sum('amount');
         $expenses_methods_totals = [];
@@ -1025,7 +1081,49 @@ class SaleController extends Controller
 
         // Base query for sales in period
         $sales_period = Sale::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
-            ->where('status', '!=', 'Anulado');
+            ->where('status', '!=', 'Anulado')
+            ->when($request->client_id, function($q, $client_id){
+                return $q->where('client_id', $client_id);
+            })
+            ->when($request->type, function($q, $type){
+                if ($type == 'Pago pendiente') {
+                    return $q->where(function($sq) {
+                        $sq->where('type', 'Pago pendiente')
+                          ->orWhere(function($ssq) {
+                              $ssq->where('type', 'Contado')
+                                  ->where('paid', 0)
+                                  ->whereHas('movements', function($mq) {
+                                      $mq->where('type', 'debt');
+                                  });
+                          });
+                    });
+                }
+                return $q->where('type', $type);
+            })
+            ->when($request->payment_method_id, function($q, $pm_id){
+                if($pm_id == 'credit'){
+                    return $q->where('type', 'Credito');
+                }
+                return $q->where('payment_method_id', $pm_id);
+            })
+            ->when($request->delivery_status, function($q, $delivery_status){
+                if($delivery_status == 'delivered'){
+                    return $q->where(function($sq){
+                        $sq->where('paid', 1)
+                        ->orWhere('type', 'Pago pendiente')
+                        ->orWhereHas('movements', function($mq){
+                            $mq->where('type', 'debt');
+                        });
+                    });
+                }elseif($delivery_status == 'pending'){
+                    return $q->where('status', '!=', 'Anulado')
+                        ->where('paid', 0)
+                        ->where('type', '!=', 'Pago pendiente')
+                        ->whereDoesntHave('movements', function($mq){
+                            $mq->where('type', 'debt');
+                        });
+                }
+            });
 
         $total_delivered = (clone $sales_period)
             ->where(function($q){
@@ -1054,13 +1152,21 @@ class SaleController extends Controller
             })
             ->sum('total');
 
-        $movements = CashboxMovement::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
-            ->with(['payment_method', 'sale'])
-            ->get();
+        $movements_query = CashboxMovement::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
+            ->with(['payment_method', 'sale']);
+            
+        if ($request->client_id || $request->type || $request->payment_method_id || $request->delivery_status) {
+            $movements_query->whereIn('sale_id', (clone $sales_period)->pluck('id'));
+        }
+        $movements = $movements_query->get();
 
-        $expenses = Expense::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
-            ->with('payment_method')
-            ->get();
+        $expenses_query = Expense::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
+            ->with('payment_method');
+            
+        if ($request->client_id || $request->type || $request->payment_method_id || $request->delivery_status) {
+            $expenses_query->whereId(0); // Ignore expenses if filtering
+        }
+        $expenses = $expenses_query->get();
         $total_expenses = $expenses->sum('amount');
 
         $expenses_methods_totals = [];

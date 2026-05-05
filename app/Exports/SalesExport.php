@@ -50,6 +50,30 @@ class SalesExport implements FromCollection, WithHeadings, WithMapping, WithStyl
             ->when($this->request->end_date, function($q, $end_date){
                 return $q->whereDate('date', '<=', $end_date);
             })
+            ->when($this->request->payment_method_id, function($q, $pm_id){
+                if($pm_id == 'credit'){
+                    return $q->where('type', 'Credito');
+                }
+                return $q->where('payment_method_id', $pm_id);
+            })
+            ->when($this->request->delivery_status, function($q, $delivery_status){
+                if($delivery_status == 'delivered'){
+                    return $q->where(function($sq){
+                        $sq->where('paid', 1)
+                        ->orWhere('type', 'Pago pendiente')
+                        ->orWhereHas('movements', function($mq){
+                            $mq->where('type', 'debt');
+                        });
+                    });
+                }elseif($delivery_status == 'pending'){
+                    return $q->where('status', '!=', 'Anulado')
+                        ->where('paid', 0)
+                        ->where('type', '!=', 'Pago pendiente')
+                        ->whereDoesntHave('movements', function($mq){
+                            $mq->where('type', 'debt');
+                        });
+                }
+            })
             ->when($this->request->is_pending, function($q){
                 return $q->whereIn('type', ['Contado', 'Pago pendiente'])->where('paid', 0);
             })
@@ -57,7 +81,7 @@ class SalesExport implements FromCollection, WithHeadings, WithMapping, WithStyl
                 return $q->where('type', 'Credito')->where('paid', 0);
             });
 
-        if(!$this->request->start_date && !$this->request->end_date && !$this->request->is_pending && !$this->request->is_credit && !$this->request->client_id){
+        if(!$this->request->start_date && !$this->request->end_date && !$this->request->is_pending && !$this->request->is_credit && !$this->request->client_id && !$this->request->type && !$this->request->payment_method_id && !$this->request->delivery_status){
             $query->whereDate('date', now());
         }
 

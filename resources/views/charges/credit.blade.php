@@ -76,13 +76,19 @@
 </div>
 
 <div class=" card border-0 shadow-sm overflow-hidden">
-    <div class="card-header border-0 py-3">
+    <div class="card-header border-0 py-3 d-flex justify-content-between align-items-center">
         <h3 class="card-title fw-bold"><i class="ti ti-credit-card me-2"></i>Ventas al Crédito</h3>
+        @if(auth()->user()->hasRole('admin'))
+        <button class="btn btn-brand d-none" id="btn-pay-selected">
+            <i class="ti ti-cash icon me-1"></i> Pagar seleccionados
+        </button>
+        @endif
     </div>
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
 			<thead class="table-corporate-header">
 				<tr>
+					<th class="w-1"><input class="form-check-input m-0 align-middle" type="checkbox" id="check-all-sales"></th>
 					<th>Guía</th>
 					<th>Fecha</th>
 					<th>Cliente</th>
@@ -96,6 +102,7 @@
 			<tbody>
 				@forelse($sales as $sale)
 				<tr>
+					<td><input class="form-check-input m-0 align-middle sale-checkbox" type="checkbox" value="{{ $sale->id }}" data-debt="{{ $sale->debt }}"></td>
 					<td class="fw-bold">{{ $sale->guide }}</td>
 					<td>{{ $sale->date->format('d/m/Y') }}</td>
 					<td>{{ optional($sale->client)->name ?? 'N/A' }}</td>
@@ -109,9 +116,14 @@
 					<td>
 						<div class="d-flex flex-wrap gap-1 align-items-center">
 							@forelse($sale->payments as $payment)
-							<span class="badge bg-blue-lt fw-normal" style="text-transform: none;">
+							<span class="badge bg-blue-lt fw-normal pe-4 position-relative" style="text-transform: none;">
 								<span class="fw-bold">S/{{ number_format($payment->amount, 2) }}</span>
 								<span class="ms-1 opacity-75">({{ optional($payment->payment_method)->name }})</span>
+                                @if(auth()->user()->hasRole('admin'))
+                                <a href="javascript:void(0)" class="btn-delete-payment text-danger position-absolute top-50 end-0 translate-middle-y me-1" data-id="{{ $payment->id }}" title="Restablecer pago">
+                                    <i class="ti ti-x fs-4"></i>
+                                </a>
+                                @endif
 							</span>
                             @empty
                             <span class="text-muted small italic">Sin pagos</span>
@@ -130,7 +142,7 @@
 				</tr>
                 @empty
 				<tr>
-					<td colspan="8" align="center" class="py-5 text-muted">
+					<td colspan="9" align="center" class="py-5 text-muted">
                         <i class="ti ti-mood-smile fs-1 mb-2 d-block"></i>
                         No se han encontrado resultados de créditos pendientes
                     </td>
@@ -172,6 +184,7 @@
   				<div>
 	  				<input type="hidden" name="type" value="Credito">
 	  				<input type="hidden" name="sale_id" id="sale_id">
+                    <div id="sale-ids-container"></div>
 	  				<input type="hidden" id="total_debt_value">
 					<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
 					<button type="submit" class="btn btn-brand"><i class="ti ti-device-floppy icon"></i> Guardar</button>
@@ -228,6 +241,7 @@
 		var debt = parseFloat($(this).data('debt'));
 
 		$('#sale_id').val(sale_id);
+        $('#sale-ids-container').html('');
 		$('#total_debt_value').val(debt);
 		$('#total-debt-display').text('S/' + debt.toFixed(2));
 		
@@ -308,6 +322,50 @@
 		calculateBalance();
 	});
 
+    $(document).on('change', '#check-all-sales', function() {
+        $('.sale-checkbox').prop('checked', $(this).prop('checked'));
+        togglePaySelectedButton();
+    });
+
+    $(document).on('change', '.sale-checkbox', function() {
+        if ($('.sale-checkbox:checked').length == $('.sale-checkbox').length) {
+            $('#check-all-sales').prop('checked', true);
+        } else {
+            $('#check-all-sales').prop('checked', false);
+        }
+        togglePaySelectedButton();
+    });
+
+    function togglePaySelectedButton() {
+        if ($('.sale-checkbox:checked').length > 0) {
+            $('#btn-pay-selected').removeClass('d-none');
+        } else {
+            $('#btn-pay-selected').addClass('d-none');
+        }
+    }
+
+    $(document).on('click', '#btn-pay-selected', function() {
+        var totalDebt = 0;
+        var saleIdsHtml = '';
+        
+        $('.sale-checkbox:checked').each(function() {
+            totalDebt += parseFloat($(this).data('debt'));
+            saleIdsHtml += '<input type="hidden" name="sale_ids[]" value="' + $(this).val() + '">';
+        });
+
+        $('#sale_id').val(''); // Clear single sale id
+        $('#sale-ids-container').html(saleIdsHtml); // Set multiple sale ids
+        
+        $('#total_debt_value').val(totalDebt);
+        $('#total-debt-display').text('S/' + totalDebt.toFixed(2));
+        
+        // Reset to one line
+        $('#payment-lines').html('');
+        addPaymentLine();
+        calculateBalance(); // Initial calculate
+        $('#paymentModal').modal('show');
+    });
+
 	$('#paymentForm').submit(function(e){
 		e.preventDefault();
 
@@ -330,5 +388,31 @@
 		});
 
 	});
+
+    $(document).on('click', '.btn-delete-payment', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        var payment_id = $(this).data('id');
+        if(confirm('¿Está seguro de restablecer este pago? La deuda volverá a su estado anterior.')){
+            $.ajax({
+                url: '{{ url("payments") }}/' + payment_id,
+                method: 'DELETE',
+                data: {
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(data){
+                    if(data.status){
+                        location.reload();
+                    } else {
+                        alert(data.error);
+                    }
+                },
+                error: function(err){
+                    console.log(err);
+                    alert('Ocurrió un error al intentar restablecer el pago.');
+                }
+            });
+        }
+    });
 </script>
 @endsection

@@ -17,7 +17,8 @@ class BankLoan extends Model
         'installments_total',
         'monthly_amount',
         'start_date',
-        'status'
+        'status',
+        'currency'
     ];
 
     protected $casts = [

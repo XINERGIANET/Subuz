@@ -596,6 +596,10 @@
 @section('scripts')
 <script>
 	$(document).on('click', '[data-bs-target="#modal-sales-report"]', function() {
+        const mainStart = $('input[name="start_date"]').val();
+        const mainEnd = $('input[name="end_date"]').val();
+        if (mainStart) $('#report-start-date').val(mainStart);
+        if (mainEnd) $('#report-end-date').val(mainEnd);
 		loadSalesReportData();
 	});
 
@@ -606,8 +610,16 @@
 	function loadSalesReportData() {
 		const start = $('#report-start-date').val();
 		const end = $('#report-end-date').val();
+        
+        // Grab other filters from the main view
+        const client_id = $('select[name="client_id"]').val() || '';
+        const type = $('select[name="type"]').val() || '';
+        const payment_method_id = $('select[name="payment_method_id"]').val() || '';
+        const delivery_status = $('select[name="delivery_status"]').val() || '';
 
-		$('#btn-download-report-pdf').attr('href', `{{ route('sales.report_pdf') }}?start_date=${start}&end_date=${end}`);
+        const queryParams = `start_date=${start}&end_date=${end}&client_id=${client_id}&type=${type}&payment_method_id=${payment_method_id}&delivery_status=${delivery_status}`;
+
+		$('#btn-download-report-pdf').attr('href', `{{ route('sales.report_pdf') }}?${queryParams}`);
 
 		$('#report-content').addClass('d-none');
 		$('#report-loader').removeClass('d-none');
@@ -615,7 +627,14 @@
 		$.ajax({
 			url: `{{ route('sales.report_data') }}`,
 			method: 'GET',
-			data: { start_date: start, end_date: end },
+			data: { 
+                start_date: start, 
+                end_date: end,
+                client_id: client_id,
+                type: type,
+                payment_method_id: payment_method_id,
+                delivery_status: delivery_status
+            },
 			success: function(response) {
 				renderSalesReport(response);
 				$('#report-loader').addClass('d-none');

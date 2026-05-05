@@ -25,6 +25,7 @@ class FinanceController extends Controller
             'installments_total' => 'required|integer|min:1',
             'monthly_amount' => 'nullable|numeric|min:0',
             'start_date' => 'required|date',
+            'currency' => 'required|string|in:PEN,USD'
         ]);
 
         BankLoan::create($data);
@@ -135,7 +136,8 @@ class FinanceController extends Controller
             'installments_total' => 'required|integer|min:1',
             'monthly_amount' => 'nullable|numeric|min:0',
             'start_date' => 'required|date',
-            'status' => 'required|string'
+            'status' => 'required|string',
+            'currency' => 'required|string|in:PEN,USD'
         ]);
 
         $loan->update($data);

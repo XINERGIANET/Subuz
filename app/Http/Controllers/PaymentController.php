@@ -33,12 +33,18 @@ class PaymentController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'sale_id' => 'required',
             'payments' => 'required|array',
             'payments.*.payment_method_id' => 'required',
             'type' => 'required',
             'photo' => 'nullable|image|mimes:jpeg,png,jpg|max:51200'
         ]);
+
+        if(!$request->sale_id && !$request->sale_ids){
+            return response()->json([
+                'status' => false,
+                'error' => 'Debe seleccionar al menos una venta.'
+            ]);
+        }
 
         $validator->sometimes('payments.*.amount', 'required|numeric|min:0', function($input){
             return $input->type == 'Credito';
@@ -61,91 +67,97 @@ class PaymentController extends Controller
         }
 
         try {
-            $sale = Sale::findOrFail($request->sale_id);
+            $saleIds = $request->sale_ids ?? [$request->sale_id];
+            $sales = Sale::whereIn('id', $saleIds)->orderBy('date', 'asc')->get();
 
-            // Handle Photo Upload
+            // Handle Photo Upload (using first sale id for filename)
             $photoPath = null;
             if ($request->hasFile('photo')) {
                 $file = $request->file('photo');
-                $filename = 'payment_' . $sale->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+                $filename = 'payment_' . $sales->first()->id . '_' . time() . '.' . $file->getClientOriginalExtension();
                 $photoPath = $file->storeAs('dispatches', $filename, 'public');
             }
 
-            DB::transaction(function() use ($request, $sale, $cashbox, $photoPath){
+            DB::transaction(function() use ($request, $sales, $cashbox, $photoPath){
+                
+                $totalAmount = floatval(collect($request->payments)->sum('amount'));
                 
                 if($request->type == 'Credito'){
-
-                    $totalAmount = floatval(collect($request->payments)->sum('amount'));
-
+                    $totalDebt = $sales->sum('debt');
                     // Check if total amount exceeds debt (with small tolerance for float issues)
-                    if(round($totalAmount, 2) > round($sale->debt, 2)){
+                    if(round($totalAmount, 2) > round($totalDebt, 2)){
                         throw new \Exception('El monto total a pagar supera la deuda actual.');
                     }
-
-                    $debt = $sale->debt - $totalAmount;
-                    $paid = $debt <= 0 ? 1 : 0;
-
-                    $updateData = [
-                        'debt' => $debt,
-                        'paid' => $paid
-                    ];
-                    if ($photoPath) $updateData['photo'] = $photoPath;
-
-                    $sale->update($updateData);
-
-                    foreach($request->payments as $paymentData){
-                        Payment::create([
-                            'sale_id' => $sale->id,
-                            'payment_method_id' => $paymentData['payment_method_id'],
-                            'amount' => $paymentData['amount'],
-                            'date' => now()
-                        ]);
-
-                        CashboxMovement::create([
-                            'cashbox_id' => $cashbox->id,
-                            'sale_id' => $sale->id,
-                            'user_id' => auth()->id(),
-                            'payment_method_id' => $paymentData['payment_method_id'],
-                            'type' => 'paid',
-                            'amount' => $paymentData['amount'],
-                            'date' => now()
-                        ]);
-                    }
-
-                }elseif($request->type == 'Pago pendiente' || $request->type == 'Contado'){
-                    
-                    $totalAmount = floatval(collect($request->payments)->sum('amount'));
-
+                } elseif($request->type == 'Pago pendiente' || $request->type == 'Contado'){
+                    $totalSalesAmount = $sales->sum('total');
                     // For pending/cash, we expect the FULL amount to be paid to clear it.
-                    if(abs($totalAmount - floatval($sale->total)) > 0.01){
-                        throw new \Exception("La suma de los pagos (S/".number_format($totalAmount, 2).") debe ser igual al total de la venta (S/".number_format($sale->total, 2).").");
+                    if(abs($totalAmount - floatval($totalSalesAmount)) > 0.01){
+                        throw new \Exception("La suma de los pagos (S/".number_format($totalAmount, 2).") debe ser igual al total de las ventas (S/".number_format($totalSalesAmount, 2).").");
+                    }
+                }
+
+                // Flatten all payment methods into a pool of funds
+                $funds = [];
+                foreach($request->payments as $p){
+                    $funds[] = [
+                        'payment_method_id' => $p['payment_method_id'],
+                        'amount' => floatval($p['amount'])
+                    ];
+                }
+
+                foreach($sales as $sale) {
+                    $saleDebt = $request->type == 'Credito' ? floatval($sale->debt) : floatval($sale->total);
+                    if($saleDebt <= 0) continue;
+
+                    $amountToPayForSale = 0;
+                    $salePaymentsToRecord = [];
+
+                    // Draw from funds
+                    foreach($funds as &$fund) {
+                        if($fund['amount'] <= 0) continue;
+                        if($saleDebt <= 0) break;
+
+                        $draw = min($fund['amount'], $saleDebt);
+                        $fund['amount'] -= $draw;
+                        $saleDebt -= $draw;
+                        $amountToPayForSale += $draw;
+
+                        $salePaymentsToRecord[] = [
+                            'payment_method_id' => $fund['payment_method_id'],
+                            'amount' => $draw
+                        ];
                     }
 
-                    $updateData = [
-                        'debt' => 0,
-                        'paid' => 1
-                    ];
-                    if ($photoPath) $updateData['photo'] = $photoPath;
+                    if($amountToPayForSale > 0) {
+                        $newDebt = $request->type == 'Credito' ? ($sale->debt - $amountToPayForSale) : 0;
+                        $paid = $newDebt <= 0 ? 1 : 0;
 
-                    $sale->update($updateData);
+                        $updateData = [
+                            'debt' => $newDebt,
+                            'paid' => $paid
+                        ];
+                        if ($photoPath) $updateData['photo'] = $photoPath;
 
-                    foreach($request->payments as $paymentData){
-                        Payment::create([
-                            'sale_id' => $sale->id,
-                            'payment_method_id' => $paymentData['payment_method_id'],
-                            'amount' => $paymentData['amount'],
-                            'date' => now()
-                        ]);
+                        $sale->update($updateData);
 
-                        CashboxMovement::create([
-                            'cashbox_id' => $cashbox->id,
-                            'sale_id' => $sale->id,
-                            'user_id' => auth()->id(),
-                            'payment_method_id' => $paymentData['payment_method_id'],
-                            'type' => 'paid',
-                            'amount' => $paymentData['amount'],
-                            'date' => now()
-                        ]);
+                        foreach($salePaymentsToRecord as $sp) {
+                            Payment::create([
+                                'sale_id' => $sale->id,
+                                'payment_method_id' => $sp['payment_method_id'],
+                                'amount' => $sp['amount'],
+                                'date' => now()
+                            ]);
+
+                            CashboxMovement::create([
+                                'cashbox_id' => $cashbox->id,
+                                'sale_id' => $sale->id,
+                                'user_id' => auth()->id(),
+                                'payment_method_id' => $sp['payment_method_id'],
+                                'type' => 'paid',
+                                'amount' => $sp['amount'],
+                                'date' => now()
+                            ]);
+                        }
                     }
                 }
             });
@@ -163,6 +175,53 @@ class PaymentController extends Controller
             return response()->json([
                 'status' => false,
                 'error' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function destroy($id) {
+        try {
+            DB::transaction(function() use ($id) {
+                $payment = Payment::findOrFail($id);
+                $sale = $payment->sale;
+
+                if (!$sale) {
+                    throw new \Exception('Venta no encontrada.');
+                }
+                
+                // Remove corresponding CashboxMovement
+                CashboxMovement::where('sale_id', $sale->id)
+                    ->where('payment_method_id', $payment->payment_method_id)
+                    ->where('amount', $payment->amount)
+                    ->where('type', 'paid')
+                    ->orderBy('id', 'desc')
+                    ->first()
+                    ?->delete();
+
+                // Restore sale debt
+                $newDebt = $sale->debt + $payment->amount;
+                // If it's not a credit, we should also calculate debt correctly or just make it unpaid
+                $sale->update([
+                    'debt' => $newDebt,
+                    'paid' => 0
+                ]);
+
+                $payment->delete();
+            });
+
+            return response()->json([
+                'status' => true
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error al restablecer pago: " . $e->getMessage(), [
+                'payment_id' => $id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'status' => false,
+                'error' => 'Error al restablecer: ' . $e->getMessage()
             ]);
         }
     }

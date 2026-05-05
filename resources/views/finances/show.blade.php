@@ -37,7 +37,7 @@
                             <td class="{{ $ins->status == 'Vencido' ? 'text-danger fw-bold' : '' }}">
                                 {{ $ins->due_date->format('d/m/Y') }}
                             </td>
-                            <td class="text-center fw-bold">S/{{ number_format($ins->amount, 2) }}</td>
+                            <td class="text-center fw-bold">{{ $loan->currency == 'USD' ? '$' : 'S/' }}{{ number_format($ins->amount, 2) }}</td>
                             <td class="text-center">
                                 @if($ins->status == 'Pagado')
                                     <span class="badge bg-success">Pagado</span>
@@ -57,7 +57,7 @@
                                                     <i class="ti ti-check fs-5"></i>
                                                 </div>
                                                 <div class="small">
-                                                    <span class="fw-bold">S/{{ number_format($p->amount, 2) }}</span>
+                                                    <span class="fw-bold">{{ $loan->currency == 'USD' ? '$' : 'S/' }}{{ number_format($p->amount, 2) }}</span>
                                                     <span class="text-muted">({{ $p->payment_method->name ?? 'Externo' }})</span>
                                                 </div>
                                             </div>
@@ -100,15 +100,15 @@
                  
                  <div class="d-flex justify-content-between mb-2">
                      <span class="text-muted">Monto Total:</span>
-                     <span class="fw-bold">S/{{ number_format($loan->total_amount, 2) }}</span>
+                     <span class="fw-bold">{{ $loan->currency == 'USD' ? '$' : 'S/' }}{{ number_format($loan->total_amount, 2) }}</span>
                  </div>
                  <div class="d-flex justify-content-between mb-2">
                      <span class="text-muted">Monto Pagado:</span>
-                     <span class="fw-bold text-success">S/{{ number_format($loan->paid_amount, 2) }}</span>
+                     <span class="fw-bold text-success">{{ $loan->currency == 'USD' ? '$' : 'S/' }}{{ number_format($loan->paid_amount, 2) }}</span>
                  </div>
                  <div class="d-flex justify-content-between mb-2">
                      <span class="text-muted">Saldo Pendiente:</span>
-                     <span class="h3 mb-0 fw-extrabold text-danger">S/{{ number_format($loan->remaining_balance, 2) }}</span>
+                     <span class="h3 mb-0 fw-extrabold text-danger">{{ $loan->currency == 'USD' ? '$' : 'S/' }}{{ number_format($loan->remaining_balance, 2) }}</span>
                  </div>
                  
                  <div class="divider mb-3"></div>
@@ -179,7 +179,7 @@
                         </div>
                         <div class="mt-3 p-3 rounded-2 bg-primary-lt border border-primary d-flex justify-content-between align-items-center">
                             <span class="fw-bold">Total a Registrar:</span>
-                            <span class="h3 mb-0 fw-extrabold text-primary" id="modal_total_display">S/0.00</span>
+                            <span class="h3 mb-0 fw-extrabold text-primary" id="modal_total_display">{{ $loan->currency == 'USD' ? '$' : 'S/' }}0.00</span>
                         </div>
                     </div>
 
@@ -188,7 +188,7 @@
                         <div class="mb-3">
                             <label class="form-label">Monto Pagado (Externo)</label>
                             <div class="input-group">
-                                <span class="input-group-text">S/</span>
+                                <span class="input-group-text">{{ $loan->currency == 'USD' ? '$' : 'S/' }}</span>
                                 <input type="number" step="0.01" class="form-control" name="amount" id="external_amount">
                             </div>
                         </div>
@@ -223,7 +223,7 @@
                     <div class="mb-3">
                         <label class="form-label">Monto</label>
                         <div class="input-group">
-                            <span class="input-group-text">S/</span>
+                            <span class="input-group-text">{{ $loan->currency == 'USD' ? '$' : 'S/' }}</span>
                             <input type="number" step="0.01" class="form-control" name="amount" id="edit_p_amount" required>
                         </div>
                     </div>
@@ -278,7 +278,7 @@
                     </div>
                     <div class="col-4">
                         <div class="input-group input-group-sm input-group-flat">
-                            <span class="input-group-text ps-2 pe-1">S/</span>
+                            <span class="input-group-text ps-2 pe-1">{{ $loan->currency == 'USD' ? '$' : 'S/' }}</span>
                             <input type="number" step="0.01" class="form-control ps-1 txt-payment-amount-modal" name="payments[${rowCount}][amount]" value="${amount}" placeholder="0.00" required>
                         </div>
                     </div>
@@ -297,7 +297,7 @@
         $('.txt-payment-amount-modal').each(function() {
             total += parseFloat($(this).val()) || 0;
         });
-        $('#modal_total_display').text('S/' + total.toFixed(2));
+        $('#modal_total_display').text('{{ $loan->currency == "USD" ? "$" : "S/" }}' + total.toFixed(2));
     }
 
     $(document).on('click', '.btn-pay-installment', function() {

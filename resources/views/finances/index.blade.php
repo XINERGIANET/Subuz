@@ -23,7 +23,11 @@
                     </div>
                     <div class="col text-truncate">
                         <div class="text-uppercase text-muted small fw-bold">Saldo Total Pendiente</div>
-                        <div class="h2 mb-0 fw-bold text-primary">S/{{ number_format($loans->sum(function($loan){ return $loan->remaining_balance; }), 2) }}</div>
+                        <div class="h2 mb-0 fw-bold text-primary">
+                            S/{{ number_format($loans->where('currency', 'PEN')->sum(function($loan){ return $loan->remaining_balance; }), 2) }}
+                            <span class="fs-4 text-muted mx-1">|</span>
+                            ${{ number_format($loans->where('currency', 'USD')->sum(function($loan){ return $loan->remaining_balance; }), 2) }}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -62,8 +66,8 @@
                         <div class="fw-bold">{{ $loan->bank_name }}</div>
                         <div class="text-muted small">{{ $loan->description }}</div>
                     </td>
-                    <td class="text-center fw-bold">S/{{ number_format($loan->total_amount, 2) }}</td>
-                    <td class="text-center fw-bold text-danger">S/{{ number_format($loan->remaining_balance, 2) }}</td>
+                    <td class="text-center fw-bold">{{ $loan->currency == 'USD' ? '$' : 'S/' }}{{ number_format($loan->total_amount, 2) }}</td>
+                    <td class="text-center fw-bold text-danger">{{ $loan->currency == 'USD' ? '$' : 'S/' }}{{ number_format($loan->remaining_balance, 2) }}</td>
                     <td class="text-center">
                         <span class="badge bg-blue-lt">
                             {{ $loan->payments->count() }} / {{ $loan->installments_total }}
@@ -121,14 +125,18 @@
                 <textarea class="form-control" name="description" rows="2" placeholder="Opcional"></textarea>
               </div>
               <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Monto Total</label>
-                    <div class="input-group">
-                        <span class="input-group-text">S/</span>
-                        <input type="number" step="0.01" class="form-control" name="total_amount" required>
-                    </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Moneda</label>
+                    <select class="form-select" name="currency" required>
+                        <option value="PEN">Soles (S/)</option>
+                        <option value="USD">Dólares ($)</option>
+                    </select>
                 </div>
-                <div class="col-md-6 mb-3">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Monto Total</label>
+                    <input type="number" step="0.01" class="form-control" name="total_amount" required>
+                </div>
+                <div class="col-md-4 mb-3">
                     <label class="form-label">N° de Cuotas</label>
                     <input type="number" class="form-control" name="installments_total" required min="1">
                 </div>
@@ -136,10 +144,7 @@
               <div class="row">
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Monto Cuota (Estimado)</label>
-                    <div class="input-group">
-                        <span class="input-group-text">S/</span>
-                        <input type="number" step="0.01" class="form-control" name="monthly_amount">
-                    </div>
+                    <input type="number" step="0.01" class="form-control" name="monthly_amount">
                 </div>
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Fecha de Inicio</label>
@@ -176,14 +181,18 @@
                 <textarea class="form-control" name="description" id="edit_description" rows="2"></textarea>
               </div>
               <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Monto Total</label>
-                    <div class="input-group">
-                        <span class="input-group-text">S/</span>
-                        <input type="number" step="0.01" class="form-control" name="total_amount" id="edit_total_amount" required>
-                    </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Moneda</label>
+                    <select class="form-select" name="currency" id="edit_currency" required>
+                        <option value="PEN">Soles (S/)</option>
+                        <option value="USD">Dólares ($)</option>
+                    </select>
                 </div>
-                <div class="col-md-6 mb-3">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Monto Total</label>
+                    <input type="number" step="0.01" class="form-control" name="total_amount" id="edit_total_amount" required>
+                </div>
+                <div class="col-md-4 mb-3">
                     <label class="form-label">N° de Cuotas</label>
                     <input type="number" class="form-control" name="installments_total" id="edit_installments_total" required min="1">
                 </div>
@@ -191,10 +200,7 @@
               <div class="row">
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Monto Cuota (Estimado)</label>
-                    <div class="input-group">
-                        <span class="input-group-text">S/</span>
-                        <input type="number" step="0.01" class="form-control" name="monthly_amount" id="edit_monthly_amount">
-                    </div>
+                    <input type="number" step="0.01" class="form-control" name="monthly_amount" id="edit_monthly_amount">
                 </div>
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Fecha de Inicio</label>
@@ -225,6 +231,7 @@
         $.get(`/finances/${id}/edit`, function(data) {
             $('#edit_bank_name').val(data.bank_name);
             $('#edit_description').val(data.description);
+            $('#edit_currency').val(data.currency);
             $('#edit_total_amount').val(data.total_amount);
             $('#edit_installments_total').val(data.installments_total);
             $('#edit_monthly_amount').val(data.monthly_amount);

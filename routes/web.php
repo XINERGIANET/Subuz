@@ -142,6 +142,7 @@ Route::middleware('auth')->group(function () {
 		Route::get('charges/history', [ChargeController::class, 'history'])->name('charges.history');
 
 		Route::post('payments', [PaymentController::class, 'store'])->name('payments.store');
+		Route::delete('payments/{id}', [PaymentController::class, 'destroy'])->name('payments.destroy');
 		Route::get('payments/excel', [PaymentController::class, 'excel'])->name('payments.excel');
 		Route::get('payments/pdf', [PaymentController::class, 'pdf'])->name('payments.pdf');
 
