@@ -13,7 +13,34 @@ class FinanceController extends Controller
     public function index()
     {
         $loans = BankLoan::with('payments')->latest()->get();
-        return view('finances.index', compact('loans'));
+        
+        $events = [];
+        foreach($loans as $loan){
+            $startDate = \Carbon\Carbon::parse($loan->start_date);
+            $amountPerInstallment = $loan->monthly_amount ?? ($loan->total_amount / $loan->installments_total);
+            $paidInstallments = $loan->payments->pluck('installment_number')->unique()->toArray();
+
+            for ($i = 1; $i <= $loan->installments_total; $i++) {
+                $dueDate = $startDate->copy()->addMonths($i - 1);
+                $isPaid = in_array($i, $paidInstallments);
+
+                $events[] = [
+                    'title' => ($loan->currency == 'USD' ? '$' : 'S/') . number_format($amountPerInstallment, 2) . ' - ' . $loan->bank_name,
+                    'start' => $dueDate->toDateString(),
+                    'url' => route('finances.show', $loan->id),
+                    'backgroundColor' => $isPaid ? '#2fb344' : ($dueDate->isPast() ? '#d63939' : '#206bc4'),
+                    'borderColor' => $isPaid ? '#2fb344' : ($dueDate->isPast() ? '#d63939' : '#206bc4'),
+                    'allDay' => true,
+                    'extendedProps' => [
+                        'bank' => $loan->bank_name,
+                        'amount' => number_format($amountPerInstallment, 2),
+                        'status' => $isPaid ? 'Pagado' : 'Pendiente'
+                    ]
+                ];
+            }
+        }
+
+        return view('finances.index', compact('loans', 'events'));
     }
 
     public function store(Request $request)

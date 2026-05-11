@@ -39,4 +39,20 @@ class BankLoan extends Model
     {
         return $this->total_amount - $this->paid_amount;
     }
+
+    public function getNextPaymentDateAttribute()
+    {
+        if ($this->status == 'Pagado') return null;
+
+        $startDate = \Carbon\Carbon::parse($this->start_date);
+        $paidInstallments = $this->payments->pluck('installment_number')->unique()->toArray();
+
+        for ($i = 1; $i <= $this->installments_total; $i++) {
+            if (!in_array($i, $paidInstallments)) {
+                return $startDate->copy()->addMonths($i - 1);
+            }
+        }
+
+        return null;
+    }
 }

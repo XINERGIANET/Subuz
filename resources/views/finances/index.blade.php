@@ -2,6 +2,27 @@
 
 @section('title', 'Finanzas')
 
+@section('styles')
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css' rel='stylesheet' />
+<style>
+    .fc-event {
+        cursor: pointer;
+        padding: 2px 4px;
+        font-size: 0.85rem;
+    }
+    #calendar-view {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+    }
+    .fc-toolbar-title {
+        font-size: 1.2rem !important;
+        font-weight: bold;
+        text-transform: capitalize;
+    }
+</style>
+@endsection
+
 @section('content')
 <nav class="mb-3">
   <ol class="breadcrumb">
@@ -38,7 +59,12 @@
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header border-0 py-3 d-flex justify-content-between align-items-center">
         <h3 class="card-title fw-bold"><i class="ti ti-activity me-2"></i>Gestión de Créditos</h3>
-        <div class="d-flex gap-2">
+        <div class="d-flex align-items-center gap-3">
+            <div class="form-check form-switch mb-0">
+                <input class="form-check-input cursor-pointer" type="checkbox" id="view-toggle">
+                <label class="form-check-label fw-bold small text-uppercase" for="view-toggle">Ver Calendario</label>
+            </div>
+            <div class="vr mx-2"></div>
             <button class="btn btn-brand btn-pill px-4 shadow-sm" data-bs-toggle="modal" data-bs-target="#createLoanModal">
                 <i class="ti ti-plus me-1 fs-3"></i> Registrar Crédito
             </button>
@@ -46,62 +72,80 @@
     </div>
 </div>
 
-<div class="card border-0 shadow-sm overflow-hidden">
-    <div class="table-responsive">
-        <table class="table card-table table-vcenter">
-            <thead class="table-corporate-header">
-                <tr>
-                    <th>Banco / Entidad</th>
-                    <th class="text-center">Monto Total</th>
-                    <th class="text-center">Saldo Pendiente</th>
-                    <th class="text-center">Cuotas</th>
-                    <th class="text-center">Estado</th>
-                    <th class="text-end">Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse($loans as $loan)
-                <tr>
-                    <td>
-                        <div class="fw-bold">{{ $loan->bank_name }}</div>
-                        <div class="text-muted small">{{ $loan->description }}</div>
-                    </td>
-                    <td class="text-center fw-bold">{{ $loan->currency == 'USD' ? '$' : 'S/' }}{{ number_format($loan->total_amount, 2) }}</td>
-                    <td class="text-center fw-bold text-danger">{{ $loan->currency == 'USD' ? '$' : 'S/' }}{{ number_format($loan->remaining_balance, 2) }}</td>
-                    <td class="text-center">
-                        <span class="badge bg-blue-lt">
-                            {{ $loan->payments->count() }} / {{ $loan->installments_total }}
-                        </span>
-                    </td>
-                    <td class="text-center">
-                        <span class="badge {{ $loan->status == 'Activo' ? 'bg-success' : 'bg-secondary' }}">
-                            {{ $loan->status }}
-                        </span>
-                    </td>
-                    <td class="text-end">
-                        <div class="d-flex justify-content-end gap-1">
-                            <a href="{{ route('finances.show', $loan->id) }}" class="btn btn-icon btn-outline-primary" data-bs-toggle="tooltip" title="Ver Detalles / Pagos">
-                                <i class="ti ti-eye fs-2"></i>
-                            </a>
-                            <button class="btn btn-icon btn-outline-info btn-edit" data-id="{{ $loan->id }}" data-bs-toggle="tooltip" title="Editar">
-                                <i class="ti ti-pencil fs-2"></i>
-                            </button>
-                            <button class="btn btn-icon btn-outline-danger btn-delete" data-id="{{ $loan->id }}" data-bs-toggle="tooltip" title="Eliminar">
-                                <i class="ti ti-trash fs-2"></i>
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-                @empty
-                <tr>
-                    <td colspan="6" align="center" class="py-5 text-muted">
-                        <i class="ti ti-mood-empty fs-1 mb-2 d-block"></i>
-                        No hay créditos registrados.
-                    </td>
-                </tr>
-                @endforelse
-            </tbody>
-        </table>
+<div id="table-view-container">
+    <div class="card border-0 shadow-sm overflow-hidden">
+        <div class="table-responsive">
+            <table class="table card-table table-vcenter">
+                <thead class="table-corporate-header">
+                    <tr>
+                        <th>Banco / Entidad</th>
+                        <th class="text-center">Próxima Fecha</th>
+                        <th class="text-center">Monto Total</th>
+                        <th class="text-center">Saldo Pendiente</th>
+                        <th class="text-center">Cuotas</th>
+                        <th class="text-center">Estado</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($loans as $loan)
+                    <tr>
+                        <td>
+                            <div class="fw-bold">{{ $loan->bank_name }}</div>
+                            <div class="text-muted small">{{ $loan->description }}</div>
+                        </td>
+                        <td class="text-center">
+                            @if($loan->next_payment_date)
+                                <span class="fw-bold">{{ $loan->next_payment_date->format('d/m/Y') }}</span>
+                            @else
+                                <span class="text-muted">-</span>
+                            @endif
+                        </td>
+                        <td class="text-center fw-bold">{{ $loan->currency == 'USD' ? '$' : 'S/' }}{{ number_format($loan->total_amount, 2) }}</td>
+                        <td class="text-center fw-bold text-danger">{{ $loan->currency == 'USD' ? '$' : 'S/' }}{{ number_format($loan->remaining_balance, 2) }}</td>
+                        <td class="text-center">
+                            <span class="badge bg-blue-lt">
+                                {{ $loan->payments->count() }} / {{ $loan->installments_total }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge {{ $loan->status == 'Activo' ? 'bg-success' : 'bg-secondary' }}">
+                                {{ $loan->status }}
+                            </span>
+                        </td>
+                        <td class="text-end">
+                            <div class="d-flex justify-content-end gap-1">
+                                <a href="{{ route('finances.show', $loan->id) }}" class="btn btn-icon btn-outline-primary" data-bs-toggle="tooltip" title="Ver Detalles / Pagos">
+                                    <i class="ti ti-eye fs-2"></i>
+                                </a>
+                                <button class="btn btn-icon btn-outline-info btn-edit" data-id="{{ $loan->id }}" data-bs-toggle="tooltip" title="Editar">
+                                    <i class="ti ti-pencil fs-2"></i>
+                                </button>
+                                <button class="btn btn-icon btn-outline-danger btn-delete" data-id="{{ $loan->id }}" data-bs-toggle="tooltip" title="Eliminar">
+                                    <i class="ti ti-trash fs-2"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    @empty
+                    <tr>
+                        <td colspan="7" align="center" class="py-5 text-muted">
+                            <i class="ti ti-mood-empty fs-1 mb-2 d-block"></i>
+                            No hay créditos registrados.
+                        </td>
+                    </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="calendar-view-container" style="display: none;">
+    <div class="card border-0 shadow-sm overflow-hidden">
+        <div class="card-body p-0">
+            <div id="calendar-view"></div>
+        </div>
     </div>
 </div>
 
@@ -225,7 +269,55 @@
 </div>
 
 @section('scripts')
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js'></script>
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/locales/es.js'></script>
 <script>
+    let calendar;
+    const events = @json($events);
+
+    $(document).ready(function() {
+        const calendarEl = document.getElementById('calendar-view');
+        calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            locale: 'es',
+            events: events,
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,dayGridWeek'
+            },
+            buttonText: {
+                today: 'Hoy',
+                month: 'Mes',
+                week: 'Semana'
+            },
+            eventClick: function(info) {
+                if (info.event.url) {
+                    window.location.href = info.event.url;
+                    return false;
+                }
+            },
+            eventMouseEnter: function(info) {
+                // Tooltip could be added here
+            }
+        });
+
+        $('#view-toggle').change(function() {
+            if ($(this).is(':checked')) {
+                $('#table-view-container').fadeOut(200, function() {
+                    $('#calendar-view-container').fadeIn(200, function() {
+                        calendar.render();
+                        calendar.updateSize();
+                    });
+                });
+            } else {
+                $('#calendar-view-container').fadeOut(200, function() {
+                    $('#table-view-container').fadeIn(200);
+                });
+            }
+        });
+    });
+
     $(document).on('click', '.btn-edit', function() {
         let id = $(this).data('id');
         $.get(`/finances/${id}/edit`, function(data) {
