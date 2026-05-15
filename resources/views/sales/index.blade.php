@@ -67,25 +67,33 @@
 		<div class="d-flex text-center gap-3 flex-wrap justify-content-center justify-content-md-end">
 			<div>
 				<span class="d-block small text-muted">Total Entregado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-				<span class="fs-3 fw-bold text-primary">S/{{ number_format($total_sales, 2) }}</span>
+				<button type="button" class="btn btn-link p-0 fs-3 fw-bold text-primary text-decoration-none js-sales-total-detail" data-detail-key="total_delivered">
+					S/{{ number_format($total_sales, 2) }}
+				</button>
 			</div>
 			<div class="vr mx-1"></div>
 			@foreach($payment_totals as $pt)
 			<div>
 				<span class="d-block small text-muted">{{ $pt->name == 'Interbank' ? 'Interbank Empresa' : $pt->name }} {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-				<span class="fs-3 fw-bold text-success">S/{{ number_format($pt->total, 2) }}</span>
+				<button type="button" class="btn btn-link p-0 fs-3 fw-bold text-success text-decoration-none js-sales-total-detail" data-detail-key="payment_{{ $pt->id }}">
+					S/{{ number_format($pt->total, 2) }}
+				</button>
 			</div>
 			<div class="vr mx-1"></div>
 			@endforeach
 
 			<div>
 				<span class="d-block small text-muted">No Pagado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-				<span class="fs-3 fw-bold text-danger">S/{{ number_format($total_unpaid_delivered, 2) }}</span>
+				<button type="button" class="btn btn-link p-0 fs-3 fw-bold text-danger text-decoration-none js-sales-total-detail" data-detail-key="unpaid_delivered">
+					S/{{ number_format($total_unpaid_delivered, 2) }}
+				</button>
 			</div>
 			<div class="vr mx-1"></div>
 			<div>
 				<span class="d-block small text-muted">No Entregado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-				<span class="fs-3 fw-bold text-warning">S/{{ number_format($total_not_delivered, 2) }}</span>
+				<button type="button" class="btn btn-link p-0 fs-3 fw-bold text-warning text-decoration-none js-sales-total-detail" data-detail-key="not_delivered">
+					S/{{ number_format($total_not_delivered, 2) }}
+				</button>
 			</div>
 		</div>
 		@endif
@@ -528,6 +536,42 @@
     </div>
   </div>
 </div>
+
+<div class="modal modal-blur fade" id="salesTotalDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="salesTotalDetailTitle">Detalle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table card-table table-vcenter mb-0">
+                        <thead class="table-corporate-header">
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Guía</th>
+                                <th>Cliente</th>
+                                <th>Tipo</th>
+                                <th class="text-end">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="salesTotalDetailRows"></tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="4" class="text-end fw-bold">Total</td>
+                                <td class="text-end fw-bold text-primary" id="salesTotalDetailAmount">S/0.00</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @section('modal')
@@ -595,6 +639,80 @@
 
 @section('scripts')
 <script>
+	const salesTotalDetails = {
+		total_delivered: {
+			title: 'Total Entregado',
+			rows: @json($total_sales_details),
+			total: {{ (float) $total_sales }}
+		},
+		unpaid_delivered: {
+			title: 'No Pagado',
+			rows: @json($total_unpaid_delivered_details),
+			total: {{ (float) $total_unpaid_delivered }}
+		},
+		not_delivered: {
+			title: 'No Entregado',
+			rows: @json($total_not_delivered_details),
+			total: {{ (float) $total_not_delivered }}
+		},
+		@foreach($payment_totals as $pt)
+		payment_{{ $pt->id }}: {
+			title: @json($pt->name == 'Interbank' ? 'Interbank Empresa' : $pt->name),
+			rows: @json($payment_total_details[$pt->id] ?? []),
+			total: {{ (float) $pt->total }}
+		},
+		@endforeach
+	};
+
+	function formatMoney(value) {
+		return 'S/' + (Number(value) || 0).toLocaleString('en-US', {
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2
+		});
+	}
+
+	function escapeHtml(value) {
+		return String(value ?? '').replace(/[&<>"']/g, function(char) {
+			return {
+				'&': '&amp;',
+				'<': '&lt;',
+				'>': '&gt;',
+				'"': '&quot;',
+				"'": '&#039;'
+			}[char];
+		});
+	}
+
+	$(document).on('click', '.js-sales-total-detail', function() {
+		const detail = salesTotalDetails[$(this).data('detail-key')];
+		if (!detail) return;
+
+		$('#salesTotalDetailTitle').text(detail.title);
+		$('#salesTotalDetailAmount').text(formatMoney(detail.total));
+
+		if (!detail.rows || detail.rows.length === 0) {
+			$('#salesTotalDetailRows').html(`
+				<tr>
+					<td colspan="5" class="text-center py-4 text-muted">No hay registros para mostrar</td>
+				</tr>
+			`);
+		} else {
+			$('#salesTotalDetailRows').html(detail.rows.map(function(row) {
+				return `
+					<tr>
+						<td class="small text-muted">${escapeHtml(row.date)}</td>
+						<td class="fw-bold">${escapeHtml(row.guide)}</td>
+						<td>${escapeHtml(row.client)}</td>
+						<td><span class="badge bg-blue-lt fw-normal">${escapeHtml(row.type)}</span></td>
+						<td class="text-end fw-bold">${formatMoney(row.amount)}</td>
+					</tr>
+				`;
+			}).join(''));
+		}
+
+		$('#salesTotalDetailModal').modal('show');
+	});
+
 	$(document).on('click', '[data-bs-target="#modal-sales-report"]', function() {
         const mainStart = $('input[name="start_date"]').val();
         const mainEnd = $('input[name="end_date"]').val();

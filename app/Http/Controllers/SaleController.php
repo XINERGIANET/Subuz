@@ -99,7 +99,23 @@ class SaleController extends Controller
             });
         }
 
+        $formatMetricSale = function($sale) {
+            return [
+                'date' => optional($sale->date)->format('d/m/Y'),
+                'guide' => $sale->guide,
+                'client' => optional($sale->client)->name ?? 'Consumidor Final',
+                'type' => $sale->type,
+                'amount' => (float) $sale->total,
+            ];
+        };
+
         $total_sales = $total_sales_query->sum('total');
+        $total_sales_details = (clone $total_sales_query)
+            ->with('client')
+            ->latest('date')
+            ->get()
+            ->map($formatMetricSale)
+            ->values();
         
         // Total cash for dispatchers (actual cash payments for filtered sales)
         $total_cash_query = (clone $query)->where('status', '!=', 'Anulado');
@@ -108,17 +124,36 @@ class SaleController extends Controller
                 $mq->where('user_id', auth()->id())->whereIn('type', ['paid', 'debt']);
             });
         }
+        $payment_total_sale_ids = $total_cash_query->pluck('id');
+
         $total_cash = Payment::where('payment_method_id', 1) // 1 = Efectivo
-            ->whereIn('sale_id', $total_cash_query->pluck('id'))
+            ->whereIn('sale_id', $payment_total_sale_ids)
             ->sum('amount');
 
         // Total by payment methods for dispatchers
         $payment_totals = \DB::table('payments')
             ->join('payment_methods', 'payments.payment_method_id', '=', 'payment_methods.id')
-            ->select('payment_methods.name', \DB::raw('SUM(payments.amount) as total'))
-            ->whereIn('payments.sale_id', $total_cash_query->pluck('id'))
-            ->groupBy('payment_methods.name')
+            ->select('payment_methods.id', 'payment_methods.name', \DB::raw('SUM(payments.amount) as total'))
+            ->whereIn('payments.sale_id', $payment_total_sale_ids)
+            ->groupBy('payment_methods.id', 'payment_methods.name')
             ->get();
+
+        $payment_total_details = Payment::with(['sale.client', 'payment_method'])
+            ->whereIn('sale_id', $payment_total_sale_ids)
+            ->latest('date')
+            ->get()
+            ->groupBy('payment_method_id')
+            ->map(function($payments) {
+                return $payments->map(function($payment) {
+                    return [
+                        'date' => optional($payment->date)->format('d/m/Y'),
+                        'guide' => optional($payment->sale)->guide ?? 'Venta',
+                        'client' => optional(optional($payment->sale)->client)->name ?? 'Consumidor Final',
+                        'type' => optional($payment->sale)->type ?? 'Pago',
+                        'amount' => (float) $payment->amount,
+                    ];
+                })->values();
+            });
 
         // Annulled sales for metrics and modal
         $annulled_sales_query = (clone $query)->where('status', 'Anulado');
@@ -154,17 +189,23 @@ class SaleController extends Controller
         }
 
         // Total No Entregado (Not annulled, unpaid, not 'Pago pendiente', and no debt movement)
-        $total_not_delivered = (clone $query)
+        $not_delivered_query = (clone $query)
             ->where('status', '!=', 'Anulado')
             ->where('paid', 0)
             ->where('type', '!=', 'Pago pendiente')
             ->whereDoesntHave('movements', function($mq){
                 $mq->where('type', 'debt');
-            })
-            ->sum('total');
+            });
+        $total_not_delivered = (clone $not_delivered_query)->sum('total');
+        $total_not_delivered_details = (clone $not_delivered_query)
+            ->with('client')
+            ->latest('date')
+            ->get()
+            ->map($formatMetricSale)
+            ->values();
 
         // Total No Pagado (Not annulled, unpaid, but delivered via 'Pago pendiente' or debt movement)
-        $total_unpaid_delivered = (clone $query)
+        $unpaid_delivered_query = (clone $query)
             ->where('status', '!=', 'Anulado')
             ->where('paid', 0)
             ->where(function($sq){
@@ -172,8 +213,14 @@ class SaleController extends Controller
                 ->orWhereHas('movements', function($mq){
                     $mq->where('type', 'debt');
                 });
-            })
-            ->sum('total');
+            });
+        $total_unpaid_delivered = (clone $unpaid_delivered_query)->sum('total');
+        $total_unpaid_delivered_details = (clone $unpaid_delivered_query)
+            ->with('client')
+            ->latest('date')
+            ->get()
+            ->map($formatMetricSale)
+            ->values();
 
         // Total by selected type (Breakdown)
         $total_by_type = null;
@@ -210,7 +257,7 @@ class SaleController extends Controller
         $selected_client = $request->client_id ? Client::find($request->client_id) : null;
 
         $products = Product::all();
-        return view('sales.index', compact('sales', 'total_sales', 'total_cash', 'payment_totals', 'total_not_delivered', 'total_unpaid_delivered', 'total_by_type', 'total_by_type_delivered', 'total_by_type_not_delivered', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox', 'products', 'selected_client', 'delivered_count'));
+        return view('sales.index', compact('sales', 'total_sales', 'total_sales_details', 'total_cash', 'payment_totals', 'payment_total_details', 'total_not_delivered', 'total_not_delivered_details', 'total_unpaid_delivered', 'total_unpaid_delivered_details', 'total_by_type', 'total_by_type_delivered', 'total_by_type_not_delivered', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox', 'products', 'selected_client', 'delivered_count'));
     }
 
     public function create(){
