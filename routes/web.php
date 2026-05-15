@@ -42,7 +42,8 @@ Route::get('photo-view/{path}', function ($path) {
 		return "ERROR: File not found at " . $fullPath;
 	}
 
-	if (ob_get_level()) ob_end_clean();
+	if (ob_get_level())
+		ob_end_clean();
 	return response()->file($fullPath);
 })->where('path', '.*');
 
@@ -174,5 +175,6 @@ Route::middleware('auth')->group(function () {
 		Route::post('cashbox/close', [CashboxController::class, 'close'])->name('cashbox.close');
 		Route::post('cashbox/income', [CashboxController::class, 'storeIncome'])->name('cashbox.income');
 		Route::post('cashbox/transfer', [CashboxController::class, 'storeTransfer'])->name('cashbox.transfer');
+		Route::delete('cashbox/movements/{movement}', [CashboxController::class, 'destroyMovement'])->name('cashbox.movements.destroy');
 	});
 });

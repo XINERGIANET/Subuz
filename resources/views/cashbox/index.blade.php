@@ -129,6 +129,7 @@
 					<th>Método</th>
 					<th class="text-center">Monto</th>
 					<th class="text-end">Usuario</th>
+					<th class="text-end" style="display: none;">Acciones</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -163,10 +164,21 @@
                         S/{{ number_format($movement->amount, 2) }}
                     </td>
 					<td class="text-end small">{{ $movement->user ? explode(' ', $movement->user->name)[0] : 'N/A' }}</td>
+					<td class="text-end" style="display: none;">
+						@if($movement->id && auth()->user()->hasRole('admin'))
+						<form method="POST" action="{{ route('cashbox.movements.destroy', $movement->id) }}" onsubmit="return confirm('¿Eliminar este movimiento de caja?');">
+							@csrf
+							@method('DELETE')
+							<button type="submit" class="btn btn-icon btn-outline-danger btn-sm" title="Eliminar movimiento">
+								<i class="ti ti-trash"></i>
+							</button>
+						</form>
+						@endif
+					</td>
 				</tr>
                 @empty
 				<tr>
-					<td colspan="7" align="center" class="py-5 text-muted">
+					<td colspan="8" align="center" class="py-5 text-muted">
                         <i class="ti ti-mood-empty fs-1 mb-2 d-block"></i>
                         No hay movimientos registrados en la sesión actual
                     </td>
@@ -389,6 +401,10 @@
 
 		$(document).on('click', '.remove-payment-row', function(){
 			$(this).closest('.payment-row').remove();
+		});
+
+		$('#incomeModal form, #openModal form').on('submit', function(){
+			$(this).find('button[type="submit"]').prop('disabled', true);
 		});
 
         // Permitir cerrar caja aunque el efectivo sea negativo, con confirmación.

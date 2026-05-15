@@ -66,34 +66,69 @@
 					</div>
 				@endif
 			</div>
-			@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente') || auth()->user()->hasRole('seller'))
-				<div class="d-flex text-center gap-3 flex-wrap justify-content-center justify-content-md-end">
-					<div>
-						<span class="d-block small text-muted">Total Entregado
-							{{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-						<span class="fs-3 fw-bold text-primary">S/{{ number_format($total_sales, 2) }}</span>
-					</div>
-					<div class="vr mx-1"></div>
-					@foreach($payment_totals as $pt)
-						<div>
-							<span class="d-block small text-muted">{{ $pt->name == 'Interbank' ? 'Interbank Empresa' : $pt->name }}
-								{{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-							<span class="fs-3 fw-bold text-success">S/{{ number_format($pt->total, 2) }}</span>
-						</div>
-						<div class="vr mx-1"></div>
-					@endforeach
+			@endif
+		</div>
+		@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente') || auth()->user()->hasRole('seller'))
+		<div class="d-flex text-center gap-3 flex-wrap justify-content-center justify-content-md-end">
+			<div>
+				<span class="d-block small text-muted">Total Entregado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+				<button type="button" class="btn btn-link p-0 fs-3 fw-bold text-primary text-decoration-none js-sales-total-detail" data-detail-key="total_delivered">
+					S/{{ number_format($total_sales, 2) }}
+				</button>
+			</div>
+			<div class="vr mx-1"></div>
+			@foreach($payment_totals as $pt)
+			<div>
+				<span class="d-block small text-muted">{{ $pt->name == 'Interbank' ? 'Interbank Empresa' : $pt->name }} {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+				<button type="button" class="btn btn-link p-0 fs-3 fw-bold text-success text-decoration-none js-sales-total-detail" data-detail-key="payment_{{ $pt->id }}">
+					S/{{ number_format($pt->total, 2) }}
+				</button>
+			</div>
+			<div class="vr mx-1"></div>
+			@endforeach
 
-					<div>
-						<span class="d-block small text-muted">No Pagado
-							{{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-						<span class="fs-3 fw-bold text-danger">S/{{ number_format($total_unpaid_delivered, 2) }}</span>
-					</div>
-					<div class="vr mx-1"></div>
-					<div>
-						<span class="d-block small text-muted">No Entregado
-							{{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-						<span class="fs-3 fw-bold text-warning">S/{{ number_format($total_not_delivered, 2) }}</span>
-					</div>
+			<div>
+				<span class="d-block small text-muted">No Pagado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+				<button type="button" class="btn btn-link p-0 fs-3 fw-bold text-danger text-decoration-none js-sales-total-detail" data-detail-key="unpaid_delivered">
+					S/{{ number_format($total_unpaid_delivered, 2) }}
+				</button>
+			</div>
+			<div class="vr mx-1"></div>
+			<div>
+				<span class="d-block small text-muted">No Entregado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+				<button type="button" class="btn btn-link p-0 fs-3 fw-bold text-warning text-decoration-none js-sales-total-detail" data-detail-key="not_delivered">
+					S/{{ number_format($total_not_delivered, 2) }}
+				</button>
+			</div>
+		</div>
+		@endif
+
+		@if(auth()->user()->hasRole('despachador'))
+		<div class="d-flex text-center gap-4 flex-wrap justify-content-center justify-content-md-end">
+			<div>
+				<span class="d-block small text-muted">
+					Pedidos Entregados
+				</span>
+				<span class="fs-2 fw-bold text-primary">
+					{{ $delivered_count ?? 0 }}
+				</span>
+			</div>
+			<div class="vr mx-2 d-none d-md-block"></div>
+			@if(isset($payment_totals) && $payment_totals->count() > 0)
+				@foreach($payment_totals as $pt)
+				<div>
+					<span class="d-block small text-muted">
+						Total {{ $pt->name }}
+					</span>
+					<span class="fs-2 fw-bold text-success">
+						S/{{ number_format($pt->total, 2) }}
+					</span>
+				</div>
+				@endforeach
+			@else
+				<div>
+					<span class="d-block small text-muted">Total Efectivo</span>
+					<span class="fs-2 fw-bold text-success">S/0.00</span>
 				</div>
 			@endif
 
@@ -564,10 +599,84 @@
 							<i class="ti ti-device-floppy me-2"></i> Confirmar Despacho
 						</button>
 					</div>
-				</form>
-			</div>
-		</div>
-	</div>
+				</div>
+
+				<div id="credit-message-container" style="display:none">
+					<div class="alert alert-info d-flex align-items-center gap-2 py-2">
+						<i class="ti ti-info-circle fs-2"></i>
+						<div>Esta venta es a <strong>Crédito</strong>. Solo confirme la entrega.</div>
+					</div>
+                    <input type="hidden" name="is_credit_hidden" id="is_credit_hidden" value="0">
+				</div>
+
+  				<div id="dispatchPaymentContainer" style="display:none">
+  					<div class="d-flex justify-content-between align-items-center mb-2">
+  						<label class="form-label mb-0 fw-bold text-uppercase small">Métodos de Pago</label>
+  						<button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-payment">
+  							<i class="ti ti-plus me-1"></i> Agregar otro
+  						</button>
+  					</div>
+  					
+  					<div id="payment-rows-container">
+  						<!-- Payment rows will be injected here -->
+  					</div>
+
+  					<div class="mt-3 p-2 rounded bg-primary-lt border border-primary d-flex justify-content-between align-items-center">
+  						<span class="fw-bold">Total Distribuido:</span>
+  						<span class="h4 mb-0 fw-extrabold" id="total-distributed">S/0.00</span>
+  					</div>
+  					<div id="payment-warning" class="mt-2 small text-danger fw-bold" style="display:none">
+  						<i class="ti ti-alert-triangle me-1"></i> La suma de los montos no coincide con el total.
+  					</div>
+  				</div>
+  			</div>
+  			<div class="modal-footer bg-light-subtle">
+  				<input type="hidden" name="sale_id" id="dispatch_sale_id">
+  				<button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Cancelar</button>
+  				<button type="submit" class="btn btn-brand px-4 h3" id="btn-confirm-dispatch">
+  					<i class="ti ti-device-floppy me-2"></i> Confirmar Despacho
+  				</button>
+  			</div>
+  		</form>
+    </div>
+  </div>
+</div>
+
+<div class="modal modal-blur fade" id="salesTotalDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="salesTotalDetailTitle">Detalle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table card-table table-vcenter mb-0">
+                        <thead class="table-corporate-header">
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Guía</th>
+                                <th>Cliente</th>
+                                <th>Tipo</th>
+                                <th class="text-end">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="salesTotalDetailRows"></tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="4" class="text-end fw-bold">Total</td>
+                                <td class="text-end fw-bold text-primary" id="salesTotalDetailAmount">S/0.00</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @section('modal')
@@ -638,13 +747,130 @@
 @endsection
 
 @section('scripts')
-	<script>
-		$(document).on('click', '[data-bs-target="#modal-sales-report"]', function () {
-			const mainStart = $('input[name="start_date"]').val();
-			const mainEnd = $('input[name="end_date"]').val();
-			if (mainStart) $('#report-start-date').val(mainStart);
-			if (mainEnd) $('#report-end-date').val(mainEnd);
-			loadSalesReportData();
+<script>
+	const salesTotalDetails = {
+		total_delivered: {
+			title: 'Total Entregado',
+			rows: @json($total_sales_details),
+			total: {{ (float) $total_sales }}
+		},
+		unpaid_delivered: {
+			title: 'No Pagado',
+			rows: @json($total_unpaid_delivered_details),
+			total: {{ (float) $total_unpaid_delivered }}
+		},
+		not_delivered: {
+			title: 'No Entregado',
+			rows: @json($total_not_delivered_details),
+			total: {{ (float) $total_not_delivered }}
+		},
+		@foreach($payment_totals as $pt)
+		payment_{{ $pt->id }}: {
+			title: @json($pt->name == 'Interbank' ? 'Interbank Empresa' : $pt->name),
+			rows: @json($payment_total_details[$pt->id] ?? []),
+			total: {{ (float) $pt->total }}
+		},
+		@endforeach
+	};
+
+	function formatMoney(value) {
+		return 'S/' + (Number(value) || 0).toLocaleString('en-US', {
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2
+		});
+	}
+
+	function escapeHtml(value) {
+		return String(value ?? '').replace(/[&<>"']/g, function(char) {
+			return {
+				'&': '&amp;',
+				'<': '&lt;',
+				'>': '&gt;',
+				'"': '&quot;',
+				"'": '&#039;'
+			}[char];
+		});
+	}
+
+	$(document).on('click', '.js-sales-total-detail', function() {
+		const detail = salesTotalDetails[$(this).data('detail-key')];
+		if (!detail) return;
+
+		$('#salesTotalDetailTitle').text(detail.title);
+		$('#salesTotalDetailAmount').text(formatMoney(detail.total));
+
+		if (!detail.rows || detail.rows.length === 0) {
+			$('#salesTotalDetailRows').html(`
+				<tr>
+					<td colspan="5" class="text-center py-4 text-muted">No hay registros para mostrar</td>
+				</tr>
+			`);
+		} else {
+			$('#salesTotalDetailRows').html(detail.rows.map(function(row) {
+				return `
+					<tr>
+						<td class="small text-muted">${escapeHtml(row.date)}</td>
+						<td class="fw-bold">${escapeHtml(row.guide)}</td>
+						<td>${escapeHtml(row.client)}</td>
+						<td><span class="badge bg-blue-lt fw-normal">${escapeHtml(row.type)}</span></td>
+						<td class="text-end fw-bold">${formatMoney(row.amount)}</td>
+					</tr>
+				`;
+			}).join(''));
+		}
+
+		$('#salesTotalDetailModal').modal('show');
+	});
+
+	$(document).on('click', '[data-bs-target="#modal-sales-report"]', function() {
+        const mainStart = $('input[name="start_date"]').val();
+        const mainEnd = $('input[name="end_date"]').val();
+        if (mainStart) $('#report-start-date').val(mainStart);
+        if (mainEnd) $('#report-end-date').val(mainEnd);
+		loadSalesReportData();
+	});
+
+	$('#btn-refresh-report').on('click', function() {
+		loadSalesReportData();
+	});
+
+	function loadSalesReportData() {
+		const start = $('#report-start-date').val();
+		const end = $('#report-end-date').val();
+        
+        // Grab other filters from the main view
+        const client_id = $('select[name="client_id"]').val() || '';
+        const type = $('select[name="type"]').val() || '';
+        const payment_method_id = $('select[name="payment_method_id"]').val() || '';
+        const delivery_status = $('select[name="delivery_status"]').val() || '';
+
+        const queryParams = `start_date=${start}&end_date=${end}&client_id=${client_id}&type=${type}&payment_method_id=${payment_method_id}&delivery_status=${delivery_status}`;
+
+		$('#btn-download-report-pdf').attr('href', `{{ route('sales.report_pdf') }}?${queryParams}`);
+
+		$('#report-content').addClass('d-none');
+		$('#report-loader').removeClass('d-none');
+
+		$.ajax({
+			url: `{{ route('sales.report_data') }}`,
+			method: 'GET',
+			data: { 
+                start_date: start, 
+                end_date: end,
+                client_id: client_id,
+                type: type,
+                payment_method_id: payment_method_id,
+                delivery_status: delivery_status
+            },
+			success: function(response) {
+				renderSalesReport(response);
+				$('#report-loader').addClass('d-none');
+				$('#report-content').removeClass('d-none');
+			},
+			error: function() {
+				alert('Error al cargar los datos del reporte');
+				$('#report-loader').addClass('d-none');
+			}
 		});
 
 		$('#btn-refresh-report').on('click', function () {
