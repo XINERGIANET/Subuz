@@ -709,10 +709,6 @@ class SaleController extends Controller
         }
 
         try {
-<<<<<<< HEAD
-            DB::transaction(function () use ($request, $sale, $cashbox, $photoPath) {
-
-=======
             DB::transaction(function() use ($request, $sale, $cashbox, $photoPath){
                 $sale = Sale::whereKey($sale->id)->lockForUpdate()->firstOrFail();
 
@@ -720,7 +716,6 @@ class SaleController extends Controller
                     throw new \Exception('La venta ya esta marcada como pagada.');
                 }
                 
->>>>>>> fa34dce4e3c119ca8d2fb3ecab477030a2bd9b74
                 $commonUpdate = [
                     'guide' => $request->guide,
                     'photo' => $photoPath
