@@ -67,29 +67,54 @@ class PaymentController extends Controller
         }
 
         try {
-            $saleIds = $request->sale_ids ?? [$request->sale_id];
-            $sales = Sale::whereIn('id', $saleIds)->orderBy('date', 'asc')->get();
+            $saleIds = collect($request->sale_ids ?? [$request->sale_id])
+                ->filter()
+                ->values()
+                ->all();
 
             // Handle Photo Upload (using first sale id for filename)
             $photoPath = null;
             if ($request->hasFile('photo')) {
                 $file = $request->file('photo');
-                $filename = 'payment_' . $sales->first()->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+                $filename = 'payment_' . $saleIds[0] . '_' . time() . '.' . $file->getClientOriginalExtension();
                 $photoPath = $file->storeAs('dispatches', $filename, 'public');
             }
 
-            DB::transaction(function() use ($request, $sales, $cashbox, $photoPath){
+            DB::transaction(function() use ($request, $saleIds, $cashbox, $photoPath){
+                $sales = Sale::whereIn('id', $saleIds)
+                    ->orderBy('date', 'asc')
+                    ->lockForUpdate()
+                    ->get();
+
+                if($sales->count() != count($saleIds)){
+                    throw new \Exception('Una o más ventas seleccionadas no existen.');
+                }
                 
                 $totalAmount = floatval(collect($request->payments)->sum('amount'));
+                $amountDueBySale = [];
+
+                foreach($sales as $sale){
+                    if($request->type == 'Credito'){
+                        $amountDue = floatval($sale->debt);
+                    } else {
+                        $amountDue = $sale->paid ? 0 : floatval($sale->debt ?: $sale->total);
+                    }
+
+                    if($amountDue <= 0){
+                        throw new \Exception('La venta ' . $sale->guide . ' ya no tiene deuda pendiente. Actualiza la página antes de volver a cobrar.');
+                    }
+
+                    $amountDueBySale[$sale->id] = $amountDue;
+                }
                 
                 if($request->type == 'Credito'){
-                    $totalDebt = $sales->sum('debt');
+                    $totalDebt = array_sum($amountDueBySale);
                     // Check if total amount exceeds debt (with small tolerance for float issues)
                     if(round($totalAmount, 2) > round($totalDebt, 2)){
                         throw new \Exception('El monto total a pagar supera la deuda actual.');
                     }
                 } elseif($request->type == 'Pago pendiente' || $request->type == 'Contado'){
-                    $totalSalesAmount = $sales->sum('total');
+                    $totalSalesAmount = array_sum($amountDueBySale);
                     // For pending/cash, we expect the FULL amount to be paid to clear it.
                     if(abs($totalAmount - floatval($totalSalesAmount)) > 0.01){
                         throw new \Exception("La suma de los pagos (S/".number_format($totalAmount, 2).") debe ser igual al total de las ventas (S/".number_format($totalSalesAmount, 2).").");
@@ -106,7 +131,7 @@ class PaymentController extends Controller
                 }
 
                 foreach($sales as $sale) {
-                    $saleDebt = $request->type == 'Credito' ? floatval($sale->debt) : floatval($sale->total);
+                    $saleDebt = $amountDueBySale[$sale->id];
                     if($saleDebt <= 0) continue;
 
                     $amountToPayForSale = 0;

@@ -616,6 +616,11 @@ class SaleController extends Controller
 
         try {
             DB::transaction(function() use ($request, $sale, $cashbox, $photoPath){
+                $sale = Sale::whereKey($sale->id)->lockForUpdate()->firstOrFail();
+
+                if($request->paid && $sale->paid){
+                    throw new \Exception('La venta ya esta marcada como pagada.');
+                }
                 
                 $commonUpdate = [
                     'guide' => $request->guide,

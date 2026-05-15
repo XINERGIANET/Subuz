@@ -369,20 +369,33 @@
 	$('#paymentForm').submit(function(e){
 		e.preventDefault();
 
+		var $form = $(this);
+		var $submit = $form.find('button[type="submit"]');
+		if($form.data('submitting')){
+			return;
+		}
+
+		$form.data('submitting', true);
+		$submit.prop('disabled', true);
+
 		$.ajax({
 			url: '{{ route('payments.store') }}',
 			method: 'POST',
-			data: $(this).serialize(),
+			data: $form.serialize(),
 			success: function(data){
 				if(data.status){
 					$('#paymentModal').modal('hide');
 					$('#paymentForm')[0].reset();
 					location.reload();
 				}else{
+					$form.data('submitting', false);
+					$submit.prop('disabled', false);
 					alert(data.error);
 				}
 			},
 			error: function(err){
+				$form.data('submitting', false);
+				$submit.prop('disabled', false);
 				console.log(err);
 			}
 		});

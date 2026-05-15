@@ -189,4 +189,15 @@ class CashboxController extends Controller
         ]);
         return back()->with('message', 'Caja cerrada correctamente.');
     }
+
+    public function destroyMovement(CashboxMovement $movement)
+    {
+        if(!auth()->user()->hasRole('admin')){
+            abort(403);
+        }
+
+        $movement->delete();
+
+        return back()->with('message', 'Movimiento de caja eliminado correctamente.');
+    }
 }

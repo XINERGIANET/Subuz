@@ -370,6 +370,15 @@
 
 	$('#paymentForm').submit(function(e){
 		e.preventDefault();
+
+		var $form = $(this);
+		var $submit = $('#btn-submit-payment');
+		if($form.data('submitting')){
+			return;
+		}
+
+		$form.data('submitting', true);
+		$submit.prop('disabled', true);
 		
 		var formData = new FormData(this);
 
@@ -385,10 +394,14 @@
 					$('#paymentForm')[0].reset();
 					ToastMessage.fire({ text: 'Pago registrado correctamente' }).then(() => location.reload());
 				}else{
+					$form.data('submitting', false);
+					$submit.prop('disabled', false);
 					ToastError.fire({ text: data.error });
 				}
 			},
 			error: function(err){
+				$form.data('submitting', false);
+				$submit.prop('disabled', false);
 				console.log(err);
                 var msg = 'Ocurrió un error en el servidor';
                 if(err.responseJSON && err.responseJSON.error) msg = err.responseJSON.error;
