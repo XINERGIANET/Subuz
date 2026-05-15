@@ -69,6 +69,13 @@ class PaymentController extends Controller
         try {
             $saleIds = $request->sale_ids ?? [$request->sale_id];
             $sales = Sale::whereIn('id', $saleIds)->orderBy('date', 'asc')->get();
+            
+            if ($sales->pluck('client_id')->unique()->count() > 1) {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Solo se pueden realizar pagos múltiples para el mismo cliente.'
+                ]);
+            }
 
             // Handle Photo Upload (using first sale id for filename)
             $photoPath = null;
@@ -82,18 +89,10 @@ class PaymentController extends Controller
                 
                 $totalAmount = floatval(collect($request->payments)->sum('amount'));
                 
-                if($request->type == 'Credito'){
-                    $totalDebt = $sales->sum('debt');
-                    // Check if total amount exceeds debt (with small tolerance for float issues)
-                    if(round($totalAmount, 2) > round($totalDebt, 2)){
-                        throw new \Exception('El monto total a pagar supera la deuda actual.');
-                    }
-                } elseif($request->type == 'Pago pendiente' || $request->type == 'Contado'){
-                    $totalSalesAmount = $sales->sum('total');
-                    // For pending/cash, we expect the FULL amount to be paid to clear it.
-                    if(abs($totalAmount - floatval($totalSalesAmount)) > 0.01){
-                        throw new \Exception("La suma de los pagos (S/".number_format($totalAmount, 2).") debe ser igual al total de las ventas (S/".number_format($totalSalesAmount, 2).").");
-                    }
+                $totalDebt = $sales->sum('debt');
+                // Check if total amount exceeds debt (with small tolerance for float issues)
+                if(round($totalAmount, 2) > round($totalDebt, 2)){
+                    throw new \Exception('El monto total a pagar supera la deuda actual.');
                 }
 
                 // Flatten all payment methods into a pool of funds
@@ -106,7 +105,7 @@ class PaymentController extends Controller
                 }
 
                 foreach($sales as $sale) {
-                    $saleDebt = $request->type == 'Credito' ? floatval($sale->debt) : floatval($sale->total);
+                    $saleDebt = floatval($sale->debt);
                     if($saleDebt <= 0) continue;
 
                     $amountToPayForSale = 0;
@@ -129,8 +128,8 @@ class PaymentController extends Controller
                     }
 
                     if($amountToPayForSale > 0) {
-                        $newDebt = $request->type == 'Credito' ? ($sale->debt - $amountToPayForSale) : 0;
-                        $paid = $newDebt <= 0 ? 1 : 0;
+                        $newDebt = $sale->debt - $amountToPayForSale;
+                        $paid = round($newDebt, 2) <= 0 ? 1 : 0;
 
                         $updateData = [
                             'debt' => $newDebt,

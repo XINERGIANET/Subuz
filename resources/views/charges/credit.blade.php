@@ -102,7 +102,7 @@
 			<tbody>
 				@forelse($sales as $sale)
 				<tr>
-					<td><input class="form-check-input m-0 align-middle sale-checkbox" type="checkbox" value="{{ $sale->id }}" data-debt="{{ $sale->debt }}"></td>
+					<td><input class="form-check-input m-0 align-middle sale-checkbox" type="checkbox" value="{{ $sale->id }}" data-debt="{{ $sale->debt }}" data-client-id="{{ $sale->client_id }}"></td>
 					<td class="fw-bold">{{ $sale->guide }}</td>
 					<td>{{ $sale->date->format('d/m/Y') }}</td>
 					<td>{{ optional($sale->client)->name ?? 'N/A' }}</td>
@@ -214,6 +214,7 @@
 			copyClassesToDropdown: false,
 			dropdownClass: 'dropdown-menu ts-dropdown',
     		optionClass:'dropdown-item',
+			dropdownParent: 'body',
 			load: function(query, callback){
 				$.ajax({
 					url: '{{ route('clients.api') }}?q=' + encodeURIComponent(query),
@@ -337,10 +338,35 @@
     });
 
     function togglePaySelectedButton() {
-        if ($('.sale-checkbox:checked').length > 0) {
-            $('#btn-pay-selected').removeClass('d-none');
+        var checked = $('.sale-checkbox:checked');
+        if (checked.length > 0) {
+            var firstClientId = $(checked[0]).data('client-id');
+            var differentClient = false;
+            
+            checked.each(function() {
+                if ($(this).data('client-id') !== firstClientId) {
+                    differentClient = true;
+                    return false;
+                }
+            });
+
+            if (differentClient) {
+                $('#btn-pay-selected').addClass('d-none');
+            } else {
+                $('#btn-pay-selected').removeClass('d-none');
+            }
+
+            // Disable others that don't match the first checked client
+            $('.sale-checkbox:not(:checked)').each(function() {
+                if ($(this).data('client-id') !== firstClientId) {
+                    $(this).prop('disabled', true);
+                } else {
+                    $(this).prop('disabled', false);
+                }
+            });
         } else {
             $('#btn-pay-selected').addClass('d-none');
+            $('.sale-checkbox').prop('disabled', false);
         }
     }
 

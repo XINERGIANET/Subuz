@@ -23,7 +23,7 @@ class ChargeController extends Controller
 
         $payment_methods = PaymentMethod::all();
         
-        $sales = Sale::when($request->client_id, function($query, $client_id){
+        $sales = Sale::with(['client', 'payments.payment_method'])->when($request->client_id, function($query, $client_id){
             return $query->where('client_id', $client_id);
         })->when($request->start_date, function($query, $start_date){
             return $query->whereDate('date', '>=', $start_date);
@@ -36,7 +36,7 @@ class ChargeController extends Controller
         })
         ->latest('date');
 
-        $total = $sales->sum('total');
+        $total = $sales->sum('debt');
     
         $sales = $sales->paginate(10);
 
@@ -45,7 +45,7 @@ class ChargeController extends Controller
 
     public function pending(Request $request){
         $payment_methods = PaymentMethod::all();
-        $query = Sale::whereIn('type', ['Contado', 'Pago pendiente'])
+        $query = Sale::with(['client', 'payments.payment_method'])->whereIn('type', ['Contado', 'Pago pendiente'])
             ->where('paid', 0)
             ->whereHas('movements', function($q) {
                 $q->where('type', 'debt');
@@ -60,7 +60,7 @@ class ChargeController extends Controller
                 return $q->whereDate('date', '<=', $end_date);
             });
 
-        $total = $query->sum('total');
+        $total = $query->sum('debt');
         
         $sales = $query->latest('date')->paginate(10);
         $selected_client = $request->client_id ? Client::find($request->client_id) : null;

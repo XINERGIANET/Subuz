@@ -76,39 +76,64 @@
 </div>
 
 <div class="card border-0 shadow-sm overflow-hidden">
-    <div class="card-header border-0 py-3">
+    <div class="card-header border-0 py-3 d-flex justify-content-between align-items-center">
         <h3 class="card-title fw-bold"><i class="ti ti-hourglass me-2"></i>Ventas por Cobrar</h3>
+        @if(auth()->user()->hasRole('admin'))
+        <button class="btn btn-brand d-none" id="btn-pay-selected">
+            <i class="ti ti-cash icon me-1"></i> Pagar seleccionados
+        </button>
+        @endif
     </div>
 	<div class="table-responsive">
 		<table class="table card-table table-vcenter">
 			<thead class="table-corporate-header">
 				<tr>
-					<th width="40" class="d-none d-sm-table-cell">#</th>
+					<th width="40"><input class="form-check-input m-0 align-middle" type="checkbox" id="check-all-sales"></th>
 					<th>Guía</th>
 					<th class="d-none d-md-table-cell">Fecha</th>
 					<th>Cliente</th>
+					<th>Pagos</th>
 					<th class="text-center">Total</th>
+					<th class="text-center">Deuda</th>
 					<th class="text-end">Acciones</th>
 				</tr>
 			</thead>
 			<tbody>
 				@forelse($sales as $sale)
 				<tr>
-					<td class="text-muted d-none d-sm-table-cell">{{ $loop->iteration }}</td>
+					<td><input class="form-check-input m-0 align-middle sale-checkbox" type="checkbox" value="{{ $sale->id }}" data-debt="{{ $sale->debt }}" data-client-id="{{ $sale->client_id }}" data-type="{{ $sale->type }}"></td>
 					<td class="fw-bold">
                         {{ $sale->guide }}
                         <div class="d-block d-md-none text-muted small fw-normal">{{ $sale->date->format('d/m/Y') }}</div>
                     </td>
 					<td class="d-none d-md-table-cell">{{ $sale->date->format('d/m/Y') }}</td>
 					<td class="small">{{ optional($sale->client)->name ?? 'Consumidor Final' }}</td>
-					<td class="text-center fw-bold text-primary">S/{{ number_format($sale->total, 2) }}</td>
+					<td>
+						<div class="d-flex flex-wrap gap-1 align-items-center">
+							@forelse($sale->payments as $payment)
+							<span class="badge bg-blue-lt fw-normal pe-4 position-relative" style="text-transform: none;">
+								<span class="fw-bold">S/{{ number_format($payment->amount, 2) }}</span>
+								<span class="ms-1 opacity-75">({{ optional($payment->payment_method)->name }})</span>
+                                @if(auth()->user()->hasRole('admin'))
+                                <a href="javascript:void(0)" class="btn-delete-payment text-danger position-absolute top-50 end-0 translate-middle-y me-1" data-id="{{ $payment->id }}" title="Restablecer pago">
+                                    <i class="ti ti-x fs-4"></i>
+                                </a>
+                                @endif
+							</span>
+                            @empty
+                            <span class="text-muted small italic">Sin pagos</span>
+							@endforelse
+						</div>
+					</td>
+					<td class="text-center fw-bold text-muted">S/{{ number_format($sale->total, 2) }}</td>
+					<td class="text-center fw-bold text-warning">S/{{ number_format($sale->debt, 2) }}</td>
 					<td class="text-end">
 						<div class="d-flex gap-2 justify-content-end">
 							<button class="btn btn-icon btn-outline-primary btn-show" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Ver Detalle">
 								<i class="ti ti-eye icon fs-2"></i>
 							</button>
 							@if(auth()->user()->hasRole('admin'))
-								<button class="btn btn-icon btn-brand btn-payment" data-id="{{ $sale->id }}" data-total="{{ $sale->total }}" data-type="{{ $sale->type }}" data-bs-toggle="tooltip" title="Registrar Pago">
+								<button class="btn btn-icon btn-brand btn-payment" data-id="{{ $sale->id }}" data-debt="{{ $sale->debt }}" data-type="{{ $sale->type }}" data-bs-toggle="tooltip" title="Registrar Pago">
 									<i class="ti ti-cash icon text-white fs-2"></i>
 								</button>
 								<button class="btn btn-icon btn-outline-danger btn-delete" data-id="{{ $sale->id }}" data-bs-toggle="tooltip" title="Eliminar Venta">
@@ -161,12 +186,13 @@
   			</div>
   			<div class="modal-footer d-flex justify-content-between align-items-center">
   				<div>
-  					<div class="small text-muted">Total Venta: <span class="fw-bold" id="total-sale-display">S/0.00</span></div>
+  					<div class="small text-muted">Total Deuda: <span class="fw-bold" id="total-sale-display">S/0.00</span></div>
   					<div class="small text-muted">Saldo Restante: <span class="fw-bold text-danger" id="remaining-balance-display">S/0.00</span></div>
   				</div>
   				<div>
 	  				<input type="hidden" name="type" id="sale_type">
 	  				<input type="hidden" name="sale_id" id="sale_id">
+                    <div id="sale-ids-container"></div>
 	  				<input type="hidden" id="total_sale_value">
 					<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
 					<button type="submit" class="btn btn-brand" id="btn-submit-payment"><i class="ti ti-device-floppy icon"></i> Guardar</button>
@@ -267,13 +293,14 @@
 
 	$(document).on('click', '.btn-payment', function(){
 		var sale_id = $(this).data('id');
-		var total = parseFloat($(this).data('total'));
+		var debt = parseFloat($(this).data('debt'));
 		var type = $(this).data('type');
 
 		$('#sale_id').val(sale_id);
+        $('#sale-ids-container').html('');
 		$('#sale_type').val(type);
-		$('#total_sale_value').val(total);
-		$('#total-sale-display').text('S/' + total.toFixed(2));
+		$('#total_sale_value').val(debt);
+		$('#total-sale-display').text('S/' + debt.toFixed(2));
 		
 		// Reset file input
 		$('#payment_photo').val('');
@@ -286,6 +313,83 @@
 		calculateBalance(); 
 		$('#paymentModal').modal('show');
 	});
+
+    $(document).on('change', '#check-all-sales', function() {
+        $('.sale-checkbox:not(:disabled)').prop('checked', $(this).prop('checked'));
+        togglePaySelectedButton();
+    });
+
+    $(document).on('change', '.sale-checkbox', function() {
+        if ($('.sale-checkbox:checked').length == $('.sale-checkbox:not(:disabled)').length && $('.sale-checkbox:not(:disabled)').length > 0) {
+            $('#check-all-sales').prop('checked', true);
+        } else {
+            $('#check-all-sales').prop('checked', false);
+        }
+        togglePaySelectedButton();
+    });
+
+    function togglePaySelectedButton() {
+        var checked = $('.sale-checkbox:checked');
+        if (checked.length > 0) {
+            var firstClientId = $(checked[0]).data('client-id');
+            var differentClient = false;
+            
+            checked.each(function() {
+                if ($(this).data('client-id') !== firstClientId) {
+                    differentClient = true;
+                    return false;
+                }
+            });
+
+            if (differentClient) {
+                $('#btn-pay-selected').addClass('d-none');
+            } else {
+                $('#btn-pay-selected').removeClass('d-none');
+            }
+
+            // Disable others that don't match the first checked client
+            $('.sale-checkbox:not(:checked)').each(function() {
+                if ($(this).data('client-id') !== firstClientId) {
+                    $(this).prop('disabled', true);
+                } else {
+                    $(this).prop('disabled', false);
+                }
+            });
+        } else {
+            $('#btn-pay-selected').addClass('d-none');
+            $('.sale-checkbox').prop('disabled', false);
+        }
+    }
+
+    $(document).on('click', '#btn-pay-selected', function() {
+        var totalDebt = 0;
+        var saleIdsHtml = '';
+        var type = '';
+        
+        $('.sale-checkbox:checked').each(function() {
+            totalDebt += parseFloat($(this).data('debt'));
+            saleIdsHtml += '<input type="hidden" name="sale_ids[]" value="' + $(this).val() + '">';
+            type = $(this).data('type');
+        });
+
+        $('#sale_id').val(''); // Clear single sale id
+        $('#sale-ids-container').html(saleIdsHtml); // Set multiple sale ids
+        $('#sale_type').val(type);
+        
+        $('#total_sale_value').val(totalDebt);
+        $('#total-sale-display').text('S/' + totalDebt.toFixed(2));
+        
+        // Reset file input
+        $('#payment_photo').val('');
+        $('#payment_photo_preview_container').addClass('d-none');
+        $('#payment_photo_preview').attr('src', '#');
+
+        // Reset to one line
+        $('#payment-lines').html('');
+        addPaymentLine();
+        calculateBalance(); // Initial calculate
+        $('#paymentModal').modal('show');
+    });
 
 	function addPaymentLine() {
 		var index = $('.payment-line').length;
@@ -330,17 +434,13 @@
 		
 		$display.text(remainingText);
 		
-		if (remaining === 0) {
+		if (remaining <= 0) {
 			$display.removeClass('text-danger').addClass('text-success');
-			$('#btn-submit-payment').prop('disabled', false);
 		} else {
 			$display.removeClass('text-success').addClass('text-danger');
-			// For Pending Payments, we usually want EXACT payment to close it
-			// However, legacy logic might differ. User said "following same logic as others".
-			// In sales/dispatch modal, we require exact match. 
-			// I'll disable Guardar if remaining != 0 to ensure full liquidation.
-			$('#btn-submit-payment').prop('disabled', true);
 		}
+        // Always enable save button to allow partial payments
+        $('#btn-submit-payment').prop('disabled', false);
 	}
 
 	$(document).on('click', '#add-payment-line', function() {
@@ -481,5 +581,31 @@
 		});
 
 	});
+
+    $(document).on('click', '.btn-delete-payment', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        var payment_id = $(this).data('id');
+        if(confirm('¿Está seguro de restablecer este pago? La deuda volverá a su estado anterior.')){
+            $.ajax({
+                url: '{{ url("payments") }}/' + payment_id,
+                method: 'DELETE',
+                data: {
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(data){
+                    if(data.status){
+                        location.reload();
+                    } else {
+                        ToastError.fire({ text: data.error });
+                    }
+                },
+                error: function(err){
+                    console.log(err);
+                    ToastError.fire({ text: 'Ocurrió un error al intentar restablecer el pago.' });
+                }
+            });
+        }
+    });
 </script>
 @endsection

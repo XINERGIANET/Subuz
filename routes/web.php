@@ -173,5 +173,6 @@ Route::middleware('auth')->group(function () {
 		Route::post('cashbox/open', [CashboxController::class, 'open'])->name('cashbox.open');
 		Route::post('cashbox/close', [CashboxController::class, 'close'])->name('cashbox.close');
 		Route::post('cashbox/income', [CashboxController::class, 'storeIncome'])->name('cashbox.income');
+		Route::post('cashbox/transfer', [CashboxController::class, 'storeTransfer'])->name('cashbox.transfer');
 	});
 });

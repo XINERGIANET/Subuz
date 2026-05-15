@@ -80,6 +80,7 @@
 			copyClassesToDropdown: false,
 			dropdownClass: 'dropdown-menu ts-dropdown',
 			optionClass:'dropdown-item',
+			dropdownParent: 'body',
 			load: function(query, callback){
 				$.ajax({
 					url: '{{ route('clients.api') }}?q=' + encodeURIComponent(query),

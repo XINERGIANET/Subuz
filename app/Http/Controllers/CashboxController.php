@@ -47,11 +47,14 @@ class CashboxController extends Controller
             $total_paid = $movements->where('type', 'paid')->sum('amount');
             $total_debt = $movements->where('type', 'debt')->sum('amount');
             $total_manual_income = $movements->where('type', 'income')->sum('amount');
+            $total_transfers = $movements->where('type', 'transfer')->sum('amount');
             
             $total_expenses = Expense::whereBetween('date', [$cashbox->opened_at, now()])
                 ->sum('amount');
 
-            $suggested_closing_amount = ($cashbox->opening_amount + $total_paid + $total_manual_income) - $total_expenses;
+            // Para el monto sugerido de cierre (Efectivo), incluimos los transfers realizados en efectivo
+            $cash_transfers = $movements->where('payment_method_id', 1)->where('type', 'transfer')->sum('amount');
+            $suggested_closing_amount = ($cashbox->opening_amount + $movements->where('payment_method_id', 1)->where('type', 'paid')->sum('amount') + $movements->where('payment_method_id', 1)->where('type', 'income')->sum('amount') + $cash_transfers) - Expense::where('payment_method_id', 1)->whereBetween('date', [$cashbox->opened_at, now()])->sum('amount');
         } else {
             $last_box = Cashbox::where('is_open', 0)->latest('closed_at')->first();
             if($last_box){
@@ -73,13 +76,14 @@ class CashboxController extends Controller
                 
                 $paid = $movements->where('payment_method_id', $pm->id)->where('type', 'paid')->sum('amount');
                 $income = $movements->where('payment_method_id', $pm->id)->where('type', 'income')->sum('amount');
+                $transfer = $movements->where('payment_method_id', $pm->id)->where('type', 'transfer')->sum('amount');
                 
                 // Calculamos los egresos específicos de este método de pago
                 $expense = Expense::where('payment_method_id', $pm->id)
                     ->whereBetween('date', [$cashbox->opened_at, now()])
                     ->sum('amount');
 
-                $balances[$pm->id] = $opening + $paid + $income - $expense;
+                $balances[$pm->id] = $opening + $paid + $income + $transfer - $expense;
             } else {
                 $balances[$pm->id] = 0;
             }
@@ -115,6 +119,44 @@ class CashboxController extends Controller
         }
 
         return back()->with('message', 'Ingreso de caja registrado correctamente.');
+    }
+
+    public function storeTransfer(Request $request){
+        $request->validate([
+            'from_payment_method_id' => 'required|exists:payment_methods,id',
+            'to_payment_method_id' => 'required|exists:payment_methods,id|different:from_payment_method_id',
+            'amount' => 'required|numeric|min:0.01',
+            'note' => 'nullable|string'
+        ]);
+
+        $cashbox = Cashbox::currentOpen();
+        if(!$cashbox){
+            return back()->with('error', 'No hay una caja abierta.');
+        }
+
+        // Registrar la salida
+        CashboxMovement::create([
+            'cashbox_id' => $cashbox->id,
+            'user_id' => auth()->id(),
+            'payment_method_id' => $request->from_payment_method_id,
+            'type' => 'transfer',
+            'amount' => -$request->amount,
+            'note' => 'Transferencia enviada: ' . $request->note,
+            'date' => now()
+        ]);
+
+        // Registrar la entrada
+        CashboxMovement::create([
+            'cashbox_id' => $cashbox->id,
+            'user_id' => auth()->id(),
+            'payment_method_id' => $request->to_payment_method_id,
+            'type' => 'transfer',
+            'amount' => $request->amount,
+            'note' => 'Transferencia recibida: ' . $request->note,
+            'date' => now()
+        ]);
+
+        return back()->with('message', 'Transferencia entre cuentas registrada correctamente.');
     }
 
     public function open(Request $request){
@@ -172,11 +214,12 @@ class CashboxController extends Controller
             $opening = ($pm->id == 1) ? $cashbox->opening_amount : ($cashbox->opening_balances[$pm->id] ?? 0);
             $paid = $movements->where('payment_method_id', $pm->id)->where('type', 'paid')->sum('amount');
             $income = $movements->where('payment_method_id', $pm->id)->where('type', 'income')->sum('amount');
+            $transfer = $movements->where('payment_method_id', $pm->id)->where('type', 'transfer')->sum('amount');
             $expense = Expense::where('payment_method_id', $pm->id)
                 ->whereBetween('date', [$cashbox->opened_at, now()])
                 ->sum('amount');
             
-            $closing_balances[$pm->id] = ($opening + $paid + $income) - $expense;
+            $closing_balances[$pm->id] = ($opening + $paid + $income + $transfer) - $expense;
         }
 
         $cashbox->update([

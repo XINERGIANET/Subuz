@@ -69,6 +69,9 @@
                     <button class="btn btn-primary btn-sm w-100 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#incomeModal">
                         <i class="ti ti-plus me-1 fs-3"></i> Nuevo Ingreso
                     </button>
+                    <button class="btn btn-outline-primary btn-sm w-100 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#transferModal">
+                        <i class="ti ti-arrows-transfer-down me-1 fs-3"></i> Transferir
+                    </button>
                     <button class="btn btn-outline-danger btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#closeModal">
                         <i class="ti ti-door-exit me-1 fs-3"></i> Cerrar Caja
                     </button>
@@ -132,9 +135,9 @@
 				@forelse($movements as $movement)
 				<tr>
 					<td class="small text-muted">{{ $movement->date->format('d/m/Y H:i') }}</td>
-					<td class="fw-bold text-dark">{{ $movement->sale ? $movement->sale->guide : ($movement->type == 'expense' ? 'Egreso' : 'Ingreso de Caja') }}</td>
+					<td class="fw-bold text-dark">{{ $movement->sale ? $movement->sale->guide : ($movement->type == 'expense' ? 'Egreso' : ($movement->type == 'transfer' ? 'Transferencia' : 'Ingreso de Caja')) }}</td>
 					<td>
-						@if($movement->type == 'income' || $movement->type == 'expense')
+						@if($movement->type == 'income' || $movement->type == 'expense' || $movement->type == 'transfer')
 							<span class="text-muted italic">{{ $movement->note }}</span>
 						@else
 							<span class="fw-medium text-dark">{{ optional(optional($movement->sale)->client)->name ?? 'Consumidor Final' }}</span>
@@ -145,6 +148,8 @@
 						    <span class="badge bg-success-lt px-2 py-1">Pagado</span>
 						@elseif($movement->type == 'expense')
 						    <span class="badge bg-red-lt px-2 py-1">Gasto</span>
+                        @elseif($movement->type == 'transfer')
+						    <span class="badge bg-azure-lt px-2 py-1">Transferencia</span>
 						@else
 						    <span class="badge bg-warning-lt px-2 py-1">Deuda</span>
 						@endif
@@ -154,7 +159,7 @@
                             {{ $movement->payment_method ? $movement->payment_method->name : 'N/A' }}
                         </span>
                     </td>
-					<td class="text-center fw-bold @if($movement->type=='expense') text-danger @else text-primary @endif">
+					<td class="text-center fw-bold @if($movement->type=='expense' || ($movement->type=='transfer' && $movement->amount < 0)) text-danger @else text-primary @endif">
                         S/{{ number_format($movement->amount, 2) }}
                     </td>
 					<td class="text-end small">{{ $movement->user ? explode(' ', $movement->user->name)[0] : 'N/A' }}</td>
@@ -229,6 +234,64 @@
   			<div class="modal-footer">
   				<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
   				<button type="submit" class="btn btn-brand"><i class="ti ti-device-floppy icon"></i> Guardar</button>
+  			</div>
+  		</form>
+  	</div>
+  </div>
+</div>
+
+<div class="modal modal-blur fade" id="transferModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+  	<div class="modal-content">
+  		<form method="POST" action="{{ route('cashbox.transfer') }}">
+  			@csrf
+  			<div class="modal-header">
+  			  <h5 class="modal-title">Transferencia entre Cuentas</h5>
+  			  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+  			</div>
+  			<div class="modal-body">
+  				<div class="mb-3">
+  					<label class="form-label">Desde (Origen)</label>
+                    <select class="form-select" name="from_payment_method_id" required>
+                        <option value="">Seleccionar cuenta origen</option>
+                        @foreach($payment_methods as $pm)
+                        <option value="{{ $pm->id }}">{{ $pm->name }} (S/{{ number_format($balances[$pm->id] ?? 0, 2) }})</option>
+                        @endforeach
+                    </select>
+  				</div>
+                <div class="mb-3 text-center">
+                    <i class="ti ti-arrow-down fs-1 text-muted"></i>
+                </div>
+                <div class="mb-3">
+  					<label class="form-label">Hacia (Destino)</label>
+                    <select class="form-select" name="to_payment_method_id" required>
+                        <option value="">Seleccionar cuenta destino</option>
+                        @foreach($payment_methods as $pm)
+                        <option value="{{ $pm->id }}">{{ $pm->name }} (S/{{ number_format($balances[$pm->id] ?? 0, 2) }})</option>
+                        @endforeach
+                    </select>
+  				</div>
+                <div class="row">
+                    <div class="col-lg-6">
+                        <div class="mb-3">
+                            <label class="form-label">Monto a transferir</label>
+                            <div class="input-group">
+                                <span class="input-group-text">S/</span>
+                                <input type="number" step="0.01" class="form-control" name="amount" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="mb-3">
+                            <label class="form-label">Nota / Referencia</label>
+                            <input type="text" class="form-control" name="note" placeholder="Ej. Depósito banco">
+                        </div>
+                    </div>
+                </div>
+  			</div>
+  			<div class="modal-footer">
+  				<button type="button" class="btn me-auto" data-bs-dismiss="modal"><i class="ti ti-x icon"></i> Cerrar</button>
+  				<button type="submit" class="btn btn-brand"><i class="ti ti-arrows-exchange icon"></i> Transferir</button>
   			</div>
   		</form>
   	</div>
