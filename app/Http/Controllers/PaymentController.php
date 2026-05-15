@@ -116,9 +116,9 @@ class PaymentController extends Controller
                     }
                 } elseif ($request->type == 'Pago pendiente' || $request->type == 'Contado') {
                     $totalSalesAmount = array_sum($amountDueBySale);
-                    // For pending/cash, we expect the FULL amount to be paid to clear it.
-                    if (abs($totalAmount - floatval($totalSalesAmount)) > 0.01) {
-                        throw new \Exception("La suma de los pagos (S/" . number_format($totalAmount, 2) . ") debe ser igual al total de las ventas (S/" . number_format($totalSalesAmount, 2) . ").");
+                    // Check if total amount exceeds debt
+                    if (round($totalAmount, 2) > round($totalSalesAmount, 2)) {
+                        throw new \Exception("El monto total a pagar (S/" . number_format($totalAmount, 2) . ") supera el saldo pendiente de las ventas seleccionadas (S/" . number_format($totalSalesAmount, 2) . ").");
                     }
                 }
 

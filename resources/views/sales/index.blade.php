@@ -66,7 +66,6 @@
 					</div>
 				@endif
 			</div>
-			@endif
 		</div>
 		@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente') || auth()->user()->hasRole('seller'))
 		<div class="d-flex text-center gap-3 flex-wrap justify-content-center justify-content-md-end">
@@ -172,6 +171,7 @@
 				</div>
 			@endif
 		</div>
+		@endif
 		<div class="card-body border-bottom">
 			<form class="mb-3">
 				<div class="row">
@@ -599,48 +599,10 @@
 							<i class="ti ti-device-floppy me-2"></i> Confirmar Despacho
 						</button>
 					</div>
-				</div>
-
-				<div id="credit-message-container" style="display:none">
-					<div class="alert alert-info d-flex align-items-center gap-2 py-2">
-						<i class="ti ti-info-circle fs-2"></i>
-						<div>Esta venta es a <strong>Crédito</strong>. Solo confirme la entrega.</div>
-					</div>
-                    <input type="hidden" name="is_credit_hidden" id="is_credit_hidden" value="0">
-				</div>
-
-  				<div id="dispatchPaymentContainer" style="display:none">
-  					<div class="d-flex justify-content-between align-items-center mb-2">
-  						<label class="form-label mb-0 fw-bold text-uppercase small">Métodos de Pago</label>
-  						<button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-payment">
-  							<i class="ti ti-plus me-1"></i> Agregar otro
-  						</button>
-  					</div>
-  					
-  					<div id="payment-rows-container">
-  						<!-- Payment rows will be injected here -->
-  					</div>
-
-  					<div class="mt-3 p-2 rounded bg-primary-lt border border-primary d-flex justify-content-between align-items-center">
-  						<span class="fw-bold">Total Distribuido:</span>
-  						<span class="h4 mb-0 fw-extrabold" id="total-distributed">S/0.00</span>
-  					</div>
-  					<div id="payment-warning" class="mt-2 small text-danger fw-bold" style="display:none">
-  						<i class="ti ti-alert-triangle me-1"></i> La suma de los montos no coincide con el total.
-  					</div>
-  				</div>
-  			</div>
-  			<div class="modal-footer bg-light-subtle">
-  				<input type="hidden" name="sale_id" id="dispatch_sale_id">
-  				<button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Cancelar</button>
-  				<button type="submit" class="btn btn-brand px-4 h3" id="btn-confirm-dispatch">
-  					<i class="ti ti-device-floppy me-2"></i> Confirmar Despacho
-  				</button>
-  			</div>
-  		</form>
-    </div>
-  </div>
-</div>
+				</form>
+			</div>
+		</div>
+	</div>
 
 <div class="modal modal-blur fade" id="salesTotalDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">

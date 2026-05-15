@@ -100,7 +100,7 @@ class SaleController extends Controller
             });
         }
 
-        $formatMetricSale = function($sale) {
+        $formatMetricSale = function ($sale) {
             return [
                 'date' => optional($sale->date)->format('d/m/Y'),
                 'guide' => $sale->guide,
@@ -111,17 +111,12 @@ class SaleController extends Controller
         };
 
         $total_sales = $total_sales_query->sum('total');
-<<<<<<< HEAD
-
-=======
         $total_sales_details = (clone $total_sales_query)
             ->with('client')
             ->latest('date')
             ->get()
             ->map($formatMetricSale)
             ->values();
-        
->>>>>>> fa34dce4e3c119ca8d2fb3ecab477030a2bd9b74
         // Total cash for dispatchers (actual cash payments for filtered sales)
         $total_cash_query = (clone $query)->where('status', '!=', 'Anulado');
         if (auth()->check() && auth()->user()->hasRole('despachador')) {
@@ -137,7 +132,7 @@ class SaleController extends Controller
             ->get();
 
         $unique_payments_for_totals = $payments_for_totals
-            ->unique(function($payment) {
+            ->unique(function ($payment) {
                 return implode('|', [
                     $payment->sale_id,
                     $payment->payment_method_id,
@@ -153,7 +148,7 @@ class SaleController extends Controller
         // Total by payment methods for dispatchers
         $payment_totals = $unique_payments_for_totals
             ->groupBy('payment_method_id')
-            ->map(function($payments, $payment_method_id) {
+            ->map(function ($payments, $payment_method_id) {
                 $payment_method = optional($payments->first()->payment_method);
 
                 return (object) [
@@ -166,8 +161,8 @@ class SaleController extends Controller
 
         $payment_total_details = $unique_payments_for_totals
             ->groupBy('payment_method_id')
-            ->map(function($payments) {
-                return $payments->map(function($payment) {
+            ->map(function ($payments) {
+                return $payments->map(function ($payment) {
                     return [
                         'date' => optional($payment->date)->format('d/m/Y'),
                         'guide' => optional($payment->sale)->guide ?? 'Venta',
@@ -233,16 +228,9 @@ class SaleController extends Controller
             ->where('paid', 0)
             ->where(function ($sq) {
                 $sq->where('type', 'Pago pendiente')
-<<<<<<< HEAD
                     ->orWhereHas('movements', function ($mq) {
                         $mq->where('type', 'debt');
                     });
-            })
-            ->sum('total');
-=======
-                ->orWhereHas('movements', function($mq){
-                    $mq->where('type', 'debt');
-                });
             });
         $total_unpaid_delivered = (clone $unpaid_delivered_query)->sum('total');
         $total_unpaid_delivered_details = (clone $unpaid_delivered_query)
@@ -251,7 +239,6 @@ class SaleController extends Controller
             ->get()
             ->map($formatMetricSale)
             ->values();
->>>>>>> fa34dce4e3c119ca8d2fb3ecab477030a2bd9b74
 
         // Total by selected type (Breakdown)
         $total_by_type = null;
@@ -709,13 +696,13 @@ class SaleController extends Controller
         }
 
         try {
-            DB::transaction(function() use ($request, $sale, $cashbox, $photoPath){
+            DB::transaction(function () use ($request, $sale, $cashbox, $photoPath) {
                 $sale = Sale::whereKey($sale->id)->lockForUpdate()->firstOrFail();
 
-                if($request->paid && $sale->paid){
+                if ($request->paid && $sale->paid) {
                     throw new \Exception('La venta ya esta marcada como pagada.');
                 }
-                
+
                 $commonUpdate = [
                     'guide' => $request->guide,
                     'photo' => $photoPath
