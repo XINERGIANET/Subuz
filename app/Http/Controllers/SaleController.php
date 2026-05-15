@@ -126,22 +126,40 @@ class SaleController extends Controller
         }
         $payment_total_sale_ids = $total_cash_query->pluck('id');
 
-        $total_cash = Payment::where('payment_method_id', 1) // 1 = Efectivo
-            ->whereIn('sale_id', $payment_total_sale_ids)
+        $payments_for_totals = Payment::with(['sale.client', 'payment_method'])
+            ->whereIn('payments.sale_id', $payment_total_sale_ids)
+            ->latest('date')
+            ->get();
+
+        $unique_payments_for_totals = $payments_for_totals
+            ->unique(function($payment) {
+                return implode('|', [
+                    $payment->sale_id,
+                    $payment->payment_method_id,
+                    number_format((float) $payment->amount, 2, '.', '')
+                ]);
+            })
+            ->values();
+
+        $total_cash = $unique_payments_for_totals
+            ->where('payment_method_id', 1) // 1 = Efectivo
             ->sum('amount');
 
         // Total by payment methods for dispatchers
-        $payment_totals = \DB::table('payments')
-            ->join('payment_methods', 'payments.payment_method_id', '=', 'payment_methods.id')
-            ->select('payment_methods.id', 'payment_methods.name', \DB::raw('SUM(payments.amount) as total'))
-            ->whereIn('payments.sale_id', $payment_total_sale_ids)
-            ->groupBy('payment_methods.id', 'payment_methods.name')
-            ->get();
+        $payment_totals = $unique_payments_for_totals
+            ->groupBy('payment_method_id')
+            ->map(function($payments, $payment_method_id) {
+                $payment_method = optional($payments->first()->payment_method);
 
-        $payment_total_details = Payment::with(['sale.client', 'payment_method'])
-            ->whereIn('sale_id', $payment_total_sale_ids)
-            ->latest('date')
-            ->get()
+                return (object) [
+                    'id' => $payment_method_id,
+                    'name' => $payment_method->name ?? 'N/A',
+                    'total' => $payments->sum('amount'),
+                ];
+            })
+            ->values();
+
+        $payment_total_details = $unique_payments_for_totals
             ->groupBy('payment_method_id')
             ->map(function($payments) {
                 return $payments->map(function($payment) {
