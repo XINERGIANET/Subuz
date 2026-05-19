@@ -68,109 +68,121 @@
 			</div>
 		</div>
 		@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente') || auth()->user()->hasRole('seller'))
-		<div class="d-flex text-center gap-3 flex-wrap justify-content-center justify-content-md-end">
-			<div>
-				<span class="d-block small text-muted">Total Entregado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-				<button type="button" class="btn btn-link p-0 fs-3 fw-bold text-primary text-decoration-none js-sales-total-detail" data-detail-key="total_delivered">
-					S/{{ number_format($total_sales, 2) }}
-				</button>
-			</div>
-			<div class="vr mx-1"></div>
-			@foreach($payment_totals as $pt)
-			<div>
-				<span class="d-block small text-muted">{{ $pt->name == 'Interbank' ? 'Interbank Empresa' : $pt->name }} {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-				<button type="button" class="btn btn-link p-0 fs-3 fw-bold text-success text-decoration-none js-sales-total-detail" data-detail-key="payment_{{ $pt->id }}">
-					S/{{ number_format($pt->total, 2) }}
-				</button>
-			</div>
-			<div class="vr mx-1"></div>
-			@endforeach
+			<div class="d-flex text-center gap-3 flex-wrap justify-content-center justify-content-md-end">
+				<div>
+					<span class="d-block small text-muted">Total Entregado
+						{{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+					<button type="button"
+						class="btn btn-link p-0 fs-3 fw-bold text-primary text-decoration-none js-sales-total-detail"
+						data-detail-key="total_delivered">
+						S/{{ number_format($total_sales, 2) }}
+					</button>
+				</div>
+				<div class="vr mx-1"></div>
+				@foreach($payment_totals as $pt)
+					<div>
+						<span class="d-block small text-muted">{{ $pt->name == 'Interbank' ? 'Interbank Empresa' : $pt->name }}
+							{{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+						<button type="button"
+							class="btn btn-link p-0 fs-3 fw-bold text-success text-decoration-none js-sales-total-detail"
+							data-detail-key="payment_{{ $pt->id }}">
+							S/{{ number_format($pt->total, 2) }}
+						</button>
+					</div>
+					<div class="vr mx-1"></div>
+				@endforeach
 
-			<div>
-				<span class="d-block small text-muted">No Pagado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-				<button type="button" class="btn btn-link p-0 fs-3 fw-bold text-danger text-decoration-none js-sales-total-detail" data-detail-key="unpaid_delivered">
-					S/{{ number_format($total_unpaid_delivered, 2) }}
-				</button>
+				<div>
+					<span class="d-block small text-muted">No Pagado
+						{{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+					<button type="button"
+						class="btn btn-link p-0 fs-3 fw-bold text-danger text-decoration-none js-sales-total-detail"
+						data-detail-key="unpaid_delivered">
+						S/{{ number_format($total_unpaid_delivered, 2) }}
+					</button>
+				</div>
+				<div class="vr mx-1"></div>
+				<div>
+					<span class="d-block small text-muted">No Entregado
+						{{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
+					<button type="button"
+						class="btn btn-link p-0 fs-3 fw-bold text-warning text-decoration-none js-sales-total-detail"
+						data-detail-key="not_delivered">
+						S/{{ number_format($total_not_delivered, 2) }}
+					</button>
+				</div>
 			</div>
-			<div class="vr mx-1"></div>
-			<div>
-				<span class="d-block small text-muted">No Entregado {{ auth()->user()->hasRole('asistente') ? '(Hoy)' : '' }}</span>
-				<button type="button" class="btn btn-link p-0 fs-3 fw-bold text-warning text-decoration-none js-sales-total-detail" data-detail-key="not_delivered">
-					S/{{ number_format($total_not_delivered, 2) }}
-				</button>
-			</div>
-		</div>
 		@endif
 
 		@if(auth()->user()->hasRole('despachador'))
-		<div class="d-flex text-center gap-4 flex-wrap justify-content-center justify-content-md-end">
-			<div>
-				<span class="d-block small text-muted">
-					Pedidos Entregados
-				</span>
-				<span class="fs-2 fw-bold text-primary">
-					{{ $delivered_count ?? 0 }}
-				</span>
-			</div>
-			<div class="vr mx-2 d-none d-md-block"></div>
-			@if(isset($payment_totals) && $payment_totals->count() > 0)
-				@foreach($payment_totals as $pt)
+			<div class="d-flex text-center gap-4 flex-wrap justify-content-center justify-content-md-end">
 				<div>
 					<span class="d-block small text-muted">
-						Total {{ $pt->name }}
+						Pedidos Entregados
 					</span>
-					<span class="fs-2 fw-bold text-success">
-						S/{{ number_format($pt->total, 2) }}
+					<span class="fs-2 fw-bold text-primary">
+						{{ $delivered_count ?? 0 }}
 					</span>
 				</div>
-				@endforeach
-			@else
-				<div>
-					<span class="d-block small text-muted">Total Efectivo</span>
-					<span class="fs-2 fw-bold text-success">S/0.00</span>
-				</div>
-			@endif
-
-			@if(auth()->user()->hasRole('despachador'))
-				<div class="d-flex text-center gap-4 flex-wrap justify-content-center justify-content-md-end">
-					<div>
-						<span class="d-block small text-muted">
-							Pedidos Entregados
-						</span>
-						<span class="fs-2 fw-bold text-primary">
-							{{ $delivered_count ?? 0 }}
-						</span>
-					</div>
-					<div class="vr mx-2 d-none d-md-block"></div>
-					@if(isset($payment_totals) && $payment_totals->count() > 0)
-						@foreach($payment_totals as $pt)
-							<div>
-								<span class="d-block small text-muted">
-									Total {{ $pt->name }}
-								</span>
-								<span class="fs-2 fw-bold text-success">
-									S/{{ number_format($pt->total, 2) }}
-								</span>
-							</div>
-						@endforeach
-					@else
+				<div class="vr mx-2 d-none d-md-block"></div>
+				@if(isset($payment_totals) && $payment_totals->count() > 0)
+					@foreach($payment_totals as $pt)
 						<div>
-							<span class="d-block small text-muted">Total Efectivo</span>
-							<span class="fs-2 fw-bold text-success">S/0.00</span>
+							<span class="d-block small text-muted">
+								Total {{ $pt->name }}
+							</span>
+							<span class="fs-2 fw-bold text-success">
+								S/{{ number_format($pt->total, 2) }}
+							</span>
 						</div>
-					@endif
-					<div class="vr mx-2 d-none d-md-block"></div>
+					@endforeach
+				@else
 					<div>
-						<span class="d-block small text-muted">
-							Valor Total Entregado
-						</span>
-						<span class="fs-2 fw-bold text-info">
-							S/{{ number_format($total_sales, 2) }}
-						</span>
+						<span class="d-block small text-muted">Total Efectivo</span>
+						<span class="fs-2 fw-bold text-success">S/0.00</span>
 					</div>
-				</div>
-			@endif
-		</div>
+				@endif
+
+				@if(auth()->user()->hasRole('despachador'))
+					<div class="d-flex text-center gap-4 flex-wrap justify-content-center justify-content-md-end">
+						<div>
+							<span class="d-block small text-muted">
+								Pedidos Entregados
+							</span>
+							<span class="fs-2 fw-bold text-primary">
+								{{ $delivered_count ?? 0 }}
+							</span>
+						</div>
+						<div class="vr mx-2 d-none d-md-block"></div>
+						@if(isset($payment_totals) && $payment_totals->count() > 0)
+							@foreach($payment_totals as $pt)
+								<div>
+									<span class="d-block small text-muted">
+										Total {{ $pt->name }}
+									</span>
+									<span class="fs-2 fw-bold text-success">
+										S/{{ number_format($pt->total, 2) }}
+									</span>
+								</div>
+							@endforeach
+						@else
+							<div>
+								<span class="d-block small text-muted">Total Efectivo</span>
+								<span class="fs-2 fw-bold text-success">S/0.00</span>
+							</div>
+						@endif
+						<div class="vr mx-2 d-none d-md-block"></div>
+						<div>
+							<span class="d-block small text-muted">
+								Valor Total Entregado
+							</span>
+							<span class="fs-2 fw-bold text-info">
+								S/{{ number_format($total_sales, 2) }}
+							</span>
+						</div>
+					</div>
+				@endif
+			</div>
 		@endif
 		<div class="card-body border-bottom">
 			<form class="mb-3">
@@ -209,7 +221,8 @@
 										Crédito</option>
 									@foreach($payment_methods as $pm)
 										<option value="{{ $pm->id }}" {{ request()->payment_method_id == $pm->id ? 'selected' : '' }}>
-											{{ $pm->name }}</option>
+											{{ $pm->name }}
+										</option>
 									@endforeach
 								</select>
 							</div>
@@ -604,41 +617,41 @@
 		</div>
 	</div>
 
-<div class="modal modal-blur fade" id="salesTotalDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="salesTotalDetailTitle">Detalle</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-0">
-                <div class="table-responsive">
-                    <table class="table card-table table-vcenter mb-0">
-                        <thead class="table-corporate-header">
-                            <tr>
-                                <th>Fecha</th>
-                                <th>Guía</th>
-                                <th>Cliente</th>
-                                <th>Tipo</th>
-                                <th class="text-end">Monto</th>
-                            </tr>
-                        </thead>
-                        <tbody id="salesTotalDetailRows"></tbody>
-                        <tfoot>
-                            <tr>
-                                <td colspan="4" class="text-end fw-bold">Total</td>
-                                <td class="text-end fw-bold text-primary" id="salesTotalDetailAmount">S/0.00</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cerrar</button>
-            </div>
-        </div>
-    </div>
-</div>
+	<div class="modal modal-blur fade" id="salesTotalDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
+		<div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="salesTotalDetailTitle">Detalle</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+				<div class="modal-body p-0">
+					<div class="table-responsive">
+						<table class="table card-table table-vcenter mb-0">
+							<thead class="table-corporate-header">
+								<tr>
+									<th>Fecha</th>
+									<th>Guía</th>
+									<th>Cliente</th>
+									<th>Tipo</th>
+									<th class="text-end">Monto</th>
+								</tr>
+							</thead>
+							<tbody id="salesTotalDetailRows"></tbody>
+							<tfoot>
+								<tr>
+									<td colspan="4" class="text-end fw-bold">Total</td>
+									<td class="text-end fw-bold text-primary" id="salesTotalDetailAmount">S/0.00</td>
+								</tr>
+							</tfoot>
+						</table>
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cerrar</button>
+				</div>
+			</div>
+		</div>
+	</div>
 @endsection
 
 @section('modal')
@@ -709,130 +722,87 @@
 @endsection
 
 @section('scripts')
-<script>
-	const salesTotalDetails = {
-		total_delivered: {
-			title: 'Total Entregado',
-			rows: @json($total_sales_details),
-			total: {{ (float) $total_sales }}
-		},
-		unpaid_delivered: {
-			title: 'No Pagado',
-			rows: @json($total_unpaid_delivered_details),
-			total: {{ (float) $total_unpaid_delivered }}
-		},
-		not_delivered: {
-			title: 'No Entregado',
-			rows: @json($total_not_delivered_details),
-			total: {{ (float) $total_not_delivered }}
-		},
-		@foreach($payment_totals as $pt)
-		payment_{{ $pt->id }}: {
-			title: @json($pt->name == 'Interbank' ? 'Interbank Empresa' : $pt->name),
-			rows: @json($payment_total_details[$pt->id] ?? []),
-			total: {{ (float) $pt->total }}
-		},
-		@endforeach
-	};
+	<script>
+		const salesTotalDetails = {
+			total_delivered: {
+				title: 'Total Entregado',
+				rows: @json($total_sales_details),
+				total: {{ (float) $total_sales }}
+			},
+			unpaid_delivered: {
+				title: 'No Pagado',
+				rows: @json($total_unpaid_delivered_details),
+				total: {{ (float) $total_unpaid_delivered }}
+			},
+			not_delivered: {
+				title: 'No Entregado',
+				rows: @json($total_not_delivered_details),
+				total: {{ (float) $total_not_delivered }}
+			},
+			@foreach($payment_totals as $pt)
+				payment_{{ $pt->id }}: {
+					title: @json($pt->name == 'Interbank' ? 'Interbank Empresa' : $pt->name),
+					rows: @json($payment_total_details[$pt->id] ?? []),
+					total: {{ (float) $pt->total }}
+				},
+			@endforeach
+		};
 
-	function formatMoney(value) {
-		return 'S/' + (Number(value) || 0).toLocaleString('en-US', {
-			minimumFractionDigits: 2,
-			maximumFractionDigits: 2
-		});
-	}
-
-	function escapeHtml(value) {
-		return String(value ?? '').replace(/[&<>"']/g, function(char) {
-			return {
-				'&': '&amp;',
-				'<': '&lt;',
-				'>': '&gt;',
-				'"': '&quot;',
-				"'": '&#039;'
-			}[char];
-		});
-	}
-
-	$(document).on('click', '.js-sales-total-detail', function() {
-		const detail = salesTotalDetails[$(this).data('detail-key')];
-		if (!detail) return;
-
-		$('#salesTotalDetailTitle').text(detail.title);
-		$('#salesTotalDetailAmount').text(formatMoney(detail.total));
-
-		if (!detail.rows || detail.rows.length === 0) {
-			$('#salesTotalDetailRows').html(`
-				<tr>
-					<td colspan="5" class="text-center py-4 text-muted">No hay registros para mostrar</td>
-				</tr>
-			`);
-		} else {
-			$('#salesTotalDetailRows').html(detail.rows.map(function(row) {
-				return `
-					<tr>
-						<td class="small text-muted">${escapeHtml(row.date)}</td>
-						<td class="fw-bold">${escapeHtml(row.guide)}</td>
-						<td>${escapeHtml(row.client)}</td>
-						<td><span class="badge bg-blue-lt fw-normal">${escapeHtml(row.type)}</span></td>
-						<td class="text-end fw-bold">${formatMoney(row.amount)}</td>
-					</tr>
-				`;
-			}).join(''));
+		function formatMoney(value) {
+			return 'S/' + (Number(value) || 0).toLocaleString('en-US', {
+				minimumFractionDigits: 2,
+				maximumFractionDigits: 2
+			});
 		}
 
-		$('#salesTotalDetailModal').modal('show');
-	});
+		function escapeHtml(value) {
+			return String(value ?? '').replace(/[&<>"']/g, function (char) {
+				return {
+					'&': '&amp;',
+					'<': '&lt;',
+					'>': '&gt;',
+					'"': '&quot;',
+					"'": '&#039;'
+				}[char];
+			});
+		}
 
-	$(document).on('click', '[data-bs-target="#modal-sales-report"]', function() {
-        const mainStart = $('input[name="start_date"]').val();
-        const mainEnd = $('input[name="end_date"]').val();
-        if (mainStart) $('#report-start-date').val(mainStart);
-        if (mainEnd) $('#report-end-date').val(mainEnd);
-		loadSalesReportData();
-	});
+		$(document).on('click', '.js-sales-total-detail', function () {
+			const detail = salesTotalDetails[$(this).data('detail-key')];
+			if (!detail) return;
 
-	$('#btn-refresh-report').on('click', function() {
-		loadSalesReportData();
-	});
+			$('#salesTotalDetailTitle').text(detail.title);
+			$('#salesTotalDetailAmount').text(formatMoney(detail.total));
 
-	function loadSalesReportData() {
-		const start = $('#report-start-date').val();
-		const end = $('#report-end-date').val();
-        
-        // Grab other filters from the main view
-        const client_id = $('select[name="client_id"]').val() || '';
-        const type = $('select[name="type"]').val() || '';
-        const payment_method_id = $('select[name="payment_method_id"]').val() || '';
-        const delivery_status = $('select[name="delivery_status"]').val() || '';
-
-        const queryParams = `start_date=${start}&end_date=${end}&client_id=${client_id}&type=${type}&payment_method_id=${payment_method_id}&delivery_status=${delivery_status}`;
-
-		$('#btn-download-report-pdf').attr('href', `{{ route('sales.report_pdf') }}?${queryParams}`);
-
-		$('#report-content').addClass('d-none');
-		$('#report-loader').removeClass('d-none');
-
-		$.ajax({
-			url: `{{ route('sales.report_data') }}`,
-			method: 'GET',
-			data: { 
-                start_date: start, 
-                end_date: end,
-                client_id: client_id,
-                type: type,
-                payment_method_id: payment_method_id,
-                delivery_status: delivery_status
-            },
-			success: function(response) {
-				renderSalesReport(response);
-				$('#report-loader').addClass('d-none');
-				$('#report-content').removeClass('d-none');
-			},
-			error: function() {
-				alert('Error al cargar los datos del reporte');
-				$('#report-loader').addClass('d-none');
+			if (!detail.rows || detail.rows.length === 0) {
+				$('#salesTotalDetailRows').html(`
+					<tr>
+						<td colspan="5" class="text-center py-4 text-muted">No hay registros para mostrar</td>
+					</tr>
+				`);
+			} else {
+				$('#salesTotalDetailRows').html(detail.rows.map(function (row) {
+					return `
+						<tr>
+							<td class="small text-muted">${escapeHtml(row.date)}</td>
+							<td class="fw-bold">${escapeHtml(row.guide)}</td>
+							<td>${escapeHtml(row.client)}</td>
+							<td><span class="badge bg-blue-lt fw-normal">${escapeHtml(row.type)}</span></td>
+							<td class="text-end fw-bold">${formatMoney(row.amount)}</td>
+						</tr>
+					`;
+				}).join(''));
 			}
+
+			$('#salesTotalDetailModal').modal('show');
+		});
+
+		$(document).on('click', '[data-bs-target="#modal-sales-report"]', function () {
+			const mainStart = $('input[name="start_date"]').val();
+			const mainEnd = $('input[name="end_date"]').val();
+			if (mainStart) $('#report-start-date').val(mainStart);
+			if (mainEnd) $('#report-end-date').val(mainEnd);
+			loadSalesReportData();
 		});
 
 		$('#btn-refresh-report').on('click', function () {
@@ -882,31 +852,31 @@
 		function renderSalesReport(data) {
 			// Render Summary Cards (Top row)
 			let summaryHtml = `
-				<div class="col-md-3">
-					<div class="card p-3 border-0 shadow-sm text-center bg-white">
-						<div class="small fw-bold text-muted text-uppercase mb-1">Total Entregado</div>
-						<div class="h3 mb-0 fw-bold text-primary">S/ ${data.summary.total_delivered}</div>
+					<div class="col-md-3">
+						<div class="card p-3 border-0 shadow-sm text-center bg-white">
+							<div class="small fw-bold text-muted text-uppercase mb-1">Total Entregado</div>
+							<div class="h3 mb-0 fw-bold text-primary">S/ ${data.summary.total_delivered}</div>
+						</div>
 					</div>
-				</div>
-				<div class="col-md-3">
-					<div class="card p-3 border-0 shadow-sm text-center bg-white">
-						<div class="small fw-bold text-muted text-uppercase mb-1">No Pagado</div>
-						<div class="h3 mb-0 fw-bold text-danger">S/ ${data.summary.total_unpaid_delivered}</div>
+					<div class="col-md-3">
+						<div class="card p-3 border-0 shadow-sm text-center bg-white">
+							<div class="small fw-bold text-muted text-uppercase mb-1">No Pagado</div>
+							<div class="h3 mb-0 fw-bold text-danger">S/ ${data.summary.total_unpaid_delivered}</div>
+						</div>
 					</div>
-				</div>
-				<div class="col-md-3">
-					<div class="card p-3 border-0 shadow-sm text-center bg-white">
-						<div class="small fw-bold text-muted text-uppercase mb-1">No Entregado</div>
-						<div class="h3 mb-0 fw-bold text-warning">S/ ${data.summary.total_not_delivered}</div>
+					<div class="col-md-3">
+						<div class="card p-3 border-0 shadow-sm text-center bg-white">
+							<div class="small fw-bold text-muted text-uppercase mb-1">No Entregado</div>
+							<div class="h3 mb-0 fw-bold text-warning">S/ ${data.summary.total_not_delivered}</div>
+						</div>
 					</div>
-				</div>
-				<div class="col-md-3">
-					<div class="card p-3 border-0 shadow-sm text-center bg-white">
-						<div class="small fw-bold text-muted text-uppercase mb-1">Total Gastos</div>
-						<div class="h3 mb-0 fw-bold text-danger">S/ ${data.summary.total_expenses}</div>
+					<div class="col-md-3">
+						<div class="card p-3 border-0 shadow-sm text-center bg-white">
+							<div class="small fw-bold text-muted text-uppercase mb-1">Total Gastos</div>
+							<div class="h3 mb-0 fw-bold text-danger">S/ ${data.summary.total_expenses}</div>
+						</div>
 					</div>
-				</div>
-			`;
+				`;
 			$('#report-summary-container').html(summaryHtml);
 
 			// Render Methods and Previous Payments
@@ -915,13 +885,13 @@
 			if (Object.keys(methods).length > 0) {
 				Object.keys(methods).forEach(method => {
 					methodsHtml += `
-						<div class="col-6 col-md-3">
-							<div class="p-2 border rounded bg-light">
-								<div class="small text-muted text-uppercase">${method}</div>
-								<div class="fw-bold text-success">S/ ${parseFloat(methods[method]).toFixed(2)}</div>
+							<div class="col-6 col-md-3">
+								<div class="p-2 border rounded bg-light">
+									<div class="small text-muted text-uppercase">${method}</div>
+									<div class="fw-bold text-success">S/ ${parseFloat(methods[method]).toFixed(2)}</div>
+								</div>
 							</div>
-						</div>
-					`;
+						`;
 				});
 			} else {
 				methodsHtml = '<div class="col-12 text-center text-muted small py-2">No se registraron cobros en este periodo</div>';
@@ -930,13 +900,13 @@
 			// Add Previous Payments Info
 			if (data.summary.previous_payments_count > 0) {
 				methodsHtml += `
-					<div class="col-12 mt-2">
-						<div class="alert alert-info d-flex align-items-center mb-0 py-2">
-							<i class="ti ti-info-circle me-2 fs-2"></i>
-							<span>Se han procesado <strong>${data.summary.previous_payments_count}</strong> pagos correspondientes a ventas de días anteriores.</span>
+						<div class="col-12 mt-2">
+							<div class="alert alert-info d-flex align-items-center mb-0 py-2">
+								<i class="ti ti-info-circle me-2 fs-2"></i>
+								<span>Se han procesado <strong>${data.summary.previous_payments_count}</strong> pagos correspondientes a ventas de días anteriores.</span>
+							</div>
 						</div>
-					</div>
-				`;
+					`;
 			}
 
 			$('#report-methods-container').html(methodsHtml);
@@ -947,13 +917,13 @@
 			if (expensesMethods && Object.keys(expensesMethods).length > 0) {
 				Object.keys(expensesMethods).forEach(method => {
 					expensesMethodsHtml += `
-						<div class="col-6 col-md-3">
-							<div class="p-2 border rounded bg-light">
-								<div class="small text-muted text-uppercase">${method}</div>
-								<div class="fw-bold text-danger">S/ ${parseFloat(expensesMethods[method]).toFixed(2)}</div>
+							<div class="col-6 col-md-3">
+								<div class="p-2 border rounded bg-light">
+									<div class="small text-muted text-uppercase">${method}</div>
+									<div class="fw-bold text-danger">S/ ${parseFloat(expensesMethods[method]).toFixed(2)}</div>
+								</div>
 							</div>
-						</div>
-					`;
+						`;
 				});
 				$('#report-expenses-methods-container').html(expensesMethodsHtml);
 				$('#report-expenses-card').removeClass('d-none');
@@ -1030,13 +1000,13 @@
 						data.details.forEach(function (item) {
 							var subtotal = (Number(item.price) * Number(item.quantity)).toFixed(2);
 							html += `
-								<tr>
-									<td>${item.product.name}</td>
-									<td>${item.price}</td>
-									<td>${item.quantity}</td>
-									<td>${subtotal}</td>
-								</tr>
-							`;
+									<tr>
+										<td>${item.product.name}</td>
+										<td>${item.price}</td>
+										<td>${item.quantity}</td>
+										<td>${subtotal}</td>
+									</tr>
+								`;
 						});
 
 						$('#tbl-show-items').html(html);
@@ -1100,13 +1070,13 @@
 							var subtotal = (Number(item.price) * Number(item.quantity));
 							modalTotal += subtotal;
 							html += `
-								<tr class="edit-item-row">
-									<td><input type="hidden" name="detail_id[]" value="${item.id}"> ${item.product.name}</td>
-									<td><input type="number" step="0.01" class="form-control form-control-sm edit-price" name="price[]" value="${item.price}" style="width: 100px"></td>
-									<td><input type="number" step="1" class="form-control form-control-sm edit-qty" name="quantity[]" value="${item.quantity}" style="width: 100px"></td>
-									<td class="edit-subtotal">S/${subtotal.toFixed(2)}</td>
-								</tr>
-							`;
+									<tr class="edit-item-row">
+										<td><input type="hidden" name="detail_id[]" value="${item.id}"> ${item.product.name}</td>
+										<td><input type="number" step="0.01" class="form-control form-control-sm edit-price" name="price[]" value="${item.price}" style="width: 100px"></td>
+										<td><input type="number" step="1" class="form-control form-control-sm edit-qty" name="quantity[]" value="${item.quantity}" style="width: 100px"></td>
+										<td class="edit-subtotal">S/${subtotal.toFixed(2)}</td>
+									</tr>
+								`;
 						});
 
 						$('#tbl-edit-items').html(html);
@@ -1227,10 +1197,10 @@
 		});
 
 		var paymentMethodsHtml = `
-			@foreach($payment_methods as $pm)
-				<option value="{{ $pm->id }}">{{ $pm->name }}</option>
-			@endforeach
-		`;
+				@foreach($payment_methods as $pm)
+					<option value="{{ $pm->id }}">{{ $pm->name }}</option>
+				@endforeach
+			`;
 
 		var tsProductsDispatch = null;
 
@@ -1293,22 +1263,22 @@
 						data.details.forEach(function (item) {
 							var subtotal = (Number(item.price) * Number(item.quantity)).toFixed(2);
 							html += `
-								<tr>
-									<td>${item.product.name}</td>
-									<td>
-										<input type="number" step="0.01" class="form-control form-control-sm edit-dispatch-price" data-id="${item.id}" value="${item.price}" style="width: 70px">
-									</td>
-									<td>
-										<input type="number" step="1" class="form-control form-control-sm edit-dispatch-qty" data-id="${item.id}" value="${item.quantity}" style="width: 60px">
-									</td>
-									<td>S/${subtotal}</td>
-									<td class="text-end">
-										<button type="button" class="btn btn-sm btn-icon btn-ghost-danger btn-delete-dispatch-detail" data-id="${item.id}">
-											<i class="ti ti-trash"></i>
-										</button>
-									</td>
-								</tr>
-							`;
+									<tr>
+										<td>${item.product.name}</td>
+										<td>
+											<input type="number" step="0.01" class="form-control form-control-sm edit-dispatch-price" data-id="${item.id}" value="${item.price}" style="width: 70px">
+										</td>
+										<td>
+											<input type="number" step="1" class="form-control form-control-sm edit-dispatch-qty" data-id="${item.id}" value="${item.quantity}" style="width: 60px">
+										</td>
+										<td>S/${subtotal}</td>
+										<td class="text-end">
+											<button type="button" class="btn btn-sm btn-icon btn-ghost-danger btn-delete-dispatch-detail" data-id="${item.id}">
+												<i class="ti ti-trash"></i>
+											</button>
+										</td>
+									</tr>
+								`;
 						});
 						$('#tbl-dispatch-items').html(html);
 						$('#dispatch_total').text(data.total);
@@ -1398,26 +1368,26 @@
 			// ... existing addPaymentRow function ...
 			var rowCount = $('#payment-rows-container .payment-row').length;
 			var html = `
-				<div class="payment-row mb-2 border-bottom pb-2">
-					<div class="row g-2 align-items-center">
-						<div class="col-7">
-							<select class="form-select" name="payments[${rowCount}][method_id]" required>
-								<option value="">Seleccionar cuenta</option>
-								${paymentMethodsHtml}
-							</select>
-						</div>
-						<div class="col-4">
-							<div class="input-group input-group-flat">
-								<span class="input-group-text ps-2 pe-0">S/</span>
-								<input type="number" step="0.01" class="form-control ps-1 txt-payment-amount" name="payments[${rowCount}][amount]" value="${amount}" placeholder="0.00" required>
+					<div class="payment-row mb-2 border-bottom pb-2">
+						<div class="row g-2 align-items-center">
+							<div class="col-7">
+								<select class="form-select" name="payments[${rowCount}][method_id]" required>
+									<option value="">Seleccionar cuenta</option>
+									${paymentMethodsHtml}
+								</select>
+							</div>
+							<div class="col-4">
+								<div class="input-group input-group-flat">
+									<span class="input-group-text ps-2 pe-0">S/</span>
+									<input type="number" step="0.01" class="form-control ps-1 txt-payment-amount" name="payments[${rowCount}][amount]" value="${amount}" placeholder="0.00" required>
+								</div>
+							</div>
+							<div class="col-1 text-end">
+								${rowCount > 0 ? '<button type="button" class="btn btn-ghost-danger btn-icon btn-sm btn-remove-payment"><i class="ti ti-trash fs-3"></i></button>' : ''}
 							</div>
 						</div>
-						<div class="col-1 text-end">
-							${rowCount > 0 ? '<button type="button" class="btn btn-ghost-danger btn-icon btn-sm btn-remove-payment"><i class="ti ti-trash fs-3"></i></button>' : ''}
-						</div>
 					</div>
-				</div>
-			`;
+				`;
 			$('#payment-rows-container').append(html);
 			calculateDistributed();
 			setPaymentInputsState($('input[name="paid"]:checked').val() == '1');
