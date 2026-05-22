@@ -37,6 +37,10 @@
 		.image-zoom-container:hover img {
 			transform: scale(2.5) !important;
 		}
+
+		.ts-dropdown {
+			z-index: 9999 !important;
+		}
 	</style>
 	<script>
 		console.log("Sales view loaded");
@@ -728,25 +732,25 @@
 				title: 'Total Entregado',
 				rows: @json($total_sales_details),
 				total: {{ (float) $total_sales }}
-			},
+				},
 			unpaid_delivered: {
 				title: 'No Pagado',
 				rows: @json($total_unpaid_delivered_details),
 				total: {{ (float) $total_unpaid_delivered }}
-			},
+				},
 			not_delivered: {
 				title: 'No Entregado',
 				rows: @json($total_not_delivered_details),
 				total: {{ (float) $total_not_delivered }}
-			},
-			@foreach($payment_totals as $pt)
-				payment_{{ $pt->id }}: {
-					title: @json($pt->name == 'Interbank' ? 'Interbank Empresa' : $pt->name),
-					rows: @json($payment_total_details[$pt->id] ?? []),
-					total: {{ (float) $pt->total }}
 				},
+			@foreach($payment_totals as $pt)
+					payment_{{ $pt->id }}: {
+				title: @json($pt->name == 'Interbank' ? 'Interbank Empresa' : $pt->name),
+				rows: @json($payment_total_details[$pt->id] ?? []),
+				total: {{ (float) $pt->total }}
+					},
 			@endforeach
-		};
+			};
 
 		function formatMoney(value) {
 			return 'S/' + (Number(value) || 0).toLocaleString('en-US', {
@@ -776,21 +780,21 @@
 
 			if (!detail.rows || detail.rows.length === 0) {
 				$('#salesTotalDetailRows').html(`
-					<tr>
-						<td colspan="5" class="text-center py-4 text-muted">No hay registros para mostrar</td>
-					</tr>
-				`);
+						<tr>
+							<td colspan="5" class="text-center py-4 text-muted">No hay registros para mostrar</td>
+						</tr>
+					`);
 			} else {
 				$('#salesTotalDetailRows').html(detail.rows.map(function (row) {
 					return `
-						<tr>
-							<td class="small text-muted">${escapeHtml(row.date)}</td>
-							<td class="fw-bold">${escapeHtml(row.guide)}</td>
-							<td>${escapeHtml(row.client)}</td>
-							<td><span class="badge bg-blue-lt fw-normal">${escapeHtml(row.type)}</span></td>
-							<td class="text-end fw-bold">${formatMoney(row.amount)}</td>
-						</tr>
-					`;
+							<tr>
+								<td class="small text-muted">${escapeHtml(row.date)}</td>
+								<td class="fw-bold">${escapeHtml(row.guide)}</td>
+								<td>${escapeHtml(row.client)}</td>
+								<td><span class="badge bg-blue-lt fw-normal">${escapeHtml(row.type)}</span></td>
+								<td class="text-end fw-bold">${formatMoney(row.amount)}</td>
+							</tr>
+						`;
 				}).join(''));
 			}
 
@@ -852,31 +856,31 @@
 		function renderSalesReport(data) {
 			// Render Summary Cards (Top row)
 			let summaryHtml = `
-					<div class="col-md-3">
-						<div class="card p-3 border-0 shadow-sm text-center bg-white">
-							<div class="small fw-bold text-muted text-uppercase mb-1">Total Entregado</div>
-							<div class="h3 mb-0 fw-bold text-primary">S/ ${data.summary.total_delivered}</div>
+						<div class="col-md-3">
+							<div class="card p-3 border-0 shadow-sm text-center bg-white">
+								<div class="small fw-bold text-muted text-uppercase mb-1">Total Entregado</div>
+								<div class="h3 mb-0 fw-bold text-primary">S/ ${data.summary.total_delivered}</div>
+							</div>
 						</div>
-					</div>
-					<div class="col-md-3">
-						<div class="card p-3 border-0 shadow-sm text-center bg-white">
-							<div class="small fw-bold text-muted text-uppercase mb-1">No Pagado</div>
-							<div class="h3 mb-0 fw-bold text-danger">S/ ${data.summary.total_unpaid_delivered}</div>
+						<div class="col-md-3">
+							<div class="card p-3 border-0 shadow-sm text-center bg-white">
+								<div class="small fw-bold text-muted text-uppercase mb-1">No Pagado</div>
+								<div class="h3 mb-0 fw-bold text-danger">S/ ${data.summary.total_unpaid_delivered}</div>
+							</div>
 						</div>
-					</div>
-					<div class="col-md-3">
-						<div class="card p-3 border-0 shadow-sm text-center bg-white">
-							<div class="small fw-bold text-muted text-uppercase mb-1">No Entregado</div>
-							<div class="h3 mb-0 fw-bold text-warning">S/ ${data.summary.total_not_delivered}</div>
+						<div class="col-md-3">
+							<div class="card p-3 border-0 shadow-sm text-center bg-white">
+								<div class="small fw-bold text-muted text-uppercase mb-1">No Entregado</div>
+								<div class="h3 mb-0 fw-bold text-warning">S/ ${data.summary.total_not_delivered}</div>
+							</div>
 						</div>
-					</div>
-					<div class="col-md-3">
-						<div class="card p-3 border-0 shadow-sm text-center bg-white">
-							<div class="small fw-bold text-muted text-uppercase mb-1">Total Gastos</div>
-							<div class="h3 mb-0 fw-bold text-danger">S/ ${data.summary.total_expenses}</div>
+						<div class="col-md-3">
+							<div class="card p-3 border-0 shadow-sm text-center bg-white">
+								<div class="small fw-bold text-muted text-uppercase mb-1">Total Gastos</div>
+								<div class="h3 mb-0 fw-bold text-danger">S/ ${data.summary.total_expenses}</div>
+							</div>
 						</div>
-					</div>
-				`;
+					`;
 			$('#report-summary-container').html(summaryHtml);
 
 			// Render Methods and Previous Payments
@@ -885,13 +889,13 @@
 			if (Object.keys(methods).length > 0) {
 				Object.keys(methods).forEach(method => {
 					methodsHtml += `
-							<div class="col-6 col-md-3">
-								<div class="p-2 border rounded bg-light">
-									<div class="small text-muted text-uppercase">${method}</div>
-									<div class="fw-bold text-success">S/ ${parseFloat(methods[method]).toFixed(2)}</div>
+								<div class="col-6 col-md-3">
+									<div class="p-2 border rounded bg-light">
+										<div class="small text-muted text-uppercase">${method}</div>
+										<div class="fw-bold text-success">S/ ${parseFloat(methods[method]).toFixed(2)}</div>
+									</div>
 								</div>
-							</div>
-						`;
+							`;
 				});
 			} else {
 				methodsHtml = '<div class="col-12 text-center text-muted small py-2">No se registraron cobros en este periodo</div>';
@@ -900,13 +904,13 @@
 			// Add Previous Payments Info
 			if (data.summary.previous_payments_count > 0) {
 				methodsHtml += `
-						<div class="col-12 mt-2">
-							<div class="alert alert-info d-flex align-items-center mb-0 py-2">
-								<i class="ti ti-info-circle me-2 fs-2"></i>
-								<span>Se han procesado <strong>${data.summary.previous_payments_count}</strong> pagos correspondientes a ventas de días anteriores.</span>
+							<div class="col-12 mt-2">
+								<div class="alert alert-info d-flex align-items-center mb-0 py-2">
+									<i class="ti ti-info-circle me-2 fs-2"></i>
+									<span>Se han procesado <strong>${data.summary.previous_payments_count}</strong> pagos correspondientes a ventas de días anteriores.</span>
+								</div>
 							</div>
-						</div>
-					`;
+						`;
 			}
 
 			$('#report-methods-container').html(methodsHtml);
@@ -917,13 +921,13 @@
 			if (expensesMethods && Object.keys(expensesMethods).length > 0) {
 				Object.keys(expensesMethods).forEach(method => {
 					expensesMethodsHtml += `
-							<div class="col-6 col-md-3">
-								<div class="p-2 border rounded bg-light">
-									<div class="small text-muted text-uppercase">${method}</div>
-									<div class="fw-bold text-danger">S/ ${parseFloat(expensesMethods[method]).toFixed(2)}</div>
+								<div class="col-6 col-md-3">
+									<div class="p-2 border rounded bg-light">
+										<div class="small text-muted text-uppercase">${method}</div>
+										<div class="fw-bold text-danger">S/ ${parseFloat(expensesMethods[method]).toFixed(2)}</div>
+									</div>
 								</div>
-							</div>
-						`;
+							`;
 				});
 				$('#report-expenses-methods-container').html(expensesMethodsHtml);
 				$('#report-expenses-card').removeClass('d-none');
@@ -1000,13 +1004,13 @@
 						data.details.forEach(function (item) {
 							var subtotal = (Number(item.price) * Number(item.quantity)).toFixed(2);
 							html += `
-									<tr>
-										<td>${item.product.name}</td>
-										<td>${item.price}</td>
-										<td>${item.quantity}</td>
-										<td>${subtotal}</td>
-									</tr>
-								`;
+										<tr>
+											<td>${item.product.name}</td>
+											<td>${item.price}</td>
+											<td>${item.quantity}</td>
+											<td>${subtotal}</td>
+										</tr>
+									`;
 						});
 
 						$('#tbl-show-items').html(html);
@@ -1070,13 +1074,13 @@
 							var subtotal = (Number(item.price) * Number(item.quantity));
 							modalTotal += subtotal;
 							html += `
-									<tr class="edit-item-row">
-										<td><input type="hidden" name="detail_id[]" value="${item.id}"> ${item.product.name}</td>
-										<td><input type="number" step="0.01" class="form-control form-control-sm edit-price" name="price[]" value="${item.price}" style="width: 100px"></td>
-										<td><input type="number" step="1" class="form-control form-control-sm edit-qty" name="quantity[]" value="${item.quantity}" style="width: 100px"></td>
-										<td class="edit-subtotal">S/${subtotal.toFixed(2)}</td>
-									</tr>
-								`;
+										<tr class="edit-item-row">
+											<td><input type="hidden" name="detail_id[]" value="${item.id}"> ${item.product.name}</td>
+											<td><input type="number" step="0.01" class="form-control form-control-sm edit-price" name="price[]" value="${item.price}" style="width: 100px"></td>
+											<td><input type="number" step="1" class="form-control form-control-sm edit-qty" name="quantity[]" value="${item.quantity}" style="width: 100px"></td>
+											<td class="edit-subtotal">S/${subtotal.toFixed(2)}</td>
+										</tr>
+									`;
 						});
 
 						$('#tbl-edit-items').html(html);
@@ -1197,10 +1201,10 @@
 		});
 
 		var paymentMethodsHtml = `
-				@foreach($payment_methods as $pm)
-					<option value="{{ $pm->id }}">{{ $pm->name }}</option>
-				@endforeach
-			`;
+					@foreach($payment_methods as $pm)
+						<option value="{{ $pm->id }}">{{ $pm->name }}</option>
+					@endforeach
+				`;
 
 		var tsProductsDispatch = null;
 
@@ -1237,19 +1241,23 @@
 
 			$('#dispatchModal').modal('show');
 
-			if ($('#add-dispatch-product-id').length > 0 && !tsProductsDispatch) {
-				tsProductsDispatch = new TomSelect('#add-dispatch-product-id', {
-					copyClassesToDropdown: false,
-					dropdownClass: 'dropdown-menu ts-dropdown',
-					optionClass: 'dropdown-item',
-					dropdownParent: 'body',
-					controlInput: '<input>',
-					render: {
-						no_results: function (data, escape) {
-							return '<div class="no-results">No se encontraron resultados</div>';
+			if ($('#add-dispatch-product-id').length > 0) {
+				if (!tsProductsDispatch) {
+					tsProductsDispatch = new TomSelect('#add-dispatch-product-id', {
+						copyClassesToDropdown: false,
+						dropdownClass: 'dropdown-menu ts-dropdown',
+						optionClass: 'dropdown-item',
+						dropdownParent: 'body',
+						controlInput: '<input>',
+						render: {
+							no_results: function (data, escape) {
+								return '<div class="no-results">No se encontraron resultados</div>';
+							}
 						}
-					}
-				});
+					});
+				} else {
+					tsProductsDispatch.clear();
+				}
 			}
 		});
 
@@ -1263,22 +1271,22 @@
 						data.details.forEach(function (item) {
 							var subtotal = (Number(item.price) * Number(item.quantity)).toFixed(2);
 							html += `
-									<tr>
-										<td>${item.product.name}</td>
-										<td>
-											<input type="number" step="0.01" class="form-control form-control-sm edit-dispatch-price" data-id="${item.id}" value="${item.price}" style="width: 70px">
-										</td>
-										<td>
-											<input type="number" step="1" class="form-control form-control-sm edit-dispatch-qty" data-id="${item.id}" value="${item.quantity}" style="width: 60px">
-										</td>
-										<td>S/${subtotal}</td>
-										<td class="text-end">
-											<button type="button" class="btn btn-sm btn-icon btn-ghost-danger btn-delete-dispatch-detail" data-id="${item.id}">
-												<i class="ti ti-trash"></i>
-											</button>
-										</td>
-									</tr>
-								`;
+										<tr>
+											<td>${item.product.name}</td>
+											<td>
+												<input type="number" step="0.01" class="form-control form-control-sm edit-dispatch-price" data-id="${item.id}" value="${item.price}" style="width: 70px">
+											</td>
+											<td>
+												<input type="number" step="1" class="form-control form-control-sm edit-dispatch-qty" data-id="${item.id}" value="${item.quantity}" style="width: 60px">
+											</td>
+											<td>S/${subtotal}</td>
+											<td class="text-end">
+												<button type="button" class="btn btn-sm btn-icon btn-ghost-danger btn-delete-dispatch-detail" data-id="${item.id}">
+													<i class="ti ti-trash"></i>
+												</button>
+											</td>
+										</tr>
+									`;
 						});
 						$('#tbl-dispatch-items').html(html);
 						$('#dispatch_total').text(data.total);
@@ -1310,6 +1318,11 @@
 					} else {
 						ToastError.fire({ text: data.error });
 					}
+				},
+				error: function (err) {
+					var errMsg = 'Ocurrió un error al añadir el producto.';
+					if (err.responseJSON && err.responseJSON.error) errMsg = err.responseJSON.error;
+					ToastError.fire({ text: errMsg });
 				}
 			});
 		});
@@ -1368,26 +1381,26 @@
 			// ... existing addPaymentRow function ...
 			var rowCount = $('#payment-rows-container .payment-row').length;
 			var html = `
-					<div class="payment-row mb-2 border-bottom pb-2">
-						<div class="row g-2 align-items-center">
-							<div class="col-7">
-								<select class="form-select" name="payments[${rowCount}][method_id]" required>
-									<option value="">Seleccionar cuenta</option>
-									${paymentMethodsHtml}
-								</select>
-							</div>
-							<div class="col-4">
-								<div class="input-group input-group-flat">
-									<span class="input-group-text ps-2 pe-0">S/</span>
-									<input type="number" step="0.01" class="form-control ps-1 txt-payment-amount" name="payments[${rowCount}][amount]" value="${amount}" placeholder="0.00" required>
+						<div class="payment-row mb-2 border-bottom pb-2">
+							<div class="row g-2 align-items-center">
+								<div class="col-7">
+									<select class="form-select" name="payments[${rowCount}][method_id]" required>
+										<option value="">Seleccionar cuenta</option>
+										${paymentMethodsHtml}
+									</select>
+								</div>
+								<div class="col-4">
+									<div class="input-group input-group-flat">
+										<span class="input-group-text ps-2 pe-0">S/</span>
+										<input type="number" step="0.01" class="form-control ps-1 txt-payment-amount" name="payments[${rowCount}][amount]" value="${amount}" placeholder="0.00" required>
+									</div>
+								</div>
+								<div class="col-1 text-end">
+									${rowCount > 0 ? '<button type="button" class="btn btn-ghost-danger btn-icon btn-sm btn-remove-payment"><i class="ti ti-trash fs-3"></i></button>' : ''}
 								</div>
 							</div>
-							<div class="col-1 text-end">
-								${rowCount > 0 ? '<button type="button" class="btn btn-ghost-danger btn-icon btn-sm btn-remove-payment"><i class="ti ti-trash fs-3"></i></button>' : ''}
-							</div>
 						</div>
-					</div>
-				`;
+					`;
 			$('#payment-rows-container').append(html);
 			calculateDistributed();
 			setPaymentInputsState($('input[name="paid"]:checked').val() == '1');
