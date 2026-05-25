@@ -90,6 +90,7 @@ class SalesExport implements FromCollection, WithHeadings, WithMapping, WithStyl
 
     public function map($sale): array
     {
+        $isDebtReport = $this->request->is_pending || $this->request->is_credit;
         return [
             $sale->guide,
             optional($sale->date)->format('d/m/Y'),
@@ -97,12 +98,13 @@ class SalesExport implements FromCollection, WithHeadings, WithMapping, WithStyl
             optional($sale->payment_method)->name ?? 'S/M',
             optional($sale->client)->name ?? 'Consumidor Final',
             optional($sale->client)->district ?? 'N/A',
-            $sale->total
+            $isDebtReport ? $sale->debt : $sale->total
         ];
     }
 
     public function headings(): array
     {
+        $isDebtReport = $this->request->is_pending || $this->request->is_credit;
         return [
             'Guía',
             'Fecha',
@@ -110,7 +112,7 @@ class SalesExport implements FromCollection, WithHeadings, WithMapping, WithStyl
             'Método de pago',
             'Cliente',
             'Distrito',
-            'Total'
+            $isDebtReport ? 'Deuda' : 'Total'
         ];
     }
 

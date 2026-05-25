@@ -607,12 +607,14 @@ class SaleController extends Controller
         $fpdf->SetTextColor(255, 255, 255);
         $fpdf->SetFont('Montserrat', 'B', 10);
 
+        $isDebtReport = $request->is_pending || $request->is_credit;
+
         $fpdf->Cell(25, 10, utf8_decode('GUÍA'), 1, 0, 'C', true);
         $fpdf->Cell(25, 10, utf8_decode('FECHA'), 1, 0, 'C', true);
         $fpdf->Cell(60, 10, utf8_decode('CLIENTE'), 1, 0, 'C', true);
         $fpdf->Cell(30, 10, utf8_decode('TIPO'), 1, 0, 'C', true);
         $fpdf->Cell(25, 10, utf8_decode('PAGO'), 1, 0, 'C', true);
-        $fpdf->Cell(25, 10, utf8_decode('TOTAL'), 1, 1, 'C', true);
+        $fpdf->Cell(25, 10, utf8_decode($isDebtReport ? 'DEUDA' : 'TOTAL'), 1, 1, 'C', true);
 
         $fpdf->SetTextColor(0, 0, 0);
         $fpdf->SetFont('Montserrat', '', 9);
@@ -622,17 +624,19 @@ class SaleController extends Controller
             if ($sale->status == 'Anulado')
                 continue;
 
+            $amount = $isDebtReport ? $sale->debt : $sale->total;
+
             $fpdf->Cell(25, 8, utf8_decode($sale->guide), 1, 0, 'C');
             $fpdf->Cell(25, 8, $sale->date->format('d/m/Y'), 1, 0, 'C');
             $fpdf->Cell(60, 8, utf8_decode(optional($sale->client)->name ?? 'Consumidor Final'), 1, 0, 'L');
             $fpdf->Cell(30, 8, utf8_decode($sale->type), 1, 0, 'C');
             $fpdf->Cell(25, 8, $sale->paid ? 'SI' : 'NO', 1, 0, 'C');
-            $fpdf->Cell(25, 8, 'S/' . number_format($sale->total, 2), 1, 1, 'R');
-            $total += $sale->total;
+            $fpdf->Cell(25, 8, 'S/' . number_format($amount, 2), 1, 1, 'R');
+            $total += $amount;
         }
 
         $fpdf->SetFont('Montserrat', 'B', 10);
-        $fpdf->Cell(165, 10, 'TOTAL EN VENTAS', 1, 0, 'R');
+        $fpdf->Cell(165, 10, utf8_decode($isDebtReport ? 'TOTAL DEUDA' : 'TOTAL EN VENTAS'), 1, 0, 'R');
         $fpdf->Cell(25, 10, 'S/' . number_format($total, 2), 1, 1, 'R');
 
         $fpdf->Ln(10);
