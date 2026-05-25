@@ -31,6 +31,7 @@ class ChargeController extends Controller
             return $query->whereDate('date', '<=', $end_date);
         })->where('type', 'Credito')
         ->where('paid', 0)
+        ->where('debt', '>', 0)
         ->whereHas('movements', function($q) {
             $q->where('type', 'debt');
         })
@@ -47,6 +48,7 @@ class ChargeController extends Controller
         $payment_methods = PaymentMethod::all();
         $query = Sale::with(['client', 'payments.payment_method'])->whereIn('type', ['Contado', 'Pago pendiente'])
             ->where('paid', 0)
+            ->where('debt', '>', 0)
             ->whereHas('movements', function($q) {
                 $q->where('type', 'debt');
             })
