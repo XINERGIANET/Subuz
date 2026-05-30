@@ -53,7 +53,7 @@
 					<input type="date" class="form-control" id="date" value="{{ now()->format('Y-m-d') }}">
 				</div>
 			</div>
-			<div class="col-lg-4">
+			<div class="col-lg-3">
 				<div class="mb-3">
 					<label class="form-label d-flex justify-content-between align-items-center">
 						Cliente
@@ -69,7 +69,18 @@
 					</div>
 				</div>
 			</div>
-			<div class="col-lg-4">
+			<div class="col-lg-2">
+				<div class="mb-3">
+					<label class="form-label">Despachador</label>
+					<select class="form-select" id="dispatcher_id">
+						<option value="">Cualquiera</option>
+						@foreach($dispatchers as $dispatcher)
+						<option value="{{ $dispatcher->id }}">{{ $dispatcher->name }}</option>
+						@endforeach
+					</select>
+				</div>
+			</div>
+			<div class="col-lg-3">
 				<div class="mb-3">
 					<label class="form-label">Producto</label>
 					<select class="form-select ts-products">
@@ -445,10 +456,11 @@
 		var type = $('#type').val();
 		var date = $('#date').val();
 		var client_id = $('#client_id').val();
+		var dispatcher_id = $('#dispatcher_id').val();
 		$.ajax({
 			url: '{{ route('sales.store') }}',
 			method: 'POST',
-			data: { type, date, client_id }, // Removed guide
+			data: { type, date, client_id, dispatcher_id },
 			success: function(data){
 				if(data.status){
 					location.href = '{{ route('sales.index') }}';

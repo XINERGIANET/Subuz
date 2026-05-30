@@ -18,6 +18,7 @@ use App\Models\Payment;
 use App\Models\Cashbox;
 use App\Models\CashboxMovement;
 use App\Models\Client;
+use App\Models\User;
 use Codedge\Fpdf\Fpdf\Fpdf;
 
 class SaleController extends Controller
@@ -81,6 +82,13 @@ class SaleController extends Controller
             if (!$request->client_id && !$request->type && !$request->delivery_status) {
                 $query->whereDate('date', now());
             }
+        }
+        
+        if (auth()->check() && auth()->user()->hasRole('despachador')) {
+            $query->where(function($q) {
+                $q->whereNull('dispatcher_id')
+                  ->orWhere('dispatcher_id', auth()->id());
+            });
         }
 
         // Totals for delivered sales
@@ -283,7 +291,8 @@ class SaleController extends Controller
         $sale_count = DB::table('settings')->pluck('sale_count')->first();
         $order = 'V' . str_pad($sale_count + 1, 4, "0", STR_PAD_LEFT);
         $products = Product::all();
-        return view('sales.create', compact('order', 'products'));
+        $dispatchers = User::where('role', 'despachador')->get();
+        return view('sales.create', compact('order', 'products', 'dispatchers'));
     }
 
     public function store(Request $request)
@@ -301,7 +310,8 @@ class SaleController extends Controller
             'guide' => 'nullable|unique:sales',
             'type' => 'required|in:Contado,Credito',
             'date' => 'required|date',
-            'client_id' => 'required'
+            'client_id' => 'required',
+            'dispatcher_id' => 'nullable|exists:users,id'
         ]);
 
         $validator->after(function ($validator) use ($cart) {
@@ -348,6 +358,7 @@ class SaleController extends Controller
             'type' => $client->type,
             'payment_method_id' => null,
             'client_id' => $request->client_id,
+            'dispatcher_id' => $request->dispatcher_id,
             'total' => $cart['total'],
             'debt' => $request->type == 'Credito' ? $cart['total'] : 0,
             'paid' => 0

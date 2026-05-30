@@ -21,7 +21,8 @@ class Sale extends Model
         'debt',
         'paid',
         'status',
-        'photo'
+        'photo',
+        'dispatcher_id'
     ];
 
     protected $dates = ['date'];
@@ -55,5 +56,9 @@ class Sale extends Model
     public function invoices()
     {
         return $this->belongsToMany(Invoice::class, 'invoice_sale');
+    }
+
+    public function dispatcher(){
+        return $this->belongsTo(User::class, 'dispatcher_id');
     }
 }
