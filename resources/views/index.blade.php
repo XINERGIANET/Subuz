@@ -255,13 +255,6 @@
 @section('content')
     <div class="dashboard-wrapper" id="dashboard_wrapper">
         <div class="dashboard-controls d-flex justify-content-end gap-2 d-print-none align-items-center">
-            <div class="zoom-controls d-flex align-items-center bg-white border rounded px-2 py-1 shadow-sm">
-                <i class="ti ti-zoom-out text-muted" style="cursor: pointer;" id="zoom_out" title="Reducir Zoom"></i>
-                <input type="range" class="form-range mx-2" id="zoom_slider" min="0.5" max="1.5" step="0.05" value="1"
-                    style="width: 100px;">
-                <i class="ti ti-zoom-in text-muted" style="cursor: pointer;" id="zoom_in" title="Aumentar Zoom"></i>
-                <span class="ms-2 fw-bold small text-muted" id="zoom_val" style="min-width: 45px;">100%</span>
-            </div>
             <button class="btn btn-sm btn-white shadow-sm fw-bold border" id="btn_fullscreen"
                 title="Ver en pantalla completa">
                 <i class="ti ti-maximize me-1"></i> Pantalla Completa
@@ -479,46 +472,6 @@
                 loadDashboardData();
             });
 
-            // Zoom Logic
-            const $grid = $('#dashboard_grid');
-            const $slider = $('#zoom_slider');
-            const $val = $('#zoom_val');
-
-            function applyZoom(scale) {
-                $slider.val(scale);
-                $val.text(Math.round(scale * 100) + '%');
-                $grid.css('transform', 'scale(' + scale + ')');
-
-                if (scale > 1) {
-                    const newWidth = 100 * scale;
-                    $grid.css({
-                        'width': newWidth + '%',
-                        'height': newWidth + '%',
-                        'flex-grow': '0'
-                    });
-                } else {
-                    $grid.css({
-                        'width': '100%',
-                        'height': '100%',
-                        'flex-grow': '1'
-                    });
-                }
-            }
-
-            $slider.on('input', function () {
-                applyZoom(parseFloat($(this).val()));
-            });
-
-            $('#zoom_in').click(function () {
-                let current = parseFloat($slider.val());
-                if (current < 1.5) applyZoom(Math.min(1.5, current + 0.05));
-            });
-
-            $('#zoom_out').click(function () {
-                let current = parseFloat($slider.val());
-                if (current > 0.5) applyZoom(Math.max(0.5, current - 0.05));
-            });
-
             // Fullscreen Logic
             const $wrapper = $('#dashboard_wrapper');
             const $btnFull = $('#btn_fullscreen');
@@ -526,7 +479,6 @@
 
             $btnFull.click(function () {
                 isFullscreen = !isFullscreen;
-                applyZoom(1);
 
                 if (isFullscreen) {
                     $wrapper.addClass('fullscreen');
@@ -535,7 +487,7 @@
                 } else {
                     $wrapper.removeClass('fullscreen');
                     $btnFull.html('<i class="ti ti-maximize me-1"></i> Pantalla Completa');
-                    $('body').css('overflow', 'hidden');
+                    $('body').css('overflow', 'auto');
                 }
             });
         });
