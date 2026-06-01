@@ -175,6 +175,23 @@ class FinanceController extends Controller
     public function destroy($id)
     {
         $loan = BankLoan::findOrFail($id);
+        
+        // Find and delete all associated expenses from payments before deleting the loan
+        foreach ($loan->payments as $payment) {
+            $description = 'Pago de Cuota ' . $payment->installment_number . ' - Crédito Banco ' . $loan->bank_name;
+            
+            $expense = \App\Models\Expense::where('description', $description)
+                ->where('amount', $payment->amount)
+                ->where('payment_method_id', $payment->payment_method_id)
+                ->whereDate('date', $payment->payment_date->toDateString())
+                ->first();
+                
+            if ($expense) {
+                $expense->delete();
+            }
+            $payment->delete();
+        }
+
         $loan->delete();
 
         return response()->json(['status' => true]);
