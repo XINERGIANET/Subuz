@@ -14,7 +14,7 @@ use Codedge\Fpdf\Fpdf\Fpdf;
 class ExpenseController extends Controller
 {
     public function index(Request $request){
-        $expenses = Expense::when($request->month, function($query, $month){
+        $query = Expense::when($request->month, function($query, $month){
             return $query->whereMonth('date', $month);
         })->when($request->year, function($query, $year){
             return $query->whereYear('date', $year);
@@ -22,9 +22,12 @@ class ExpenseController extends Controller
             return $query->whereDate('date', '>=', $from);
         })->when($request->to_date, function($query, $to){
             return $query->whereDate('date', '<=', $to);
-        })->latest('date')->paginate(10);
+        });
+
+        $total_expenses = $query->sum('amount');
+        $expenses = $query->latest('date')->paginate(10);
+
         $payment_methods = PaymentMethod::all();
-        $total_expenses = $expenses->sum('amount');
         $descriptions = Expense::select('description')->distinct()->pluck('description');
         return view('expenses.index', compact('expenses', 'payment_methods', 'total_expenses', 'descriptions'));
     }
