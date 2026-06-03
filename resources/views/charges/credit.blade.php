@@ -43,7 +43,10 @@
                 <i class="ti ti-file-spreadsheet icon me-1"></i> Excel
             </a>
             <a href="{{ route('sales.pdf', ['is_credit' => 1] + request()->all()) }}" class="btn btn-danger btn-pill px-4 shadow-sm">
-                <i class="ti ti-file-type-pdf icon me-1"></i> PDF
+                <i class="ti ti-file-type-pdf icon me-1"></i> PDF Detallado
+            </a>
+            <a href="{{ route('sales.pdf_summary', ['is_credit' => 1] + request()->all()) }}" class="btn btn-warning btn-pill px-4 shadow-sm">
+                <i class="ti ti-file-type-pdf icon me-1"></i> PDF Resumen
             </a>
         </div>
     </div>

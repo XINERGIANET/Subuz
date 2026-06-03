@@ -660,6 +660,141 @@ class SaleController extends Controller
         $fpdf->Output('D', $name);
     }
 
+    public function pdfSummary(Request $request)
+    {
+        $query = Sale::with(['client'])
+            ->when($request->client_id, function ($q, $client_id) {
+                return $q->where('client_id', $client_id);
+            })
+            ->when($request->type, function ($q, $type) {
+                return $q->where('type', $type);
+            })
+            ->when($request->start_date, function ($q, $start_date) {
+                return $q->whereDate('date', '>=', $start_date);
+            })
+            ->when($request->end_date, function ($q, $end_date) {
+                return $q->whereDate('date', '<=', $end_date);
+            })
+            ->when($request->is_pending, function ($q) {
+                return $q->whereIn('type', ['Contado', 'Pago pendiente'])
+                    ->where('paid', 0)
+                    ->whereHas('movements', function ($mq) {
+                        $mq->where('type', 'debt');
+                    });
+            })
+            ->when($request->is_credit, function ($q) {
+                return $q->where('type', 'Credito')
+                    ->where('paid', 0)
+                    ->whereHas('movements', function ($mq) {
+                        $mq->where('type', 'debt');
+                    });
+            });
+
+        if (!$request->start_date && !$request->end_date && !$request->is_pending && !$request->is_credit && !$request->client_id) {
+            $query->whereDate('date', now());
+        }
+
+        $sales = $query->get();
+
+        $grouped = [];
+        foreach ($sales as $sale) {
+            if ($sale->status == 'Anulado') continue;
+            
+            $clientId = $sale->client_id ?? 0;
+            $clientName = optional($sale->client)->name ?? 'Consumidor Final';
+            
+            $amount = ($request->is_pending || $request->is_credit) ? $sale->debt : $sale->total;
+
+            if (!isset($grouped[$clientId])) {
+                $grouped[$clientId] = [
+                    'name' => $clientName,
+                    'debt' => 0,
+                    'count' => 0,
+                    'latest_date' => null
+                ];
+            }
+            $grouped[$clientId]['debt'] += $amount;
+            $grouped[$clientId]['count'] += 1;
+            
+            if (is_null($grouped[$clientId]['latest_date']) || $sale->date > $grouped[$clientId]['latest_date']) {
+                $grouped[$clientId]['latest_date'] = $sale->date;
+            }
+        }
+
+        // Ordenar por fecha de la última venta descendente
+        usort($grouped, function($a, $b) {
+            return $b['latest_date'] <=> $a['latest_date'];
+        });
+
+        $fpdf = new Fpdf;
+        $fpdf->AddPage();
+
+        $fpdf->AddFont('Montserrat', '');
+        $fpdf->AddFont('Montserrat', 'B');
+
+        if (file_exists(public_path('assets/images/logo.jpg'))) {
+            $fpdf->Image(public_path('assets/images/logo.jpg'), 10, 10, 30);
+        }
+
+        $fpdf->SetFont('Montserrat', 'B', 16);
+        $fpdf->SetTextColor(2, 93, 166);
+        $fpdf->Cell(190, 10, utf8_decode('RESUMEN DE DEUDAS POR CLIENTE'), 0, 1, 'C');
+
+        $period = "Filtro: ";
+        if ($request->is_pending)
+            $period = "RESUMEN DE PAGOS PENDIENTES";
+        elseif ($request->is_credit)
+            $period = "RESUMEN DE CRÉDITOS PENDIENTES";
+        else {
+            if ($request->start_date)
+                $period .= "Desde " . date('d/m/Y', strtotime($request->start_date)) . " ";
+            if ($request->end_date)
+                $period .= "Hasta " . date('d/m/Y', strtotime($request->end_date));
+            if (!$request->start_date && !$request->end_date)
+                $period .= "Ventas de hoy (" . now()->format('d/m/Y') . ")";
+        }
+
+        $fpdf->SetFont('Montserrat', '', 10);
+        $fpdf->SetTextColor(80, 80, 80);
+        $fpdf->Cell(190, 8, utf8_decode($period), 0, 1, 'C');
+        $fpdf->Ln(10);
+
+        $fpdf->SetFillColor(2, 93, 166);
+        $fpdf->SetTextColor(255, 255, 255);
+        $fpdf->SetFont('Montserrat', 'B', 10);
+
+        $fpdf->Cell(15, 10, utf8_decode('N°'), 1, 0, 'C', true);
+        $fpdf->Cell(100, 10, utf8_decode('CLIENTE'), 1, 0, 'C', true);
+        $fpdf->Cell(40, 10, utf8_decode('N° VENTAS ASOC.'), 1, 0, 'C', true);
+        $fpdf->Cell(35, 10, utf8_decode('DEUDA TOTAL'), 1, 1, 'C', true);
+
+        $fpdf->SetTextColor(0, 0, 0);
+        $fpdf->SetFont('Montserrat', '', 9);
+        $total = 0;
+
+        $index = 1;
+        foreach ($grouped as $clientData) {
+            $fpdf->Cell(15, 8, $index++, 1, 0, 'C');
+            $fpdf->Cell(100, 8, utf8_decode($clientData['name']), 1, 0, 'L');
+            $fpdf->Cell(40, 8, $clientData['count'], 1, 0, 'C');
+            $fpdf->Cell(35, 8, 'S/' . number_format($clientData['debt'], 2), 1, 1, 'R');
+            $total += $clientData['debt'];
+        }
+
+        $fpdf->SetFont('Montserrat', 'B', 10);
+        $fpdf->Cell(155, 10, utf8_decode('TOTAL DEUDA'), 1, 0, 'R');
+        $fpdf->Cell(35, 10, 'S/' . number_format($total, 2), 1, 1, 'R');
+
+        $fpdf->Ln(10);
+        $fpdf->SetFont('Montserrat', '', 8);
+        $fpdf->Cell(190, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i')), 0, 1, 'R');
+
+        $name = "ResumenDeudas_" . now()->format('dm') . ".pdf";
+        if (ob_get_level() > 0)
+            ob_end_clean();
+        $fpdf->Output('D', $name);
+    }
+
     public function markDispatch(Request $request, Sale $sale)
     {
         if (!auth()->user()->hasRole('admin') && !auth()->user()->hasRole('despachador') && !auth()->user()->hasRole('asistente')) {

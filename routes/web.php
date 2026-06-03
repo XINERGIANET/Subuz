@@ -162,6 +162,7 @@ Route::middleware('auth')->group(function () {
 
 	Route::middleware('role:admin|seller|viewer|asistente')->group(function () {
 		Route::get('sales/pdf', [SaleController::class, 'pdf'])->name('sales.pdf');
+		Route::get('sales/pdf-summary', [SaleController::class, 'pdfSummary'])->name('sales.pdf_summary');
 		Route::get('sales/report-pdf', [SaleController::class, 'reportPdf'])->name('sales.report_pdf');
 		Route::get('sales/report-data', [SaleController::class, 'reportData'])->name('sales.report_data');
 		Route::get('reports', [ReportController::class, 'index'])->name('reports.index');

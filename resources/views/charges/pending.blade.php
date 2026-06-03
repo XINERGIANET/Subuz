@@ -43,7 +43,10 @@
                 <i class="ti ti-file-spreadsheet icon me-1"></i> Excel
             </a>
             <a href="{{ route('sales.pdf', ['is_pending' => 1] + request()->all()) }}" class="btn btn-danger btn-pill px-3 py-2 flex-grow-1 flex-md-grow-0 shadow-sm">
-                <i class="ti ti-file-type-pdf icon me-1"></i> PDF
+                <i class="ti ti-file-type-pdf icon me-1"></i> PDF Detallado
+            </a>
+            <a href="{{ route('sales.pdf_summary', ['is_pending' => 1] + request()->all()) }}" class="btn btn-warning btn-pill px-3 py-2 flex-grow-1 flex-md-grow-0 shadow-sm">
+                <i class="ti ti-file-type-pdf icon me-1"></i> PDF Resumen
             </a>
         </div>
     </div>
