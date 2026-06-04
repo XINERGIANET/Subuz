@@ -524,7 +524,11 @@ class SaleController extends Controller
                         $product->increment('stock', $detail->quantity);
                     }
                 }
-                $sale->update(['status' => 'Anulado']);
+                $sale->update([
+                    'status' => 'Anulado',
+                    'jugs_borrowed' => 0,
+                    'jugs_returned' => 0
+                ]);
             });
 
             return response()->json(['status' => true]);
@@ -795,6 +799,199 @@ class SaleController extends Controller
         $fpdf->Output('D', $name);
     }
 
+    public function jerryCanReportView(Request $request)
+    {
+        $search = $request->search;
+
+        $sales = Sale::with('client')
+            ->where(function($q) {
+                $q->where('jugs_borrowed', '>', 0)
+                  ->orWhere('jugs_returned', '>', 0);
+            })
+            ->where('status', '!=', 'Anulado')
+            ->when($search, function($q) use ($search) {
+                $q->whereHas('client', function($cq) use ($search) {
+                    $cq->where('name', 'like', '%' . $search . '%')
+                       ->orWhere('document', 'like', '%' . $search . '%');
+                });
+            })
+            ->get();
+
+        $grouped = [];
+        foreach ($sales as $sale) {
+            $clientId = $sale->client_id ?? 0;
+            $clientName = optional($sale->client)->name ?? 'Consumidor Final';
+
+            if (!isset($grouped[$clientId])) {
+                $grouped[$clientId] = [
+                    'id' => $clientId,
+                    'name' => $clientName,
+                    'borrowed' => 0,
+                    'returned' => 0,
+                    'balance' => 0
+                ];
+            }
+            $grouped[$clientId]['borrowed'] += $sale->jugs_borrowed;
+            $grouped[$clientId]['returned'] += $sale->jugs_returned;
+        }
+
+        foreach ($grouped as $id => $data) {
+            $grouped[$id]['balance'] = $data['borrowed'] - $data['returned'];
+        }
+
+        // Sort by balance desc
+        usort($grouped, function($a, $b) {
+            return $b['balance'] <=> $a['balance'];
+        });
+
+        return view('sales.jerry_can_report', compact('grouped', 'search'));
+    }
+
+    public function returnJerryCans(Request $request)
+    {
+        $request->validate([
+            'client_id' => 'required|exists:clients,id',
+            'quantity' => 'required|integer|min:1'
+        ]);
+
+        $sale_count = \Illuminate\Support\Facades\DB::table('settings')->pluck('sale_count')->first();
+        $order = 'V' . str_pad($sale_count + 1, 4, "0", STR_PAD_LEFT);
+
+        $week = \App\Models\Week::where('number', now()->format('W'))->first();
+        if (!$week) {
+            $number = now()->format('W');
+            $year = now()->format('Y');
+            $start_date = date('Y-m-d', strtotime("{$year}W{$number}"));
+            $end_date = date('Y-m-d', strtotime("{$year}W{$number} +6 days"));
+            $week = \App\Models\Week::create([
+                'number' => $number,
+                'year' => $year,
+                'start_date' => $start_date,
+                'end_date' => $end_date
+            ]);
+        }
+
+        Sale::create([
+            'order' => $order,
+            'date' => now(),
+            'week_id' => $week->id,
+            'guide' => 'DEV-BIDONES',
+            'type' => 'Contado',
+            'payment_method_id' => null,
+            'client_id' => $request->client_id,
+            'dispatcher_id' => auth()->id(),
+            'total' => 0,
+            'debt' => 0,
+            'paid' => 1,
+            'status' => 'Entregado',
+            'jugs_borrowed' => 0,
+            'jugs_returned' => $request->quantity
+        ]);
+
+        \Illuminate\Support\Facades\DB::table('settings')->update([
+            'sale_count' => $sale_count + 1
+        ]);
+
+        return redirect()->back()->with('success', 'Bidones devueltos correctamente.');
+    }
+
+    public function jerryCanReportPdf(Request $request)
+    {
+        $sales = Sale::with('client')
+            ->where(function($q) {
+                $q->where('jugs_borrowed', '>', 0)
+                  ->orWhere('jugs_returned', '>', 0);
+            })
+            ->where('status', '!=', 'Anulado')
+            ->get();
+
+        $grouped = [];
+        foreach ($sales as $sale) {
+            $clientId = $sale->client_id ?? 0;
+            $clientName = optional($sale->client)->name ?? 'Consumidor Final';
+
+            if (!isset($grouped[$clientId])) {
+                $grouped[$clientId] = [
+                    'name' => $clientName,
+                    'borrowed' => 0,
+                    'returned' => 0,
+                    'balance' => 0
+                ];
+            }
+            $grouped[$clientId]['borrowed'] += $sale->jugs_borrowed;
+            $grouped[$clientId]['returned'] += $sale->jugs_returned;
+        }
+
+        foreach ($grouped as $id => $data) {
+            $grouped[$id]['balance'] = $data['borrowed'] - $data['returned'];
+        }
+
+        // Sort by balance desc
+        usort($grouped, function($a, $b) {
+            return $b['balance'] <=> $a['balance'];
+        });
+
+        $fpdf = new Fpdf;
+        $fpdf->AddPage();
+        $fpdf->AddFont('Montserrat', '');
+        $fpdf->AddFont('Montserrat', 'B');
+
+        if (file_exists(public_path('assets/images/logo.jpg'))) {
+            $fpdf->Image(public_path('assets/images/logo.jpg'), 10, 10, 30);
+        }
+
+        $fpdf->SetFont('Montserrat', 'B', 16);
+        $fpdf->SetTextColor(2, 93, 166);
+        $fpdf->Cell(190, 10, utf8_decode('REPORTE DE BIDONES PRESTADOS POR CLIENTE'), 0, 1, 'C');
+        $fpdf->Ln(10);
+
+        $fpdf->SetFillColor(2, 93, 166);
+        $fpdf->SetTextColor(255, 255, 255);
+        $fpdf->SetFont('Montserrat', 'B', 10);
+
+        $fpdf->Cell(15, 10, utf8_decode('N°'), 1, 0, 'C', true);
+        $fpdf->Cell(80, 10, utf8_decode('CLIENTE'), 1, 0, 'C', true);
+        $fpdf->Cell(30, 10, utf8_decode('PRESTADOS'), 1, 0, 'C', true);
+        $fpdf->Cell(30, 10, utf8_decode('DEVUELTOS'), 1, 0, 'C', true);
+        $fpdf->Cell(35, 10, utf8_decode('SALDO PENDIENTE'), 1, 1, 'C', true);
+
+        $fpdf->SetTextColor(0, 0, 0);
+        $fpdf->SetFont('Montserrat', '', 9);
+
+        $totalBorrowed = 0;
+        $totalReturned = 0;
+        $totalBalance = 0;
+
+        $index = 1;
+        foreach ($grouped as $clientData) {
+            if ($clientData['balance'] == 0 && $clientData['borrowed'] == 0 && $clientData['returned'] == 0) continue;
+            
+            $fpdf->Cell(15, 8, $index++, 1, 0, 'C');
+            $fpdf->Cell(80, 8, utf8_decode($clientData['name']), 1, 0, 'L');
+            $fpdf->Cell(30, 8, $clientData['borrowed'], 1, 0, 'C');
+            $fpdf->Cell(30, 8, $clientData['returned'], 1, 0, 'C');
+            $fpdf->Cell(35, 8, $clientData['balance'], 1, 1, 'C');
+            
+            $totalBorrowed += $clientData['borrowed'];
+            $totalReturned += $clientData['returned'];
+            $totalBalance += $clientData['balance'];
+        }
+
+        $fpdf->SetFont('Montserrat', 'B', 10);
+        $fpdf->Cell(95, 10, utf8_decode('TOTALES'), 1, 0, 'R');
+        $fpdf->Cell(30, 10, $totalBorrowed, 1, 0, 'C');
+        $fpdf->Cell(30, 10, $totalReturned, 1, 0, 'C');
+        $fpdf->Cell(35, 10, $totalBalance, 1, 1, 'C');
+
+        $fpdf->Ln(10);
+        $fpdf->SetFont('Montserrat', '', 8);
+        $fpdf->Cell(190, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i')), 0, 1, 'R');
+
+        $name = "ReporteBidones_" . now()->format('dm') . ".pdf";
+        if (ob_get_level() > 0) ob_end_clean();
+        $fpdf->Output('D', $name);
+    }
+
     public function markDispatch(Request $request, Sale $sale)
     {
         if (!auth()->user()->hasRole('admin') && !auth()->user()->hasRole('despachador') && !auth()->user()->hasRole('asistente')) {
@@ -807,7 +1004,9 @@ class SaleController extends Controller
         $validator = Validator::make($request->all(), [
             'paid' => 'required|boolean',
             'guide' => 'required|string|max:255',
-            'photo' => 'required|image|mimes:jpeg,png,jpg|max:204800'
+            'photo' => 'required|image|mimes:jpeg,png,jpg|max:204800',
+            'jugs_borrowed' => 'nullable|integer|min:0',
+            'jugs_returned' => 'nullable|integer|min:0'
         ], [
             'guide.required' => 'El número de guía es obligatorio para despachar.',
             'photo.required' => 'La foto de evidencia es obligatoria para despachar.',
@@ -855,7 +1054,9 @@ class SaleController extends Controller
 
                 $commonUpdate = [
                     'guide' => $request->guide,
-                    'photo' => $photoPath
+                    'photo' => $photoPath,
+                    'jugs_borrowed' => $request->jugs_borrowed ?? 0,
+                    'jugs_returned' => $request->jugs_returned ?? 0
                 ];
 
                 if ($request->paid) {
@@ -974,7 +1175,9 @@ class SaleController extends Controller
                     'paid' => 0,
                     'debt' => $sale->total,
                     'payment_method_id' => null,
-                    'photo' => null
+                    'photo' => null,
+                    'jugs_borrowed' => 0,
+                    'jugs_returned' => 0
                 ]);
             });
 

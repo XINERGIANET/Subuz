@@ -58,6 +58,9 @@
 					<button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modal-sales-report">
 						<i class="ti ti-file-text icon"></i> Reportes
 					</button>
+					<a class="btn btn-outline-info" href="{{ route('sales.jerry_can_report_view') }}">
+						<i class="ti ti-file-analytics icon"></i> Reporte Bidones
+					</a>
 				@endif
 				@if(auth()->user()->hasRole('admin'))
 					<div class="mt-2">
@@ -344,9 +347,17 @@
 											<i class="ti ti-eye icon"></i>
 										</button>
 										@if((auth()->user()->hasRole('despachador') || auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente')) && !$isDelivered)
+											@php
+												$jugsBalance = 0;
+												if ($sale->client_id) {
+													$jugsBalance = \App\Models\Sale::where('client_id', $sale->client_id)
+														->where('status', '!=', 'Anulado')
+														->sum(\Illuminate\Support\Facades\DB::raw('jugs_borrowed - jugs_returned'));
+												}
+											@endphp
 											<button class="btn btn-icon btn-dispatch" data-id="{{ $sale->id }}"
 												data-order="{{ $sale->order }}" data-guide="{{ $sale->guide }}"
-												data-total="{{ $sale->total }}" data-type="{{ $sale->type }}" data-bs-toggle="tooltip"
+												data-total="{{ $sale->total }}" data-type="{{ $sale->type }}" data-jugs-balance="{{ $jugsBalance }}" data-bs-toggle="tooltip"
 												title="Despachar">
 												<i class="ti ti-check icon"></i>
 											</button>
@@ -555,6 +566,21 @@
 											class="img-fluid rounded border shadow-sm" style="max-height: 200px;">
 									</div>
 								</div>
+							</div>
+						</div>
+
+						<div class="d-flex justify-content-between align-items-center mt-3">
+							<label class="form-label fw-bold mb-0">Control de Bidones</label>
+							<span id="dispatch_jugs_balance_badge" class="badge bg-info d-none">Actual: 0 Bidones prestados</span>
+						</div>
+						<div class="row g-2 mb-3 mt-1">
+							<div class="col-6">
+								<label class="form-label small text-muted mb-1">Préstamo de bidones</label>
+								<input type="number" name="jugs_borrowed" class="form-control" placeholder="0" min="0" value="0">
+							</div>
+							<div class="col-6">
+								<label class="form-label small text-muted mb-1">Recojo de bidones</label>
+								<input type="number" name="jugs_returned" class="form-control" placeholder="0" min="0" value="0">
 							</div>
 						</div>
 
@@ -1214,6 +1240,15 @@
 			var order = $(this).data('order');
 			var guide = $(this).data('guide');
 			var type = $(this).data('type');
+			var jugsBalance = $(this).data('jugs-balance');
+
+			if (jugsBalance !== undefined && jugsBalance > 0) {
+				$('#dispatch_jugs_balance_badge').text('Actual: ' + jugsBalance + ' Bidones prestados').removeClass('d-none');
+			} else if (jugsBalance !== undefined && jugsBalance < 0) {
+				$('#dispatch_jugs_balance_badge').text('Saldo a favor (debe ' + Math.abs(jugsBalance) + ' a la empresa)').removeClass('d-none').removeClass('bg-info').addClass('bg-warning');
+			} else {
+				$('#dispatch_jugs_balance_badge').addClass('d-none');
+			}
 
 			$('#dispatch_sale_id').val(id);
 			$('#dispatch_guide').text(order);

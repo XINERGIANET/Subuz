@@ -163,6 +163,9 @@ Route::middleware('auth')->group(function () {
 	Route::middleware('role:admin|seller|viewer|asistente')->group(function () {
 		Route::get('sales/pdf', [SaleController::class, 'pdf'])->name('sales.pdf');
 		Route::get('sales/pdf-summary', [SaleController::class, 'pdfSummary'])->name('sales.pdf_summary');
+		Route::get('sales/jerry-can-report', [SaleController::class, 'jerryCanReportView'])->name('sales.jerry_can_report_view');
+		Route::get('sales/jerry-can-report-pdf', [SaleController::class, 'jerryCanReportPdf'])->name('sales.jerry_can_report_pdf');
+		Route::post('sales/jerry-can-return', [SaleController::class, 'returnJerryCans'])->name('sales.jerry_can_return');
 		Route::get('sales/report-pdf', [SaleController::class, 'reportPdf'])->name('sales.report_pdf');
 		Route::get('sales/report-data', [SaleController::class, 'reportData'])->name('sales.report_data');
 		Route::get('reports', [ReportController::class, 'index'])->name('reports.index');

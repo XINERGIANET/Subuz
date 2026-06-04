@@ -22,7 +22,9 @@ class Sale extends Model
         'paid',
         'status',
         'photo',
-        'dispatcher_id'
+        'dispatcher_id',
+        'jugs_borrowed',
+        'jugs_returned'
     ];
 
     protected $dates = ['date'];

@@ -11,7 +11,17 @@ use App\Models\Product;
 class PriceController extends Controller
 {
     public function index(Request $request){
-        $prices = Price::paginate(10);
+        $search = $request->search;
+
+        $prices = Price::when($search, function($query) use ($search) {
+            $query->whereHas('client', function($q) use ($search) {
+                $q->where('name', 'like', '%' . $search . '%')
+                  ->orWhere('document', 'like', '%' . $search . '%');
+            })->orWhereHas('product', function($q) use ($search) {
+                $q->where('name', 'like', '%' . $search . '%');
+            });
+        })->paginate(10);
+
         $products = Product::all();
         return view('prices.index', compact('prices', 'products'));
     }
