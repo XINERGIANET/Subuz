@@ -49,7 +49,7 @@ class PriceController extends Controller
     }
 
     public function edit(Request $request, $id){
-        $price = Price::find($id)->with(['client', 'product'])->first();
+        $price = Price::with(['client', 'product'])->find($id);
         return response()->json($price);
     }
 
