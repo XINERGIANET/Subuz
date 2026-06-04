@@ -213,9 +213,7 @@
 												<a class="dropdown-item" href="{{ route('reports.cashbox') }}">
 													<i class="ti ti-cash icon me-2"></i> Cierres de caja
 												</a>
-												<a class="dropdown-item" href="{{ route('sales.jerry_can_report_view') }}">
-													<i class="ti ti-bucket icon me-2"></i> Reporte de bidones
-												</a>											</div>
+											</div>
 										</div>
 									</div>
 								</li>
