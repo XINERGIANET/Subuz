@@ -726,6 +726,33 @@
 			</div>
 		</div>
 	</div>
+	<div class="modal modal-blur fade" id="splitDispatchModal" tabindex="-1" role="dialog" aria-hidden="true">
+		<div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">¿Cuántos deseas prestar?</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+				<div class="modal-body">
+					<div class="row">
+						<input type="hidden" id="splitDispatchDetailId">
+						<input type="hidden" id="splitDispatchTotalQty">
+						<div class="col-6 mb-3">
+							<label class="form-label">Prestar</label>
+							<input type="number" class="form-control text-center" id="splitDispatchLoanQty" min="0">
+						</div>
+						<div class="col-6 mb-3">
+							<label class="form-label">Vender</label>
+							<input type="number" class="form-control text-center" id="splitDispatchSellQty" min="0">
+						</div>
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-primary w-100" id="btn-confirm-dispatch-split">Confirmar</button>
+				</div>
+			</div>
+		</div>
+	</div>
 @endsection
 
 @section('scripts')
@@ -1282,11 +1309,20 @@
 						var html = '';
 						data.details.forEach(function (item) {
 							var subtotal = (Number(item.price) * Number(item.quantity)).toFixed(2);
+							var is_loaned = (Number(item.price) === 0);
 							html += `
 										<tr>
-											<td>${item.product.name}</td>
 											<td>
-												<input type="number" step="0.01" class="form-control form-control-sm edit-dispatch-price" data-id="${item.id}" value="${item.price}" style="width: 70px">
+												${item.product.name}
+												${item.product.is_loanable ? `
+													<br><label class="form-check mb-0 mt-1 d-inline-block">
+														<input class="form-check-input cbx-dispatch-loaned" type="checkbox" data-id="${item.id}" ${is_loaned ? 'checked' : ''}>
+														<span class="form-check-label small fw-bold">Es prestable</span>
+													</label>
+												` : ''}
+											</td>
+											<td>
+												<input type="number" step="0.01" class="form-control form-control-sm edit-dispatch-price" data-id="${item.id}" value="${item.price}" style="width: 70px" ${is_loaned ? 'readonly' : ''}>
 											</td>
 											<td>
 												<input type="number" step="1" class="form-control form-control-sm edit-dispatch-qty" data-id="${item.id}" value="${item.quantity}" style="width: 60px">
@@ -1375,6 +1411,73 @@
 					}
 				}
 			});
+		});
+
+		$(document).on('change', '.cbx-dispatch-loaned', function(e){
+			var saleId = $('#dispatch_sale_id').val();
+			var detailId = $(this).data('id');
+			var is_loaned = $(this).prop('checked');
+			var quantity = parseInt($(this).closest('tr').find('.edit-dispatch-qty').val());
+
+			if (is_loaned && quantity > 1) {
+				e.preventDefault();
+				$(this).prop('checked', false);
+
+				$('#splitDispatchDetailId').val(detailId);
+				$('#splitDispatchTotalQty').val(quantity);
+				$('#splitDispatchLoanQty').val(quantity).attr('max', quantity);
+				$('#splitDispatchSellQty').val(0).attr('max', quantity);
+				$('#splitDispatchModal').modal('show');
+				return;
+			}
+
+			var sell_qty = is_loaned ? 0 : quantity;
+			var loan_qty = is_loaned ? quantity : 0;
+
+			$.ajax({
+				url: '{{ url('sales') }}/' + saleId + '/details/' + detailId + '/split',
+				method: 'POST',
+				data: { sell_qty: sell_qty, loan_qty: loan_qty },
+				success: function(data){
+					if(data.status){
+						loadDispatchDetails(saleId);
+					}
+				}
+			});
+		});
+
+		$('#btn-confirm-dispatch-split').click(function(){
+			var saleId = $('#dispatch_sale_id').val();
+			var detailId = $('#splitDispatchDetailId').val();
+			var sell_qty = $('#splitDispatchSellQty').val();
+			var loan_qty = $('#splitDispatchLoanQty').val();
+
+			$.ajax({
+				url: '{{ url('sales') }}/' + saleId + '/details/' + detailId + '/split',
+				method: 'POST',
+				data: { sell_qty: sell_qty, loan_qty: loan_qty },
+				success: function(data){
+					if(data.status){
+						$('#splitDispatchModal').modal('hide');
+						loadDispatchDetails(saleId);
+					}
+				}
+			});
+		});
+
+		$('#splitDispatchLoanQty').on('input', function(){
+			var total = parseInt($('#splitDispatchTotalQty').val());
+			var loan = parseInt($(this).val()) || 0;
+			if(loan > total) { loan = total; $(this).val(total); }
+			if(loan < 0) { loan = 0; $(this).val(0); }
+			$('#splitDispatchSellQty').val(total - loan);
+		});
+		$('#splitDispatchSellQty').on('input', function(){
+			var total = parseInt($('#splitDispatchTotalQty').val());
+			var sell = parseInt($(this).val()) || 0;
+			if(sell > total) { sell = total; $(this).val(total); }
+			if(sell < 0) { sell = 0; $(this).val(0); }
+			$('#splitDispatchLoanQty').val(total - sell);
 		});
 
 		$(document).on('change', '#dispatch_photo', function () {

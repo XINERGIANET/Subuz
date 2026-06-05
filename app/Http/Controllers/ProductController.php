@@ -34,6 +34,13 @@ class ProductController extends Controller
 
         $data = $request->all();
         $data['reduces_stock'] = $request->has('reduces_stock');
+        $data['is_loanable'] = $request->has('is_loanable');
+        
+        if ($request->has('stock') && $request->stock !== null) {
+            $data['initial_stock'] = $request->stock;
+            $data['stock_updated_at'] = now();
+        }
+        
         Product::create($data);
 
         return response()->json([
@@ -62,6 +69,13 @@ class ProductController extends Controller
 
         $data = $request->all();
         $data['reduces_stock'] = $request->has('reduces_stock');
+        $data['is_loanable'] = $request->has('is_loanable');
+        
+        if ($request->has('stock') && $request->stock != $product->stock) {
+            $data['initial_stock'] = $request->stock;
+            $data['stock_updated_at'] = now();
+        }
+
         $product->update($data);
 
         return response()->json([

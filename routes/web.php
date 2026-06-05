@@ -66,6 +66,7 @@ Route::middleware('auth')->group(function () {
 	Route::post('sales/{sale}/delivery-status', [SaleController::class, 'updateDeliveryStatus'])->name('sales.updateDeliveryStatus');
 	Route::post('sales/{sale}/add-detail', [SaleController::class, 'addDetail'])->name('sales.addDetail');
 	Route::patch('sales/{sale}/details/{detail}', [SaleController::class, 'updateDetail'])->name('sales.updateDetail');
+	Route::post('sales/{sale}/details/{detail}/split', [SaleController::class, 'splitDetail'])->name('sales.splitDetail');
 	Route::delete('sales/{sale}/details/{detail}', [SaleController::class, 'destroyDetail'])->name('sales.destroyDetail');
 
 
@@ -128,6 +129,7 @@ Route::middleware('auth')->group(function () {
 		Route::get('cart', [CartController::class, 'index'])->name('cart.index');
 		Route::post('cart', [CartController::class, 'store'])->name('cart.store');
 		Route::patch('cart', [CartController::class, 'update'])->name('cart.update');
+		Route::post('cart/split', [CartController::class, 'split'])->name('cart.split');
 		Route::delete('destroy', [CartController::class, 'destroy'])->name('cart.destroy');
 		Route::post('cart/update-prices', [CartController::class, 'updatePricesByClient'])->name('cart.updatePrices');
 	});
@@ -169,6 +171,10 @@ Route::middleware('auth')->group(function () {
 		Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
 		Route::get('reports/liquidation', [ReportController::class, 'liquidation'])->name('reports.liquidation');
 		Route::get('reports/cashbox', [ReportController::class, 'cashbox'])->name('reports.cashbox');
+		
+		Route::get('jerry-can-report', [SaleController::class, 'jerryCanReportView'])->name('reports.jerryCan');
+		Route::post('jerry-can-report/return', [SaleController::class, 'returnJerryCans'])->name('reports.returnJerryCans');
+		Route::get('jerry-can-report/pdf', [SaleController::class, 'jerryCanReportPdf'])->name('reports.jerryCanPdf');
 	});
 
 	Route::middleware('role:admin|despachador|asistente')->group(function () {

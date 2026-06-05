@@ -801,61 +801,156 @@ class SaleController extends Controller
 
     public function jerryCanReportView(Request $request)
     {
+        $startDateParam = $request->start_date ? $request->start_date . ' 00:00:00' : null;
+        $endDateParam = $request->end_date ? $request->end_date . ' 23:59:59' : null;
         $search = $request->search;
 
-        $sales = Sale::with('client')
-            ->where(function($q) {
-                $q->where('jugs_borrowed', '>', 0)
-                  ->orWhere('jugs_returned', '>', 0);
-            })
-            ->where('status', '!=', 'Anulado')
-            ->when($search, function($q) use ($search) {
-                $q->whereHas('client', function($cq) use ($search) {
-                    $cq->where('name', 'like', '%' . $search . '%')
-                       ->orWhere('document', 'like', '%' . $search . '%');
-                });
-            })
-            ->get();
+        $products = \App\Models\Product::where('is_loanable', 1)->get();
+        $clientDetails = [];
 
-        $grouped = [];
-        foreach ($sales as $sale) {
-            $clientId = $sale->client_id ?? 0;
-            $clientName = optional($sale->client)->name ?? 'Consumidor Final';
-
-            if (!isset($grouped[$clientId])) {
-                $grouped[$clientId] = [
-                    'id' => $clientId,
-                    'name' => $clientName,
-                    'borrowed' => 0,
-                    'returned' => 0,
-                    'balance' => 0
-                ];
+        foreach ($products as $product) {
+            // Si no hay filtro de fecha, usamos la fecha en la que se actualizó el stock manualmente, 
+            // o si no hay, la primera vez que se prestó, o finalmente hoy.
+            $defaultStartDate = $startDateParam;
+            if (!$defaultStartDate) {
+                if ($product->stock_updated_at) {
+                    $defaultStartDate = \Carbon\Carbon::parse($product->stock_updated_at)->startOfDay()->format('Y-m-d H:i:s');
+                } else {
+                    $firstLoanSale = \App\Models\Sale::whereHas('details', function($q) use ($product) {
+                        $q->where('product_id', $product->id)->where('price', 0);
+                    })->min('date');
+                    $defaultStartDate = $firstLoanSale ? \Carbon\Carbon::parse($firstLoanSale)->startOfDay()->format('Y-m-d H:i:s') : now()->startOfDay()->format('Y-m-d H:i:s');
+                }
             }
-            $grouped[$clientId]['borrowed'] += $sale->jugs_borrowed;
-            $grouped[$clientId]['returned'] += $sale->jugs_returned;
+
+            // Para los totales de las tarjetas (solo por producto)
+            $product->total_loaned = \App\Models\SaleDetail::where('product_id', $product->id)
+                ->where('price', 0)
+                ->whereHas('sale', function($q) use ($defaultStartDate, $endDateParam) {
+                    $q->where('status', '!=', 'Anulado');
+                    $q->where('date', '>=', $defaultStartDate);
+                    if ($endDateParam) {
+                        $q->where('date', '<=', $endDateParam);
+                    }
+                })
+                ->sum('quantity');
+
+            $product->total_sold = \App\Models\SaleDetail::where('product_id', $product->id)
+                ->where('price', '>', 0)
+                ->whereHas('sale', function($q) use ($defaultStartDate, $endDateParam) {
+                    $q->where('status', '!=', 'Anulado');
+                    $q->where('date', '>=', $defaultStartDate);
+                    if ($endDateParam) {
+                        $q->where('date', '<=', $endDateParam);
+                    }
+                })
+                ->sum('quantity');
+
+            // Recopilar desglose por clientes
+            $salesQuery = \App\Models\Sale::with(['client', 'details' => function($q) use ($product) {
+                    $q->where('product_id', $product->id);
+                }])
+                ->whereHas('details', function($q) use ($product) {
+                    $q->where('product_id', $product->id);
+                })
+                ->where('status', '!=', 'Anulado')
+                ->where('date', '>=', $defaultStartDate);
+
+            if ($endDateParam) {
+                $salesQuery->where('date', '<=', $endDateParam);
+            }
+
+            if ($search) {
+                $salesQuery->where(function($q) use ($search) {
+                    $q->whereHas('client', function($cq) use ($search) {
+                        $cq->where('name', 'like', '%' . $search . '%')
+                           ->orWhere('document', 'like', '%' . $search . '%');
+                    })->orWhereNull('client_id'); // Allow Consumidor Final if they search something? Maybe not.
+                });
+            }
+
+            $sales = $salesQuery->get();
+
+            foreach ($sales as $sale) {
+                $clientId = $sale->client_id ?? 0;
+                $clientName = optional($sale->client)->name ?? 'Consumidor Final';
+
+                if ($clientId == 0 && $search && stripos('Consumidor Final', $search) === false) {
+                    continue; // Skip if search doesn't match 'Consumidor Final'
+                }
+
+                if (!isset($clientDetails[$clientId])) {
+                    $clientDetails[$clientId] = [
+                        'name' => $clientName,
+                        'products' => []
+                    ];
+                }
+
+                if (!isset($clientDetails[$clientId]['products'][$product->id])) {
+                    $clientDetails[$clientId]['products'][$product->id] = [
+                        'product_name' => $product->name,
+                        'sold' => 0,
+                        'borrowed' => 0,
+                        'returned' => 0,
+                        'loaned' => 0
+                    ];
+                }
+
+                foreach ($sale->details as $detail) {
+                    if ($detail->product_id == $product->id) {
+                        if ($detail->price > 0) {
+                            $clientDetails[$clientId]['products'][$product->id]['sold'] += $detail->quantity;
+                        } else {
+                            if ($detail->quantity > 0) {
+                                $clientDetails[$clientId]['products'][$product->id]['borrowed'] += $detail->quantity;
+                            } else {
+                                $clientDetails[$clientId]['products'][$product->id]['returned'] += abs($detail->quantity);
+                            }
+                            $clientDetails[$clientId]['products'][$product->id]['loaned'] += $detail->quantity;
+                        }
+                    }
+                }
+            }
         }
 
-        foreach ($grouped as $id => $data) {
-            $grouped[$id]['balance'] = $data['borrowed'] - $data['returned'];
+        // Aplanar la lista para mostrarla en tabla
+        $clientBreakdown = [];
+        foreach ($clientDetails as $clientId => $cData) {
+            foreach ($cData['products'] as $productId => $pData) {
+                if ($pData['sold'] > 0 || $pData['loaned'] > 0) {
+                    $clientBreakdown[] = [
+                        'client_id' => $clientId,
+                        'product_id' => $productId,
+                        'client_name' => $cData['name'],
+                        'product_name' => $pData['product_name'],
+                        'sold' => $pData['sold'],
+                        'borrowed' => $pData['borrowed'],
+                        'returned' => $pData['returned'],
+                        'loaned' => $pData['loaned']
+                    ];
+                }
+            }
         }
 
-        // Sort by balance desc
-        usort($grouped, function($a, $b) {
-            return $b['balance'] <=> $a['balance'];
+        usort($clientBreakdown, function($a, $b) {
+            return $a['client_name'] <=> $b['client_name'];
         });
 
-        return view('sales.jerry_can_report', compact('grouped', 'search'));
+        return view('sales.jerry_can_report', compact('products', 'request', 'clientBreakdown'));
     }
 
     public function returnJerryCans(Request $request)
     {
         $request->validate([
             'client_id' => 'required|exists:clients,id',
+            'product_id' => 'required|exists:products,id',
             'quantity' => 'required|integer|min:1'
         ]);
 
+        $product = \App\Models\Product::findOrFail($request->product_id);
+
         $sale_count = \Illuminate\Support\Facades\DB::table('settings')->pluck('sale_count')->first();
-        $order = 'V' . str_pad($sale_count + 1, 4, "0", STR_PAD_LEFT);
+        $order = 'DEV-' . str_pad($sale_count + 1, 4, "0", STR_PAD_LEFT);
 
         $week = \App\Models\Week::where('number', now()->format('W'))->first();
         if (!$week) {
@@ -871,9 +966,9 @@ class SaleController extends Controller
             ]);
         }
 
-        Sale::create([
+        $sale = \App\Models\Sale::create([
             'order' => $order,
-            'date' => now(),
+            'date' => now()->format('Y-m-d H:i:s'),
             'week_id' => $week->id,
             'guide' => 'DEV-BIDONES',
             'type' => 'Contado',
@@ -883,10 +978,21 @@ class SaleController extends Controller
             'total' => 0,
             'debt' => 0,
             'paid' => 1,
-            'status' => 'Entregado',
-            'jugs_borrowed' => 0,
-            'jugs_returned' => $request->quantity
+            'status' => 'Entregado'
         ]);
+
+        \App\Models\SaleDetail::create([
+            'sale_id' => $sale->id,
+            'product_id' => $product->id,
+            'price' => 0,
+            'quantity' => -($request->quantity),
+            'special' => 0
+        ]);
+
+        if ($product->reduces_stock) {
+            $product->stock += $request->quantity; // Aumentamos el stock físico porque lo están devolviendo
+            $product->save();
+        }
 
         \Illuminate\Support\Facades\DB::table('settings')->update([
             'sale_count' => $sale_count + 1
@@ -897,38 +1003,132 @@ class SaleController extends Controller
 
     public function jerryCanReportPdf(Request $request)
     {
-        $sales = Sale::with('client')
-            ->where(function($q) {
-                $q->where('jugs_borrowed', '>', 0)
-                  ->orWhere('jugs_returned', '>', 0);
-            })
-            ->where('status', '!=', 'Anulado')
-            ->get();
+        $startDateParam = $request->start_date ? $request->start_date . ' 00:00:00' : null;
+        $endDateParam = $request->end_date ? $request->end_date . ' 23:59:59' : null;
+        $search = $request->search;
 
-        $grouped = [];
-        foreach ($sales as $sale) {
-            $clientId = $sale->client_id ?? 0;
-            $clientName = optional($sale->client)->name ?? 'Consumidor Final';
+        $products = \App\Models\Product::where('is_loanable', 1)->get();
+        $clientDetails = [];
 
-            if (!isset($grouped[$clientId])) {
-                $grouped[$clientId] = [
-                    'name' => $clientName,
-                    'borrowed' => 0,
-                    'returned' => 0,
-                    'balance' => 0
-                ];
+        foreach ($products as $product) {
+            $defaultStartDate = $startDateParam;
+            if (!$defaultStartDate) {
+                if ($product->stock_updated_at) {
+                    $defaultStartDate = \Carbon\Carbon::parse($product->stock_updated_at)->startOfDay()->format('Y-m-d H:i:s');
+                } else {
+                    $firstLoanSale = \App\Models\Sale::whereHas('details', function($q) use ($product) {
+                        $q->where('product_id', $product->id)->where('price', 0);
+                    })->min('date');
+                    $defaultStartDate = $firstLoanSale ? \Carbon\Carbon::parse($firstLoanSale)->startOfDay()->format('Y-m-d H:i:s') : now()->startOfDay()->format('Y-m-d H:i:s');
+                }
             }
-            $grouped[$clientId]['borrowed'] += $sale->jugs_borrowed;
-            $grouped[$clientId]['returned'] += $sale->jugs_returned;
+
+            $product->total_loaned = \App\Models\SaleDetail::where('product_id', $product->id)
+                ->where('price', 0)
+                ->whereHas('sale', function($q) use ($defaultStartDate, $endDateParam) {
+                    $q->where('status', '!=', 'Anulado');
+                    $q->where('date', '>=', $defaultStartDate);
+                    if ($endDateParam) {
+                        $q->where('date', '<=', $endDateParam);
+                    }
+                })
+                ->sum('quantity');
+
+            $product->total_sold = \App\Models\SaleDetail::where('product_id', $product->id)
+                ->where('price', '>', 0)
+                ->whereHas('sale', function($q) use ($defaultStartDate, $endDateParam) {
+                    $q->where('status', '!=', 'Anulado');
+                    $q->where('date', '>=', $defaultStartDate);
+                    if ($endDateParam) {
+                        $q->where('date', '<=', $endDateParam);
+                    }
+                })
+                ->sum('quantity');
+
+            $salesQuery = \App\Models\Sale::with(['client', 'details' => function($q) use ($product) {
+                    $q->where('product_id', $product->id);
+                }])
+                ->whereHas('details', function($q) use ($product) {
+                    $q->where('product_id', $product->id);
+                })
+                ->where('status', '!=', 'Anulado')
+                ->where('date', '>=', $defaultStartDate);
+
+            if ($endDateParam) {
+                $salesQuery->where('date', '<=', $endDateParam);
+            }
+
+            if ($search) {
+                $salesQuery->where(function($q) use ($search) {
+                    $q->whereHas('client', function($cq) use ($search) {
+                        $cq->where('name', 'like', '%' . $search . '%')
+                           ->orWhere('document', 'like', '%' . $search . '%');
+                    })->orWhereNull('client_id');
+                });
+            }
+
+            $sales = $salesQuery->get();
+
+            foreach ($sales as $sale) {
+                $clientId = $sale->client_id ?? 0;
+                $clientName = optional($sale->client)->name ?? 'Consumidor Final';
+
+                if ($clientId == 0 && $search && stripos('Consumidor Final', $search) === false) {
+                    continue;
+                }
+
+                if (!isset($clientDetails[$clientId])) {
+                    $clientDetails[$clientId] = [
+                        'name' => $clientName,
+                        'products' => []
+                    ];
+                }
+
+                if (!isset($clientDetails[$clientId]['products'][$product->id])) {
+                    $clientDetails[$clientId]['products'][$product->id] = [
+                        'product_name' => $product->name,
+                        'sold' => 0,
+                        'borrowed' => 0,
+                        'returned' => 0,
+                        'loaned' => 0
+                    ];
+                }
+
+                foreach ($sale->details as $detail) {
+                    if ($detail->product_id == $product->id) {
+                        if ($detail->price > 0) {
+                            $clientDetails[$clientId]['products'][$product->id]['sold'] += $detail->quantity;
+                        } else {
+                            if ($detail->quantity > 0) {
+                                $clientDetails[$clientId]['products'][$product->id]['borrowed'] += $detail->quantity;
+                            } else {
+                                $clientDetails[$clientId]['products'][$product->id]['returned'] += abs($detail->quantity);
+                            }
+                            $clientDetails[$clientId]['products'][$product->id]['loaned'] += $detail->quantity;
+                        }
+                    }
+                }
+            }
         }
 
-        foreach ($grouped as $id => $data) {
-            $grouped[$id]['balance'] = $data['borrowed'] - $data['returned'];
+        $clientBreakdown = [];
+        foreach ($clientDetails as $clientId => $cData) {
+            foreach ($cData['products'] as $productId => $pData) {
+                if ($pData['sold'] > 0 || $pData['loaned'] > 0) {
+                    $clientBreakdown[] = [
+                        'client_name' => $cData['name'],
+                        'product_name' => $pData['product_name'],
+                        'sold' => $pData['sold'],
+                        'borrowed' => $pData['borrowed'],
+                        'returned' => $pData['returned'],
+                        'loaned' => $pData['loaned']
+                    ];
+                }
+            }
         }
 
-        // Sort by balance desc
-        usort($grouped, function($a, $b) {
-            return $b['balance'] <=> $a['balance'];
+        usort($clientBreakdown, function($a, $b) {
+            return $a['client_name'] <=> $b['client_name'];
         });
 
         $fpdf = new Fpdf;
@@ -942,52 +1142,79 @@ class SaleController extends Controller
 
         $fpdf->SetFont('Montserrat', 'B', 16);
         $fpdf->SetTextColor(2, 93, 166);
-        $fpdf->Cell(190, 10, utf8_decode('REPORTE DE BIDONES PRESTADOS POR CLIENTE'), 0, 1, 'C');
+        $fpdf->Cell(190, 10, utf8_decode('REPORTE DE PRODUCTOS PRESTABLES (BIDONES)'), 0, 1, 'C');
         $fpdf->Ln(10);
 
+        // Tabla de Productos
         $fpdf->SetFillColor(2, 93, 166);
         $fpdf->SetTextColor(255, 255, 255);
         $fpdf->SetFont('Montserrat', 'B', 10);
 
         $fpdf->Cell(15, 10, utf8_decode('N°'), 1, 0, 'C', true);
-        $fpdf->Cell(80, 10, utf8_decode('CLIENTE'), 1, 0, 'C', true);
-        $fpdf->Cell(30, 10, utf8_decode('PRESTADOS'), 1, 0, 'C', true);
-        $fpdf->Cell(30, 10, utf8_decode('DEVUELTOS'), 1, 0, 'C', true);
-        $fpdf->Cell(35, 10, utf8_decode('SALDO PENDIENTE'), 1, 1, 'C', true);
+        $fpdf->Cell(80, 10, utf8_decode('PRODUCTO'), 1, 0, 'C', true);
+        $fpdf->Cell(30, 10, utf8_decode('STOCK'), 1, 0, 'C', true);
+        $fpdf->Cell(30, 10, utf8_decode('VENDIDOS'), 1, 0, 'C', true);
+        $fpdf->Cell(35, 10, utf8_decode('PRESTADOS'), 1, 1, 'C', true);
 
         $fpdf->SetTextColor(0, 0, 0);
         $fpdf->SetFont('Montserrat', '', 9);
 
-        $totalBorrowed = 0;
-        $totalReturned = 0;
-        $totalBalance = 0;
-
         $index = 1;
-        foreach ($grouped as $clientData) {
-            if ($clientData['balance'] == 0 && $clientData['borrowed'] == 0 && $clientData['returned'] == 0) continue;
-            
+        foreach ($products as $product) {
             $fpdf->Cell(15, 8, $index++, 1, 0, 'C');
-            $fpdf->Cell(80, 8, utf8_decode($clientData['name']), 1, 0, 'L');
-            $fpdf->Cell(30, 8, $clientData['borrowed'], 1, 0, 'C');
-            $fpdf->Cell(30, 8, $clientData['returned'], 1, 0, 'C');
-            $fpdf->Cell(35, 8, $clientData['balance'], 1, 1, 'C');
-            
-            $totalBorrowed += $clientData['borrowed'];
-            $totalReturned += $clientData['returned'];
-            $totalBalance += $clientData['balance'];
+            $fpdf->Cell(80, 8, utf8_decode($product->name), 1, 0, 'L');
+            $fpdf->Cell(30, 8, $product->stock, 1, 0, 'C');
+            $fpdf->Cell(30, 8, $product->total_sold, 1, 0, 'C');
+            $fpdf->Cell(35, 8, $product->total_loaned, 1, 1, 'C');
         }
 
-        $fpdf->SetFont('Montserrat', 'B', 10);
-        $fpdf->Cell(95, 10, utf8_decode('TOTALES'), 1, 0, 'R');
-        $fpdf->Cell(30, 10, $totalBorrowed, 1, 0, 'C');
-        $fpdf->Cell(30, 10, $totalReturned, 1, 0, 'C');
-        $fpdf->Cell(35, 10, $totalBalance, 1, 1, 'C');
+        $fpdf->Ln(10);
+
+        // Tabla de Clientes
+        if (count($clientBreakdown) > 0) {
+            $fpdf->SetFont('Montserrat', 'B', 14);
+            $fpdf->SetTextColor(2, 93, 166);
+            $fpdf->Cell(190, 10, utf8_decode('DETALLE POR CLIENTE'), 0, 1, 'L');
+            
+            $fpdf->SetFillColor(2, 93, 166);
+            $fpdf->SetTextColor(255, 255, 255);
+            $fpdf->SetFont('Montserrat', 'B', 8);
+
+            $fpdf->Cell(65, 8, utf8_decode('CLIENTE'), 1, 0, 'L', true);
+            $fpdf->Cell(25, 8, utf8_decode('PRODUCTO'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 8, utf8_decode('COMPRADOS'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 8, utf8_decode('PRESTADOS'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 8, utf8_decode('DEVUELTOS'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 8, utf8_decode('SALDO'), 1, 1, 'C', true);
+
+            $fpdf->SetTextColor(0, 0, 0);
+            $fpdf->SetFont('Montserrat', '', 8);
+
+            foreach ($clientBreakdown as $data) {
+                // Handle long client names
+                $nameStr = utf8_decode($data['client_name']);
+                if (strlen($nameStr) > 35) {
+                    $nameStr = substr($nameStr, 0, 32) . '...';
+                }
+                $fpdf->Cell(65, 8, $nameStr, 1, 0, 'L');
+                $fpdf->Cell(25, 8, utf8_decode($data['product_name']), 1, 0, 'C');
+                $fpdf->Cell(25, 8, $data['sold'], 1, 0, 'C');
+                $fpdf->Cell(25, 8, $data['borrowed'], 1, 0, 'C');
+                $fpdf->Cell(25, 8, $data['returned'], 1, 0, 'C');
+                $fpdf->Cell(25, 8, $data['loaned'], 1, 1, 'C');
+            }
+        } else {
+            $fpdf->SetFont('Montserrat', '', 10);
+            $fpdf->SetTextColor(100, 100, 100);
+            $fpdf->Cell(190, 10, utf8_decode('No se encontraron movimientos para detallar.'), 0, 1, 'C');
+        }
 
         $fpdf->Ln(10);
         $fpdf->SetFont('Montserrat', '', 8);
+        $fpdf->SetTextColor(0, 0, 0);
         $fpdf->Cell(190, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i')), 0, 1, 'R');
 
-        $name = "ReporteBidones_" . now()->format('dm') . ".pdf";
+        $name = "ReportePrestables_" . now()->format('dm') . ".pdf";
         if (ob_get_level() > 0) ob_end_clean();
         $fpdf->Output('D', $name);
     }
@@ -1308,6 +1535,87 @@ class SaleController extends Controller
             if ($product && $product->stock !== null && $product->reduces_stock) {
                 $diff = $newQuantity - $oldQuantity;
                 $product->decrement('stock', $diff);
+            }
+        });
+
+        return response()->json(['status' => true]);
+    }
+
+    public function splitDetail(Request $request, Sale $sale, SaleDetail $detail)
+    {
+        $validator = Validator::make($request->all(), [
+            'sell_qty' => 'required|integer|min:0',
+            'loan_qty' => 'required|integer|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'error' => $validator->errors()->first()]);
+        }
+
+        if ($detail->sale_id !== $sale->id) {
+            return response()->json(['status' => false, 'error' => 'Detalle no válido']);
+        }
+
+        DB::transaction(function () use ($sale, $detail, $request) {
+            $product = $detail->product;
+            
+            $price = $product->price;
+            $special_price = \App\Models\Price::where('client_id', $sale->client_id)
+                ->where('product_id', $product->id)
+                ->first();
+            if ($special_price) {
+                $price = $special_price->price;
+            }
+
+            $oldQuantity = $detail->quantity;
+            $newQuantity = $request->sell_qty + $request->loan_qty;
+
+            $detail->delete();
+            
+            if ($request->sell_qty > 0) {
+                SaleDetail::create([
+                    'sale_id' => $sale->id,
+                    'product_id' => $product->id,
+                    'price' => $price,
+                    'quantity' => $request->sell_qty,
+                    'special' => 0
+                ]);
+            }
+            
+            if ($request->loan_qty > 0) {
+                SaleDetail::create([
+                    'sale_id' => $sale->id,
+                    'product_id' => $product->id,
+                    'price' => 0.00,
+                    'quantity' => $request->loan_qty,
+                    'special' => 0
+                ]);
+            }
+
+            if ($product && $product->stock !== null && $product->reduces_stock) {
+                $diff = $newQuantity - $oldQuantity;
+                if ($diff > 0) {
+                    $product->decrement('stock', $diff);
+                } elseif ($diff < 0) {
+                    $product->increment('stock', abs($diff));
+                }
+            }
+
+            $realTotal = $sale->details()->get()->sum(function ($d) {
+                return $d->price * $d->quantity;
+            });
+
+            $sale->update(['total' => $realTotal]);
+
+            if ($sale->type == 'Credito' && !$sale->paid) {
+                $totalPaid = $sale->payments()->sum('amount');
+                $newDebt = max(0, $realTotal - $totalPaid);
+                $sale->update(['debt' => $newDebt]);
+
+                $movement = $sale->movements()->where('type', 'debt')->first();
+                if ($movement) {
+                    $movement->update(['amount' => $newDebt]);
+                }
             }
         });
 

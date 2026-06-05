@@ -184,6 +184,33 @@
 		</div>
 	</div>
 </div>
+<div class="modal modal-blur fade" id="splitModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title">¿Cuántos deseas prestar?</h5>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+			</div>
+			<div class="modal-body">
+				<div class="row">
+					<input type="hidden" id="splitProductId">
+					<input type="hidden" id="splitTotalQty">
+					<div class="col-6 mb-3">
+						<label class="form-label">Prestar</label>
+						<input type="number" class="form-control text-center" id="splitLoanQty" min="0">
+					</div>
+					<div class="col-6 mb-3">
+						<label class="form-label">Vender</label>
+						<input type="number" class="form-control text-center" id="splitSellQty" min="0">
+					</div>
+				</div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-primary w-100" id="btn-confirm-split">Confirmar</button>
+			</div>
+		</div>
+	</div>
+</div>
 @endsection
 
 @section('scripts')
@@ -338,7 +365,13 @@
 						<td>${key + 1}</td>
 						<td>${item.name}</td>
 						<td>
-							${item.special ? '<span class="badge bg-purple-lt fw-bold">Precio especial</span>' : ''}
+							${item.special ? '<span class="badge bg-purple-lt fw-bold mb-1">Precio especial</span><br>' : ''}
+							${item.is_loanable ? `
+								<label class="form-check mb-0 mt-1">
+									<input class="form-check-input cbx-loaned" type="checkbox" data-id="${item.id}" ${item.is_loaned ? 'checked' : ''}>
+									<span class="form-check-label small fw-bold">Es prestable</span>
+								</label>
+							` : ''}
 						</td>
 						<td>
 							<input type="text" class="form-control form-control-sm txt-price" value="${ money(item.price) }" data-id="${item.id}" style="width: 60px;">
@@ -351,7 +384,7 @@
 							<!-- <button class="btn btn-sm btn-icon btn-primary btn-edit" data-id="${item.id}" title="Actualizar">
 								<i class="ti ti-reload"></i>
 							</button> -->
-							<button class="btn btn-sm btn-icon btn-danger btn-delete" data-id="${item.id}" title="Eliminar">
+							<button class="btn btn-sm btn-icon btn-danger btn-delete" data-id="${item.id}" data-is-loaned="${item.is_loaned}" title="Eliminar">
 								<i class="ti ti-x"></i>
 							</button>
 						</td>
@@ -412,13 +445,14 @@
 	$(document).on('blur', '.txt-price, .txt-quantity', function(){
 		var id = $(this).data('id');
 
-		var price = $(this).parent().parent().find('.txt-price').val();
-		var quantity = $(this).parent().parent().find('.txt-quantity').val();
+		var price = $(this).closest('tr').find('.txt-price').val();
+		var quantity = $(this).closest('tr').find('.txt-quantity').val();
+		var is_loaned = $(this).closest('tr').find('.cbx-loaned').prop('checked');
 		
 		$.ajax({
 			url: '{{ route('cart.update') }}',
 			method: 'PATCH',
-			data: { id, price, quantity },
+			data: { id, price, quantity, is_loaned },
 			success: function(data){
 				if(data.status){
 					getItems();
@@ -432,14 +466,88 @@
 		});
 	});
 
+	$(document).on('change', '.cbx-loaned', function(e){
+		var id = $(this).data('id');
+		var is_loaned = $(this).prop('checked');
+		var quantity = parseInt($(this).closest('tr').find('.txt-quantity').val());
+
+		if (is_loaned && quantity > 1) {
+			e.preventDefault();
+			$(this).prop('checked', false);
+
+			$('#splitProductId').val(id);
+			$('#splitTotalQty').val(quantity);
+			$('#splitLoanQty').val(quantity).attr('max', quantity);
+			$('#splitSellQty').val(0).attr('max', quantity);
+			$('#splitModal').modal('show');
+			return;
+		}
+
+		var sell_qty = is_loaned ? 0 : quantity;
+		var loan_qty = is_loaned ? quantity : 0;
+		var client_id = $('#client_id').val();
+
+		$.ajax({
+			url: '{{ route('cart.split') }}',
+			method: 'POST',
+			data: { id, sell_qty, loan_qty, client_id },
+			success: function(data){
+				if(data.status){
+					getItems();
+				}
+			},
+			error: function(err){
+				console.log(err);
+			}
+		});
+	});
+
+	$('#btn-confirm-split').click(function(){
+		var id = $('#splitProductId').val();
+		var sell_qty = $('#splitSellQty').val();
+		var loan_qty = $('#splitLoanQty').val();
+		var client_id = $('#client_id').val();
+
+		$.ajax({
+			url: '{{ route('cart.split') }}',
+			method: 'POST',
+			data: { id, sell_qty, loan_qty, client_id },
+			success: function(data){
+				if(data.status){
+					$('#splitModal').modal('hide');
+					getItems();
+				}
+			},
+			error: function(err){
+				console.log(err);
+			}
+		});
+	});
+
+	$('#splitLoanQty').on('input', function(){
+		var total = parseInt($('#splitTotalQty').val());
+		var loan = parseInt($(this).val()) || 0;
+		if(loan > total) { loan = total; $(this).val(total); }
+		if(loan < 0) { loan = 0; $(this).val(0); }
+		$('#splitSellQty').val(total - loan);
+	});
+	$('#splitSellQty').on('input', function(){
+		var total = parseInt($('#splitTotalQty').val());
+		var sell = parseInt($(this).val()) || 0;
+		if(sell > total) { sell = total; $(this).val(total); }
+		if(sell < 0) { sell = 0; $(this).val(0); }
+		$('#splitLoanQty').val(total - sell);
+	});
+
 	$(document).on('click', '.btn-delete', function(){
 
 		var id = $(this).data('id');
+		var is_loaned = $(this).data('is-loaned') ? 'true' : 'false';
 
 		$.ajax({
 			url: '{{ route('cart.destroy') }}',
 			method: 'DELETE',
-			data: { id },
+			data: { id, is_loaned },
 			success: function(data){
 				getItems();
 			},

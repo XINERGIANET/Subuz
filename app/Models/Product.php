@@ -13,7 +13,10 @@ class Product extends Model
         'name',
         'price',
         'stock',
-        'reduces_stock'
+        'reduces_stock',
+        'is_loanable',
+        'initial_stock',
+        'stock_updated_at'
     ];
 
     public $timestamps = false;

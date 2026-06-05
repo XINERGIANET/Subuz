@@ -36,6 +36,7 @@
 					<th>Precio</th>
 					<th>Stock</th>
 					<th>¿Reduce stock?</th>
+					<th>¿Es prestable?</th>
 					<th>Acción</th>
 				</tr>
 			</thead>
@@ -48,6 +49,13 @@
 					<td>{{ $product->stock ?? 'N/A' }}</td>
 					<td>
 						@if($product->reduces_stock)
+						<span class="badge bg-success text-success-fg">Si</span>
+						@else
+						<span class="badge bg-secondary text-secondary-fg">No</span>
+						@endif
+					</td>
+					<td>
+						@if($product->is_loanable)
 						<span class="badge bg-success text-success-fg">Si</span>
 						@else
 						<span class="badge bg-secondary text-secondary-fg">No</span>
@@ -129,6 +137,15 @@
 								<div class="form-hint small">Si se marca, el stock se descontará en todas las ventas.</div>
 							</div>
 						</div>
+						<div class="col-lg-6">
+							<div class="mb-3 mt-4">
+								<label class="form-check">
+									<input class="form-check-input" type="checkbox" name="is_loanable" value="1">
+									<span class="form-check-label fw-bold">¿Es prestable?</span>
+								</label>
+								<div class="form-hint small">Si se marca, se podrá prestar en las ventas con precio 0.</div>
+							</div>
+						</div>
 					</div>
 				</div>
 				<div class="modal-footer border-0">
@@ -191,11 +208,19 @@
                                 </div>
 							</div>
 						</div>
-						<div class="col-lg-12">
+						<div class="col-lg-6">
 							<div class="mb-3">
 								<label class="form-check">
 									<input class="form-check-input" type="checkbox" name="reduces_stock" id="editIsBidon" value="1">
 									<span class="form-check-label fw-bold">¿Este producto reduce stock?</span>
+								</label>
+							</div>
+						</div>
+						<div class="col-lg-6">
+							<div class="mb-3">
+								<label class="form-check">
+									<input class="form-check-input" type="checkbox" name="is_loanable" id="editIsLoanable" value="1">
+									<span class="form-check-label fw-bold">¿Es prestable?</span>
 								</label>
 							</div>
 						</div>
@@ -256,6 +281,7 @@
 				$('#editPrice').val(data.price);
 				$('#editStock').val(data.stock);
 				$('#editIsBidon').prop('checked', data.reduces_stock == 1);
+				$('#editIsLoanable').prop('checked', data.is_loanable == 1);
 				$('#editId').val(data.id);
 				$('#editModal').modal('show');
 			},
