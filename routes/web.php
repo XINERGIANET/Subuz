@@ -174,6 +174,7 @@ Route::middleware('auth')->group(function () {
 		
 		Route::get('jerry-can-report', [SaleController::class, 'jerryCanReportView'])->name('reports.jerryCan');
 		Route::post('jerry-can-report/return', [SaleController::class, 'returnJerryCans'])->name('reports.returnJerryCans');
+		Route::post('jerry-can-report/buy', [SaleController::class, 'buyJerryCans'])->name('reports.buyJerryCans');
 		Route::get('jerry-can-report/pdf', [SaleController::class, 'jerryCanReportPdf'])->name('reports.jerryCanPdf');
 	});
 

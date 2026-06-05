@@ -936,7 +936,38 @@ class SaleController extends Controller
             return $a['client_name'] <=> $b['client_name'];
         });
 
-        return view('sales.jerry_can_report', compact('products', 'request', 'clientBreakdown'));
+        $payment_methods = \App\Models\PaymentMethod::all();
+
+        return view('sales.jerry_can_report', compact('products', 'request', 'clientBreakdown', 'payment_methods'));
+    }
+
+    public function buyJerryCans(Request $request)
+    {
+        $request->validate([
+            'product_id' => 'required|exists:products,id',
+            'quantity' => 'required|integer|min:1',
+            'amount' => 'required|numeric|min:0.01',
+            'payment_method_id' => 'required_unless:is_external,1|exists:payment_methods,id'
+        ]);
+
+        $product = \App\Models\Product::findOrFail($request->product_id);
+        
+        if (!$request->is_external) {
+            // Registrar el egreso en caja
+            \App\Models\Expense::create([
+                'description' => 'Compra de producto: ' . $product->name . ' (Cant: ' . $request->quantity . ')',
+                'amount' => $request->amount,
+                'payment_method_id' => $request->payment_method_id,
+                'date' => now()
+            ]);
+        }
+
+        // Aumentar el stock del producto
+        if ($product->stock !== null) {
+            $product->increment('stock', $request->quantity);
+        }
+
+        return back()->with('message', 'Compra registrada correctamente. El stock ha sido actualizado.');
     }
 
     public function returnJerryCans(Request $request)

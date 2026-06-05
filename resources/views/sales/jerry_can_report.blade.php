@@ -56,7 +56,12 @@
                                 <span class="bg-primary text-white avatar avatar-md me-3">
                                     <i class="ti ti-package fs-2"></i>
                                 </span>
-                                <h2 class="m-0 fw-bold">{{ $product->name }}</h2>
+                                <div>
+                                    <h2 class="m-0 fw-bold">{{ $product->name }}</h2>
+                                    <button class="btn btn-sm btn-outline-primary mt-1" data-bs-toggle="modal" data-bs-target="#modal-buy-{{ $product->id }}">
+                                        <i class="ti ti-shopping-cart icon me-1"></i> Comprar Stock
+                                    </button>
+                                </div>
                             </div>
                             
                             <!-- Right: Stats -->
@@ -186,4 +191,70 @@
     @endforeach
 @endif
 
+@foreach($products as $product)
+<!-- Modal for Buy Stock -->
+<div class="modal modal-blur fade text-start" id="modal-buy-{{ $product->id }}" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <form action="{{ url('jerry-can-report/buy') }}" method="POST">
+                @csrf
+                <div class="modal-body text-center py-4">
+                    <i class="ti ti-shopping-cart text-primary fs-1 mb-2 d-block"></i>
+                    <h3>Comprar {{ $product->name }}</h3>
+                    <div class="text-muted mb-3">Se registrará como un egreso de caja y aumentará el stock actual ({{ $product->stock }}).</div>
+                    
+                    <input type="hidden" name="product_id" value="{{ $product->id }}">
+                    
+                    <div class="form-group mb-3 text-start">
+                        <label class="form-label">Cantidad a comprar</label>
+                        <input type="number" name="quantity" class="form-control" min="1" value="1" required>
+                    </div>
+                    <div class="form-group mb-3 text-start">
+                        <label class="form-label">Costo Total (S/)</label>
+                        <input type="number" name="amount" class="form-control" min="0.01" step="0.01" required>
+                    </div>
+                    <div class="form-group mb-3 text-start">
+                        <label class="form-check">
+                            <input class="form-check-input check-external-payment" type="checkbox" name="is_external" value="1" data-target="#payment-method-container-{{ $product->id }}">
+                            <span class="form-check-label fw-bold">Pago Externo (No registrar en caja)</span>
+                        </label>
+                        <div class="form-hint small">Si se marca, la compra sólo aumentará el stock pero no se registrará como egreso en la caja del sistema.</div>
+                    </div>
+                    <div class="form-group mb-3 text-start" id="payment-method-container-{{ $product->id }}">
+                        <label class="form-label">Método de Pago</label>
+                        <select name="payment_method_id" class="form-select" required>
+                            @foreach($payment_methods as $pm)
+                                <option value="{{ $pm->id }}">{{ $pm->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Registrar Compra</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endforeach
+
+@endsection
+
+@section('scripts')
+<script>
+    document.querySelectorAll('.check-external-payment').forEach(function(checkbox) {
+        checkbox.addEventListener('change', function() {
+            var targetContainer = document.querySelector(this.getAttribute('data-target'));
+            var select = targetContainer.querySelector('select');
+            if (this.checked) {
+                targetContainer.style.display = 'none';
+                select.removeAttribute('required');
+            } else {
+                targetContainer.style.display = 'block';
+                select.setAttribute('required', 'required');
+            }
+        });
+    });
+</script>
 @endsection
