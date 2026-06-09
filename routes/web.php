@@ -18,6 +18,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\StockController;
 
 
 Route::get('login', [AuthController::class, 'login'])->name('auth.login');
@@ -115,6 +116,7 @@ Route::middleware('auth')->group(function () {
 	Route::middleware('role:admin|seller|asistente')->group(function () {
 		Route::get('products/api', [ProductController::class, 'api'])->name('products.api');
 		Route::resource('products', ProductController::class);
+		Route::resource('stocks', StockController::class);
 
 		Route::post('clients/store', [ClientController::class, 'storeInSale'])->name('clients.storeInSale');
 		Route::resource('clients', ClientController::class)->where(['client' => '[0-9]+']);

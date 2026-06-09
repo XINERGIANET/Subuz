@@ -112,6 +112,9 @@
 													<a class="dropdown-item" href="{{ route('products.index') }}">
 														<i class="ti ti-package icon me-2"></i> Productos
 													</a>
+													<a class="dropdown-item" href="{{ route('stocks.index') }}">
+														<i class="ti ti-database icon me-2"></i> Stock
+													</a>
 												@endif
 												<a class="dropdown-item" href="{{ route('clients.index') }}">
 													<i class="ti ti-users icon me-2"></i> Clientes
