@@ -22,6 +22,8 @@ class ExpenseController extends Controller
             return $query->whereDate('date', '>=', $from);
         })->when($request->to_date, function($query, $to){
             return $query->whereDate('date', '<=', $to);
+        })->when($request->payment_method_id, function($query, $payment_method_id){
+            return $query->where('payment_method_id', $payment_method_id);
         });
 
         $total_expenses = $query->sum('amount');
@@ -147,6 +149,8 @@ class ExpenseController extends Controller
                 return $query->whereDate('date', '>=', $from);
             })->when($request->to_date, function($query, $to){
                 return $query->whereDate('date', '<=', $to);
+            })->when($request->payment_method_id, function($query, $payment_method_id){
+                return $query->where('payment_method_id', $payment_method_id);
             })->latest('date')->get();
 
         $fpdf = new Fpdf;

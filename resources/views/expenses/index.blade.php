@@ -100,6 +100,15 @@
                             value="{{ request()->to_date }}">
                     </div>
                     <div class="col-md-2">
+                        <label class="form-label small fw-medium text-muted text-uppercase mb-1">Método</label>
+                        <select class="form-select text-dark" name="payment_method_id">
+                            <option value="">Todos</option>
+                            @foreach ($payment_methods as $pm)
+                                <option value="{{ $pm->id }}" @if(request()->payment_method_id == $pm->id) selected @endif>{{ $pm->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2">
                         <button type="submit" class="btn btn-brand w-100 py-2 fw-bold"><i
                                 class="ti ti-search me-1 fs-3"></i> Buscar</button>
                     </div>

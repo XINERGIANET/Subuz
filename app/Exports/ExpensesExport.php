@@ -34,6 +34,8 @@ class ExpensesExport implements FromCollection, WithHeadings, WithMapping, WithS
                 return $query->whereDate('date', '>=', $from);
             })->when($this->request->to_date, function($query, $to){
                 return $query->whereDate('date', '<=', $to);
+            })->when($this->request->payment_method_id, function($query, $payment_method_id){
+                return $query->where('payment_method_id', $payment_method_id);
             })->latest('date')->get();
     }
 
