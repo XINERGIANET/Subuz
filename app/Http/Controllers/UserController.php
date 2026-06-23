@@ -157,7 +157,10 @@ class UserController extends Controller
         $start_date = $request->start_date ?? now()->toDateString();
         $end_date = $request->end_date ?? now()->toDateString();
 
-        $movements = CashboxMovement::where('user_id', $dispatcher->id)
+        $movements = CashboxMovement::where(function($q) use ($dispatcher) {
+                $q->where('user_id', $dispatcher->id)->whereNull('dispatcher_id')
+                  ->orWhere('dispatcher_id', $dispatcher->id);
+            })
             ->whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
             ->with(['sale.client', 'payment_method'])
             ->get();
@@ -228,6 +231,52 @@ class UserController extends Controller
         $fpdf->Cell(30, 10, 'S/ '.number_format($total_delivered, 2), 0, 1, 'R');
         $fpdf->Ln(5);
 
+        $current_movements = [];
+        $prev_payments_data = [];
+
+        foreach($movements as $mov){
+            $sale = $mov->sale;
+            if(!$sale) continue;
+            
+            if ($mov->type == 'paid' && $sale->date->toDateString() < $start_date) {
+                $prev_payments_data[] = $mov;
+            } else {
+                $current_movements[] = $mov;
+            }
+        }
+
+        if(count($prev_payments_data) > 0){
+            $fpdf->SetFont('Montserrat', 'B', 12);
+            $fpdf->SetTextColor(28, 115, 71);
+            $fpdf->Cell(190, 10, utf8_decode('DETALLE DE PAGOS DE VENTAS ANTERIORES'), 0, 1, 'L');
+
+            $fpdf->SetFillColor(230, 245, 235);
+            $fpdf->SetTextColor(0, 0, 0);
+            $fpdf->SetFont('Montserrat', 'B', 9);
+
+            $fpdf->Cell(25, 8, utf8_decode('GUÍA'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 8, utf8_decode('F. VENTA'), 1, 0, 'C', true);
+            $fpdf->Cell(80, 8, utf8_decode('CLIENTE'), 1, 0, 'C', true);
+            $fpdf->Cell(35, 8, utf8_decode('MÉTODO'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 8, utf8_decode('MONTO'), 1, 1, 'C', true);
+
+            $fpdf->SetFont('Montserrat', '', 8);
+            foreach($prev_payments_data as $mov){
+                $sale = $mov->sale;
+                $method_name = optional($mov->payment_method)->name ?? 'Manual';
+                $fpdf->Cell(25, 7, utf8_decode($sale->guide), 1, 0, 'C');
+                $fpdf->Cell(25, 7, $sale->date->format('d/m/Y'), 1, 0, 'C');
+                $fpdf->Cell(80, 7, utf8_decode(substr(optional($sale->client)->name ?? 'Consumidor Final', 0, 40)), 1, 0, 'L');
+                $fpdf->Cell(35, 7, utf8_decode($method_name), 1, 0, 'C');
+                $fpdf->Cell(25, 7, 'S/ '.number_format($mov->amount, 2), 1, 1, 'R');
+            }
+            $fpdf->Ln(5);
+        }
+
+        $fpdf->SetFont('Montserrat', 'B', 12);
+        $fpdf->SetTextColor(2, 93, 166);
+        $fpdf->Cell(190, 10, utf8_decode('ENTREGAS DEL PERIODO'), 0, 1, 'L');
+
         // Detailed Table
         $fpdf->SetFillColor(2, 93, 166);
         $fpdf->SetTextColor(255, 255, 255);
@@ -242,11 +291,9 @@ class UserController extends Controller
 
         $fpdf->SetTextColor(0, 0, 0);
         $fpdf->SetFont('Montserrat', '', 9);
-        
-        foreach($movements as $mov){
-            $sale = $mov->sale;
-            if(!$sale) continue;
 
+        foreach($current_movements as $mov){
+            $sale = $mov->sale;
             $method_name = '';
             $payment_status = '';
 
@@ -265,7 +312,7 @@ class UserController extends Controller
 
             $fpdf->Cell(25, 8, utf8_decode($sale->guide), 1, 0, 'C');
             $fpdf->Cell(25, 8, date('d/m/Y', strtotime($mov->date)), 1, 0, 'C');
-            $fpdf->Cell(60, 8, utf8_decode(optional($sale->client)->name ?? 'Consumidor Final'), 1, 0, 'L');
+            $fpdf->Cell(60, 8, utf8_decode(substr(optional($sale->client)->name ?? 'Consumidor Final', 0, 30)), 1, 0, 'L');
             $fpdf->Cell(30, 8, utf8_decode($method_name), 1, 0, 'C');
             $fpdf->Cell(25, 8, $payment_status, 1, 0, 'C');
             $fpdf->Cell(25, 8, 'S/ '.number_format($mov->amount, 2), 1, 1, 'R');
@@ -289,7 +336,10 @@ class UserController extends Controller
         $start_date = $request->start_date ?? now()->toDateString();
         $end_date = $request->end_date ?? now()->toDateString();
 
-        $movements = CashboxMovement::where('user_id', $dispatcher->id)
+        $movements = CashboxMovement::where(function($q) use ($dispatcher) {
+                $q->where('user_id', $dispatcher->id)->whereNull('dispatcher_id')
+                  ->orWhere('dispatcher_id', $dispatcher->id);
+            })
             ->whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
             ->with(['sale.client', 'payment_method'])
             ->get();
@@ -315,8 +365,13 @@ class UserController extends Controller
             }
         }
 
-        $formatted_movements = $movements->map(function ($mov) {
+        $current_movements = [];
+        $prev_payments_data = [];
+
+        foreach ($movements as $mov) {
             $sale = $mov->sale;
+            if(!$sale) continue;
+
             $method_name = 'N/A';
             $payment_status = $mov->type == 'paid' ? 'PAGADO' : 'CRÉDITO';
 
@@ -329,7 +384,7 @@ class UserController extends Controller
                 }
             }
 
-            return [
+            $formatted_mov = [
                 'guide' => optional($sale)->guide ?? 'N/A',
                 'date' => date('d/m/Y H:i', strtotime($mov->date)),
                 'client' => optional(optional($sale)->client)->name ?? 'Consumidor Final',
@@ -337,7 +392,13 @@ class UserController extends Controller
                 'payment_status' => $payment_status,
                 'amount' => number_format($mov->amount, 2, '.', '')
             ];
-        });
+
+            if ($mov->type == 'paid' && $sale->date->toDateString() < $start_date) {
+                $prev_payments_data[] = $formatted_mov;
+            } else {
+                $current_movements[] = $formatted_mov;
+            }
+        }
 
         return response()->json([
             'status' => true,
@@ -352,7 +413,9 @@ class UserController extends Controller
                 'pending' => number_format($total_pending_cash, 2, '.', ''),
                 'total' => number_format($total_delivered, 2, '.', '')
             ],
-            'movements' => $formatted_movements
+            'movements' => $current_movements,
+            'previous_payments' => $prev_payments_data,
+            'previous_payments_count' => count($prev_payments_data)
         ]);
     }
 }

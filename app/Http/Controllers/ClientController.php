@@ -128,7 +128,7 @@ class ClientController extends Controller
             });
         }
 
-        $clients = $query->select('id', 'name', 'business_name', 'document', 'type')
+        $clients = $query->select('id', 'name', 'business_name', 'document', 'type', 'address', 'district')
             ->limit(30)
             ->get();
             

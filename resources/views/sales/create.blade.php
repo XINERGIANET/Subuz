@@ -62,6 +62,9 @@
 					<div class="input-group">
 						<select class="form-select ts-clients" id="client_id">
 							<option value="">Seleccionar</option>
+							@if(isset($client))
+							<option value="{{ $client->id }}" selected>{{ $client->name }}</option>
+							@endif
 						</select>
 						<button class="btn btn-icon" data-bs-toggle="modal" data-bs-target="#createClientModal">
 							<i class="ti ti-user-plus icon"></i>
@@ -323,6 +326,25 @@
 				}
 			});
 		}
+
+		@if(isset($client))
+			tsClients.addOption({
+				id: '{{ $client->id }}',
+				name: '{{ $client->name }}',
+				document: '{{ $client->document }}',
+				type: '{{ $client->type }}'
+			});
+			tsClients.setValue('{{ $client->id }}');
+
+			$('#type').val('{{ $client->type }}');
+			var badgeClass = '{{ $client->type }}' === 'Credito' ? 'bg-purple-lt' : 'bg-azure-lt';
+			var badgeText = '{{ $client->type }}' === 'Credito' ? 'Crédito' : 'Contado';
+			$('#client-type-badge').attr('class', 'badge ' + badgeClass).text(badgeText);
+			
+			$.get('{{ url("prices/special") }}/{{ $client->id }}', function(prices){
+				updateProductLabels(prices);
+			});
+		@endif
 	});
 
 	$('#storeClientForm').submit(function(e){

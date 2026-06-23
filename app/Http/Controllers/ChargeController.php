@@ -40,8 +40,9 @@ class ChargeController extends Controller
         $total = $sales->sum('debt');
     
         $sales = $sales->paginate(10);
+        $dispatchers = \App\Models\User::where('role', 'despachador')->get();
 
-        return view('charges.credit', compact('client', 'sales','payment_methods', 'total'));
+        return view('charges.credit', compact('client', 'sales','payment_methods', 'total', 'dispatchers'));
     }
 
     public function pending(Request $request){
@@ -66,8 +67,9 @@ class ChargeController extends Controller
         
         $sales = $query->latest('date')->paginate(10);
         $selected_client = $request->client_id ? Client::find($request->client_id) : null;
+        $dispatchers = \App\Models\User::where('role', 'despachador')->get();
 
-        return view('charges.pending', compact('sales', 'payment_methods', 'total', 'selected_client'));
+        return view('charges.pending', compact('sales', 'payment_methods', 'total', 'selected_client', 'dispatchers'));
     }
 
     public function history(Request $request){

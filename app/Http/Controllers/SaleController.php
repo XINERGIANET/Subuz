@@ -286,13 +286,14 @@ class SaleController extends Controller
         return view('sales.index', compact('sales', 'total_sales', 'total_sales_details', 'total_cash', 'payment_totals', 'payment_total_details', 'total_not_delivered', 'total_not_delivered_details', 'total_unpaid_delivered', 'total_unpaid_delivered_details', 'total_by_type', 'total_by_type_delivered', 'total_by_type_not_delivered', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox', 'products', 'selected_client', 'delivered_count'));
     }
 
-    public function create()
+    public function create(Request $request)
     {
         $sale_count = DB::table('settings')->pluck('sale_count')->first();
         $order = 'V' . str_pad($sale_count + 1, 4, "0", STR_PAD_LEFT);
         $products = Product::all();
         $dispatchers = User::where('role', 'despachador')->get();
-        return view('sales.create', compact('order', 'products', 'dispatchers'));
+        $client = $request->client_id ? \App\Models\Client::find($request->client_id) : null;
+        return view('sales.create', compact('order', 'products', 'dispatchers', 'client'));
     }
 
     public function store(Request $request)
@@ -387,6 +388,14 @@ class SaleController extends Controller
         ]);
 
         session()->forget('cart');
+
+        if(session()->has('active_quote_id')) {
+            $quote_id = session()->pull('active_quote_id');
+            $quote = \App\Models\Quote::find($quote_id);
+            if ($quote) {
+                $quote->update(['status' => 'Aprobada']);
+            }
+        }
 
         return response()->json(['status' => true]);
     }
@@ -1783,7 +1792,7 @@ class SaleController extends Controller
 
         // 4. Movements in period (including payments for previous sales)
         $movements_query = CashboxMovement::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
-            ->with(['payment_method', 'sale']);
+            ->with(['payment_method', 'sale', 'user', 'dispatcher']);
 
         if ($request->client_id || $request->type || $request->payment_method_id || $request->delivery_status) {
             $movements_query->whereIn('sale_id', (clone $sales_period)->pluck('id'));
@@ -1811,7 +1820,8 @@ class SaleController extends Controller
                             'guide' => $mov->sale->guide ?? $mov->sale->order,
                             'sale_date' => $mov->sale->date->format('d/m/Y'),
                             'amount' => number_format($mov->amount, 2, '.', ''),
-                            'method' => $method_name
+                            'method' => $method_name,
+                            'delivered_to' => optional($mov->dispatcher)->name ?? optional($mov->user)->name ?? 'Sistema'
                         ];
                     }
                 }
@@ -1935,7 +1945,7 @@ class SaleController extends Controller
             ->sum('total');
 
         $movements_query = CashboxMovement::whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
-            ->with(['payment_method', 'sale']);
+            ->with(['payment_method', 'sale', 'user', 'dispatcher']);
 
         if ($request->client_id || $request->type || $request->payment_method_id || $request->delivery_status) {
             $movements_query->whereIn('sale_id', (clone $sales_period)->pluck('id'));
@@ -2022,7 +2032,8 @@ class SaleController extends Controller
                             'guide' => $mov->sale->guide ?? $mov->sale->order,
                             'sale_date' => $mov->sale->date->format('d/m/Y'),
                             'amount' => $mov->amount,
-                            'method' => $method_name
+                            'method' => $method_name,
+                            'delivered_to' => optional($mov->dispatcher)->name ?? optional($mov->user)->name ?? 'Sistema'
                         ];
                     }
                 }
@@ -2061,19 +2072,21 @@ class SaleController extends Controller
             $fpdf->SetTextColor(0, 0, 0);
             $fpdf->SetFont('Montserrat', 'B', 9);
 
-            $fpdf->Cell(25, 8, utf8_decode('GUÍA'), 1, 0, 'C', true);
-            $fpdf->Cell(25, 8, utf8_decode('F. VENTA'), 1, 0, 'C', true);
-            $fpdf->Cell(70, 8, utf8_decode('CLIENTE'), 1, 0, 'C', true);
-            $fpdf->Cell(35, 8, utf8_decode('MÉTODO'), 1, 0, 'C', true);
-            $fpdf->Cell(35, 8, utf8_decode('MONTO'), 1, 1, 'C', true);
+            $fpdf->Cell(15, 8, utf8_decode('GUÍA'), 1, 0, 'C', true);
+            $fpdf->Cell(20, 8, utf8_decode('F.VENTA'), 1, 0, 'C', true);
+            $fpdf->Cell(65, 8, utf8_decode('CLIENTE'), 1, 0, 'C', true);
+            $fpdf->Cell(30, 8, utf8_decode('MÉTODO'), 1, 0, 'C', true);
+            $fpdf->Cell(35, 8, utf8_decode('ENTREGADO A'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 8, utf8_decode('MONTO'), 1, 1, 'C', true);
 
-            $fpdf->SetFont('Montserrat', '', 8);
+            $fpdf->SetFont('Montserrat', '', 7);
             foreach ($prev_payments_data as $pp) {
-                $fpdf->Cell(25, 7, utf8_decode($pp['guide']), 1, 0, 'C');
-                $fpdf->Cell(25, 7, $pp['sale_date'], 1, 0, 'C');
-                $fpdf->Cell(70, 7, utf8_decode(substr($pp['client'], 0, 40)), 1, 0, 'L');
-                $fpdf->Cell(35, 7, utf8_decode($pp['method']), 1, 0, 'C');
-                $fpdf->Cell(35, 7, 'S/ ' . number_format($pp['amount'], 2), 1, 1, 'R');
+                $fpdf->Cell(15, 7, utf8_decode($pp['guide']), 1, 0, 'C');
+                $fpdf->Cell(20, 7, $pp['sale_date'], 1, 0, 'C');
+                $fpdf->Cell(65, 7, utf8_decode(substr($pp['client'], 0, 35)), 1, 0, 'L');
+                $fpdf->Cell(30, 7, utf8_decode($pp['method']), 1, 0, 'C');
+                $fpdf->Cell(35, 7, utf8_decode(substr($pp['delivered_to'], 0, 18)), 1, 0, 'C');
+                $fpdf->Cell(25, 7, 'S/ ' . number_format($pp['amount'], 2), 1, 1, 'R');
             }
         }
         $fpdf->Ln(10);

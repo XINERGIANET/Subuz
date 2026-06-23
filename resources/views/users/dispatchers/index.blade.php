@@ -124,8 +124,34 @@
                         <!-- Dynamic summary -->
                     </div>
 
+                    <!-- Previous Payments Table (if any) -->
+                    <div id="modal-previous-payments-container" class="card border-0 shadow-sm overflow-hidden mb-3 d-none">
+                        <div class="card-header bg-green-lt py-2">
+                            <h6 class="card-title mb-0 fw-bold text-success"><i class="ti ti-history me-1"></i> Pagos de Ventas Anteriores</h6>
+                        </div>
+                        <div class="table-responsive" style="max-height: 250px;">
+                            <table class="table table-vcenter table-nowrap card-table bg-white">
+                                <thead class="table-corporate-header sticky-top">
+                                    <tr>
+                                        <th>Guía</th>
+                                        <th>Fecha/Hora</th>
+                                        <th>Cliente</th>
+                                        <th class="text-center">Tipo</th>
+                                        <th class="text-center">Estado</th>
+                                        <th class="text-end">Monto</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="modal-prev-table-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <!-- Details Table -->
                     <div class="card border-0 shadow-sm overflow-hidden">
+                        <div class="card-header bg-brand-lt py-2">
+                            <h6 class="card-title mb-0 fw-bold text-brand"><i class="ti ti-list me-1"></i> Entregas del Periodo</h6>
+                        </div>
                         <div class="table-responsive" style="max-height: 400px;">
                             <table class="table table-vcenter table-nowrap card-table bg-white">
                                 <thead class="table-corporate-header sticky-top">
@@ -249,6 +275,30 @@
         `;
 
         $('#modal-summary-container').html(summaryHtml);
+
+        // Render Previous Payments Table
+        let prevTableHtml = '';
+        if (data.previous_payments_count && data.previous_payments_count > 0) {
+            data.previous_payments.forEach(mov => {
+                const statusBadge = mov.payment_status === 'PAGADO' ? 'bg-success-lt' : 'bg-orange-lt';
+                prevTableHtml += `
+                    <tr>
+                        <td class="fw-bold">${mov.guide}</td>
+                        <td class="small">${mov.date}</td>
+                        <td class="text-truncate" style="max-width: 150px;">${mov.client}</td>
+                        <td class="text-center small">${mov.type}</td>
+                        <td class="text-center">
+                            <span class="badge ${statusBadge} px-2 py-1">${mov.payment_status}</span>
+                        </td>
+                        <td class="text-end fw-bold">S/ ${mov.amount}</td>
+                    </tr>
+                `;
+            });
+            $('#modal-prev-table-body').html(prevTableHtml);
+            $('#modal-previous-payments-container').removeClass('d-none');
+        } else {
+            $('#modal-previous-payments-container').addClass('d-none');
+        }
 
         // Render Table
         let tableHtml = '';

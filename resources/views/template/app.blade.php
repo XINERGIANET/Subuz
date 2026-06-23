@@ -140,6 +140,18 @@
 									</div>
 								</li>
 							@endif
+							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente'))
+								<li class="nav-item">
+									<a class="nav-link" href="{{ route('quotes.index') }}">
+										<span class="nav-link-icon d-md-none d-lg-inline-block">
+											<i class="ti ti-file-text icon"></i>
+										</span>
+										<span class="nav-link-title">
+											Cotizaciones
+										</span>
+									</a>
+								</li>
+							@endif
 							<li class="nav-item">
 								<a class="nav-link" href="{{ route('sales.index') }}">
 									<span class="nav-link-icon d-md-none d-lg-inline-block">

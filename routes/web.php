@@ -19,6 +19,7 @@ use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\StockController;
+use App\Http\Controllers\QuoteController;
 
 
 Route::get('login', [AuthController::class, 'login'])->name('auth.login');
@@ -134,6 +135,9 @@ Route::middleware('auth')->group(function () {
 		Route::post('cart/split', [CartController::class, 'split'])->name('cart.split');
 		Route::delete('destroy', [CartController::class, 'destroy'])->name('cart.destroy');
 		Route::post('cart/update-prices', [CartController::class, 'updatePricesByClient'])->name('cart.updatePrices');
+		Route::resource('quotes', QuoteController::class)->except(['show']);
+		Route::get('quotes/{quote}/pdf', [QuoteController::class, 'pdf'])->name('quotes.pdf');
+		Route::post('quotes/{quote}/approve', [QuoteController::class, 'approve'])->name('quotes.approve');
 	});
 
 	Route::middleware('role:admin|seller|despachador|asistente')->group(function () {

@@ -186,6 +186,23 @@
 					  <img id="payment_photo_preview" src="#" alt="Vista previa" class="img-fluid rounded border shadow-sm" style="max-height: 200px;">
 				  </div>
 			  </div>
+			  <div class="mt-3">
+				  <div class="form-check">
+					  <input class="form-check-input" type="checkbox" id="check_dispatcher" name="is_delivered_by_dispatcher" value="1">
+					  <label class="form-check-label" for="check_dispatcher">
+						  Este pago fue entregado a un despachador
+					  </label>
+				  </div>
+				  <div class="mt-2 d-none" id="dispatcher_select_container">
+					  <label class="form-label small text-muted mb-1">Seleccionar Despachador</label>
+					  <select class="form-select" name="dispatcher_id" id="dispatcher_id_select">
+						  <option value="">Seleccione un despachador</option>
+						  @foreach($dispatchers as $dispatcher)
+							  <option value="{{ $dispatcher->id }}">{{ $dispatcher->name }}</option>
+						  @endforeach
+					  </select>
+				  </div>
+			  </div>
   			</div>
   			<div class="modal-footer d-flex justify-content-between align-items-center">
   				<div>
@@ -309,6 +326,7 @@
 		$('#payment_photo').val('');
 		$('#payment_photo_preview_container').addClass('d-none');
 		$('#payment_photo_preview').attr('src', '#');
+		$('#check_dispatcher').prop('checked', false).trigger('change');
 
 		// Reset to one line
 		$('#payment-lines').html('');
@@ -386,6 +404,7 @@
         $('#payment_photo').val('');
         $('#payment_photo_preview_container').addClass('d-none');
         $('#payment_photo_preview').attr('src', '#');
+		$('#check_dispatcher').prop('checked', false).trigger('change');
 
         // Reset to one line
         $('#payment-lines').html('');
@@ -468,6 +487,17 @@
 				$('#payment_photo_preview_container').removeClass('d-none');
 			}
 			reader.readAsDataURL(file);
+		}
+	});
+
+	$(document).on('change', '#check_dispatcher', function() {
+		if($(this).is(':checked')){
+			$('#dispatcher_select_container').removeClass('d-none');
+            $('#dispatcher_id_select').prop('required', true);
+		}else{
+			$('#dispatcher_select_container').addClass('d-none');
+            $('#dispatcher_id_select').prop('required', false);
+            $('#dispatcher_id_select').val('');
 		}
 	});
 

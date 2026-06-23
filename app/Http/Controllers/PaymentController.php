@@ -182,6 +182,7 @@ class PaymentController extends Controller
                                 'cashbox_id' => $cashbox->id,
                                 'sale_id' => $sale->id,
                                 'user_id' => auth()->id(),
+                                'dispatcher_id' => $request->is_delivered_by_dispatcher ? $request->dispatcher_id : null,
                                 'payment_method_id' => $sp['payment_method_id'],
                                 'type' => 'paid',
                                 'amount' => $sp['amount'],

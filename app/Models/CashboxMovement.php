@@ -18,7 +18,8 @@ class CashboxMovement extends Model
         'type',
         'amount',
         'date',
-        'note'
+        'note',
+        'dispatcher_id'
     ];
 
     protected $dates = ['date'];
@@ -39,5 +40,9 @@ class CashboxMovement extends Model
 
     public function user(){
         return $this->belongsTo(User::class);
+    }
+
+    public function dispatcher(){
+        return $this->belongsTo(User::class, 'dispatcher_id');
     }
 }
