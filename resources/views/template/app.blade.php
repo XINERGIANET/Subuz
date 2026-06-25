@@ -94,6 +94,16 @@
 									</span>
 								</a>
 							</li>
+							<li class="nav-item {{ request()->is('reports/products*') ? 'active' : '' }}">
+								<a class="nav-link fw-bold" href="{{ route('reports.products') }}">
+									<span class="nav-link-icon d-md-none d-lg-inline-block">
+										<i class="ti ti-chart-bar icon"></i>
+									</span>
+									<span class="nav-link-title">
+										Gráficos de Productos
+									</span>
+								</a>
+							</li>
 							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente'))
 								<li class="nav-item dropdown">
 									<a class="nav-link dropdown-toggle" href="#navbar-register" data-bs-toggle="dropdown"

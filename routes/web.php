@@ -9,6 +9,7 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\PriceController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\ChargeController;
 use App\Http\Controllers\PaymentController;
@@ -158,6 +159,10 @@ Route::middleware('auth')->group(function () {
 		Route::get('expenses/excel', [ExpenseController::class, 'excel'])->name('expenses.excel');
 		Route::get('expenses/pdf', [ExpenseController::class, 'pdf'])->name('expenses.pdf');
 		Route::resource('expenses', ExpenseController::class);
+
+		Route::resource('expense-categories', ExpenseCategoryController::class);
+		Route::post('expense-categories/{category}/subcategories', [ExpenseCategoryController::class, 'storeSubcategory'])->name('expense-categories.subcategories.store');
+		Route::delete('expense-subcategories/{subcategory}', [ExpenseCategoryController::class, 'destroySubcategory'])->name('expense-subcategories.destroy');
 	});
 
 	Route::middleware('role:admin|viewer')->group(function () {
@@ -175,6 +180,7 @@ Route::middleware('auth')->group(function () {
 		Route::get('sales/report-pdf', [SaleController::class, 'reportPdf'])->name('sales.report_pdf');
 		Route::get('sales/report-data', [SaleController::class, 'reportData'])->name('sales.report_data');
 		Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
+		Route::get('reports/products', [ReportController::class, 'products'])->name('reports.products');
 		Route::get('reports/liquidation', [ReportController::class, 'liquidation'])->name('reports.liquidation');
 		Route::get('reports/cashbox', [ReportController::class, 'cashbox'])->name('reports.cashbox');
 		

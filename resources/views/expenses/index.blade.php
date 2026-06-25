@@ -40,6 +40,10 @@
                         data-bs-target="#createModal">
                         <i class="ti ti-plus me-1 fs-3"></i> Crear nuevo gasto
                     </button>
+                    <button class="btn btn-outline-brand btn-pill px-4 shadow-sm" data-bs-toggle="modal"
+                        data-bs-target="#categoryModal">
+                        <i class="ti ti-tags me-1 fs-3"></i> Categorías
+                    </button>
                     <a class="btn btn-success btn-pill px-4 shadow-sm"
                         href="{{ route('expenses.excel', request()->all()) }}">
                         <i class="ti ti-file-spreadsheet me-1 fs-3"></i> Excel
@@ -131,6 +135,7 @@
                 <thead class="table-corporate-header">
                     <tr>
                         <th>Descripción</th>
+                        <th>Categoría</th>
                         <th class="text-center">Monto Total</th>
                         <th>Desglose de Pago</th>
                         <th class="text-center">Fecha</th>
@@ -142,6 +147,16 @@
                         @php $first = $group->first(); @endphp
                         <tr>
                             <td class="fw-bold">{{ $first->description }}</td>
+                            <td>
+                                @if($first->category)
+                                    <span class="badge bg-blue-lt">{{ $first->category->name }}</span>
+                                    @if($first->subcategory)
+                                        <span class="badge bg-azure-lt">{{ $first->subcategory->name }}</span>
+                                    @endif
+                                @else
+                                    <span class="text-muted small">Sin categoría</span>
+                                @endif
+                            </td>
                             <td class="text-center fw-extrabold text-danger" style="font-size: 1.1rem;">
                                 S/{{ number_format($group->sum('amount'), 2) }}</td>
                             <td>
@@ -209,6 +224,23 @@
                                 @endforeach
                             </select>
                         </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Categoría</label>
+                                <select class="form-select" name="expense_category_id" id="createCategory">
+                                    <option value="">Ninguna</option>
+                                    @foreach($categories as $category)
+                                        <option value="{{ $category->id }}">{{ $category->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Subcategoría</label>
+                                <select class="form-select" name="expense_subcategory_id" id="createSubcategory" disabled>
+                                    <option value="">Seleccione Categoría Primero</option>
+                                </select>
+                            </div>
+                        </div>
 
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label class="form-label mb-0 fw-bold text-uppercase small">Pagos / Métodos</label>
@@ -255,6 +287,23 @@
                                 @endforeach
                             </select>
                         </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Categoría</label>
+                                <select class="form-select" name="expense_category_id" id="editCategory">
+                                    <option value="">Ninguna</option>
+                                    @foreach($categories as $category)
+                                        <option value="{{ $category->id }}">{{ $category->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Subcategoría</label>
+                                <select class="form-select" name="expense_subcategory_id" id="editSubcategory" disabled>
+                                    <option value="">Seleccione Categoría Primero</option>
+                                </select>
+                            </div>
+                        </div>
 
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label class="form-label mb-0 fw-bold text-uppercase small">Pagos / Métodos (Modo
@@ -280,6 +329,60 @@
                         <button type="submit" class="btn btn-brand">Guardar</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Categorias -->
+    <div class="modal modal-blur fade" id="categoryModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Categorías y Subcategorías</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addCategoryForm" class="mb-4">
+                        @csrf
+                        <div class="input-group">
+                            <input type="text" class="form-control" name="name" placeholder="Nueva Categoría" required>
+                            <button class="btn btn-primary" type="submit">Agregar</button>
+                        </div>
+                    </form>
+
+                    <div class="accordion" id="categoriesAccordion">
+                        @foreach($categories as $category)
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="heading-{{ $category->id }}">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ $category->id }}" aria-expanded="false" aria-controls="collapse-{{ $category->id }}">
+                                    {{ $category->name }}
+                                </button>
+                            </h2>
+                            <div id="collapse-{{ $category->id }}" class="accordion-collapse collapse" aria-labelledby="heading-{{ $category->id }}" data-bs-parent="#categoriesAccordion">
+                                <div class="accordion-body">
+                                    <form class="addSubcategoryForm mb-3" data-category-id="{{ $category->id }}">
+                                        @csrf
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" class="form-control" name="name" placeholder="Nueva Subcategoría" required>
+                                            <button class="btn btn-outline-secondary" type="submit">Agregar</button>
+                                        </div>
+                                    </form>
+                                    <ul class="list-group list-group-flush subcategories-list-{{ $category->id }}">
+                                        @foreach($category->subcategories as $subcategory)
+                                        <li class="list-group-item d-flex justify-content-between align-items-center py-1">
+                                            {{ $subcategory->name }}
+                                            <button type="button" class="btn btn-sm btn-icon btn-ghost-danger btn-delete-subcategory" data-id="{{ $subcategory->id }}">
+                                                <i class="ti ti-trash"></i>
+                                            </button>
+                                        </li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        @endforeach
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -342,6 +445,90 @@
 
         $(document).on('input', '.txt-payment-amount-create', function() {
             calculateTotalCreate();
+        });
+
+        var categoriesData = @json($categories);
+
+        function updateSubcategories(categoryId, selectElementId, selectedSubcategoryId = null) {
+            var $subCatSelect = $('#' + selectElementId);
+            $subCatSelect.empty();
+            if (!categoryId) {
+                $subCatSelect.append('<option value="">Seleccione Categoría Primero</option>');
+                $subCatSelect.prop('disabled', true);
+                return;
+            }
+            
+            var category = categoriesData.find(c => c.id == categoryId);
+            if (category && category.subcategories.length > 0) {
+                $subCatSelect.append('<option value="">Ninguna</option>');
+                category.subcategories.forEach(function(sub) {
+                    $subCatSelect.append('<option value="' + sub.id + '">' + sub.name + '</option>');
+                });
+                $subCatSelect.prop('disabled', false);
+                if(selectedSubcategoryId) {
+                    $subCatSelect.val(selectedSubcategoryId);
+                }
+            } else {
+                $subCatSelect.append('<option value="">Sin Subcategorías</option>');
+                $subCatSelect.prop('disabled', true);
+            }
+        }
+
+        $('#createCategory').change(function() {
+            updateSubcategories($(this).val(), 'createSubcategory');
+        });
+
+        $('#editCategory').change(function() {
+            updateSubcategories($(this).val(), 'editSubcategory');
+        });
+
+        $('#addCategoryForm').submit(function(e) {
+            e.preventDefault();
+            $.ajax({
+                url: '{{ route('expense-categories.store') }}',
+                method: 'POST',
+                data: $(this).serialize(),
+                success: function(res) {
+                    if (res.status) {
+                        ToastMessage.fire({ text: 'Categoría agregada' }).then(() => location.reload());
+                    }
+                }
+            });
+        });
+
+        $('.addSubcategoryForm').submit(function(e) {
+            e.preventDefault();
+            var categoryId = $(this).data('category-id');
+            var url = '{{ route("expense-categories.subcategories.store", ":id") }}'.replace(':id', categoryId);
+            $.ajax({
+                url: url,
+                method: 'POST',
+                data: $(this).serialize(),
+                success: function(res) {
+                    if (res.status) {
+                        ToastMessage.fire({ text: 'Subcategoría agregada' }).then(() => location.reload());
+                    }
+                }
+            });
+        });
+
+        $('.btn-delete-subcategory').click(function() {
+            var id = $(this).data('id');
+            var url = '{{ route("expense-subcategories.destroy", ":id") }}'.replace(':id', id);
+            ToastConfirm.fire({ text: '¿Borrar subcategoría?' }).then((result) => {
+                if(result.isConfirmed){
+                    $.ajax({
+                        url: url,
+                        method: 'DELETE',
+                        data: { _token: '{{ csrf_token() }}' },
+                        success: function(res) {
+                            if (res.status) {
+                                ToastMessage.fire({ text: 'Subcategoría borrada' }).then(() => location.reload());
+                            }
+                        }
+                    });
+                }
+            });
         });
 
         $('#createModal').on('show.bs.modal', function() {
@@ -456,6 +643,14 @@
                     }
                     tsDescriptionEdit.setValue(data.description);
                     $('#editId').val(data.id);
+
+                    if (data.expense_category_id) {
+                        $('#editCategory').val(data.expense_category_id);
+                        updateSubcategories(data.expense_category_id, 'editSubcategory', data.expense_subcategory_id);
+                    } else {
+                        $('#editCategory').val('');
+                        updateSubcategories('', 'editSubcategory');
+                    }
 
                     // Initialize with all payments in the group
                     data.payments.forEach(function(p) {

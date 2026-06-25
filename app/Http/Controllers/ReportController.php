@@ -211,4 +211,33 @@ class ReportController extends Controller
 
     }
 
+    public function products(Request $request){
+        $period = $request->get('period', 'day'); // day, month, year, custom
+        $start_date = $request->get('start_date', now()->format('Y-m-d'));
+        $end_date = $request->get('end_date', now()->format('Y-m-d'));
+
+        $query = \App\Models\SaleDetail::join('sales', 'sale_details.sale_id', '=', 'sales.id')
+            ->join('products', 'sale_details.product_id', '=', 'products.id')
+            ->select('products.name', \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity) as total_quantity'))
+            ->groupBy('products.id', 'products.name')
+            ->orderBy('total_quantity', 'desc');
+
+        if ($period == 'day') {
+            $query->whereDate('sales.date', now()->format('Y-m-d'));
+        } elseif ($period == 'month') {
+            $query->whereMonth('sales.date', now()->format('m'))
+                  ->whereYear('sales.date', now()->format('Y'));
+        } elseif ($period == 'year') {
+            $query->whereYear('sales.date', now()->format('Y'));
+        } elseif ($period == 'custom') {
+            if ($start_date && $end_date) {
+                $query->whereBetween('sales.date', [$start_date . ' 00:00:00', $end_date . ' 23:59:59']);
+            }
+        }
+
+        $data = $query->get();
+
+        return view('reports.products', compact('data', 'period', 'start_date', 'end_date'));
+    }
+
 }

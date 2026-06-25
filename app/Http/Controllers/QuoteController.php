@@ -261,7 +261,7 @@ class QuoteController extends Controller
         $fpdf->Cell(20, 9, utf8_decode('CANT.'), 1, 0, 'C', true);
         $fpdf->Cell(30, 9, utf8_decode('PRECIO UNIT.'), 1, 0, 'C', true);
         $fpdf->Cell(30, 9, utf8_decode('TOTAL'), 1, 1, 'C', true);
-
+ 
         $fpdf->SetTextColor(50, 50, 50);
         $fpdf->SetFont('Montserrat', '', 10);
         $fpdf->SetFillColor(248, 249, 250);
