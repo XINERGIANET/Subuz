@@ -42,6 +42,28 @@ class ReportController extends Controller
         return view('reports.cashbox', compact('cashboxes', 'date'));
     }
 
+    public function getSalesForLiquidation(Request $request){
+        $client_id = $request->client_id;
+        $start_date = $request->start_date;
+        $end_date = $request->end_date;
+
+        $sales = Sale::where([
+            ['type', 'Credito'],
+            ['client_id', $client_id]
+        ])->whereBetween('date', [$start_date . ' 00:00:00', $end_date . ' 23:59:59'])->get();
+
+        $data = $sales->map(function($sale){
+            return [
+                'id' => $sale->id,
+                'guide' => $sale->guide,
+                'date' => $sale->date->format('d/m/Y'),
+                'total' => number_format($sale->total, 2)
+            ];
+        });
+
+        return response()->json(['status' => true, 'sales' => $data]);
+    }
+
     public function pdf(Request $request){
         $data = $request->validate([
             'client_id' => 'required|integer|exists:clients,id',
@@ -49,6 +71,9 @@ class ReportController extends Controller
             'end_date' => 'required|date|after_or_equal:start_date',
             'payment_date' => 'nullable|date',
             'send_mail' => 'nullable|boolean',
+            'correlative_type' => 'nullable|string|in:general,per_sale',
+            'general_correlative' => 'nullable|string',
+            'sale_correlatives' => 'nullable|array'
         ]);
 
         $fpdf = new Fpdf;
@@ -110,8 +135,14 @@ class ReportController extends Controller
         $fpdf->SetFont('Montserrat', 'B', 14);
         $fpdf->SetTextColor(255,255,255);
         $fpdf->Cell(190, 15, utf8_decode('REPORTE DE LIQUIDACIÓN'),0,0,'C',1);
-        
         $fpdf->Ln(15);
+        
+        if ($request->correlative_type == 'general' && !empty($request->general_correlative)) {
+            $fpdf->SetFont('Montserrat', 'B', 12);
+            $fpdf->SetTextColor(2,93,166);
+            $fpdf->Cell(190, 8, utf8_decode('Comprobante: ' . $request->general_correlative), 0, 1, 'C');
+            $fpdf->Ln(5);
+        }
 
         $fpdf->SetFont('Montserrat', 'B', 12);
         $fpdf->SetTextColor(2,93,166);
@@ -160,7 +191,11 @@ class ReportController extends Controller
 
             $fpdf->SetFillColor(200,200,200);
             $fpdf->Cell(20, 8, $i,0,0,'C',1);
-            $fpdf->Cell(170, 8, utf8_decode('GUÍA '.$sale->guide.' - '.$sale->date->format('d/m/Y')),0,0,'L',1);
+            $guide_text = 'GUÍA '.$sale->guide.' - '.$sale->date->format('d/m/Y');
+            if ($request->correlative_type == 'per_sale' && isset($request->sale_correlatives[$sale->id]) && !empty($request->sale_correlatives[$sale->id])) {
+                $guide_text .= ' - Comp: ' . $request->sale_correlatives[$sale->id];
+            }
+            $fpdf->Cell(170, 8, utf8_decode($guide_text),0,0,'L',1);
             $fpdf->Ln();
 
             foreach($sale->details as $detail){

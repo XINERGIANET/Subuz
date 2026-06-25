@@ -183,6 +183,7 @@ Route::middleware('auth')->group(function () {
 		Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
 		Route::get('reports/products', [ReportController::class, 'products'])->name('reports.products');
 		Route::get('reports/liquidation', [ReportController::class, 'liquidation'])->name('reports.liquidation');
+		Route::get('reports/liquidation/sales', [ReportController::class, 'getSalesForLiquidation'])->name('reports.liquidation.sales');
 		Route::get('reports/cashbox', [ReportController::class, 'cashbox'])->name('reports.cashbox');
 		
 		Route::get('jerry-can-report', [SaleController::class, 'jerryCanReportView'])->name('reports.jerryCan');
