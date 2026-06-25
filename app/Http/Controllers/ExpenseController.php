@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -34,6 +35,159 @@ class ExpenseController extends Controller
         $categories = ExpenseCategory::with('subcategories')->get();
         $descriptions = Expense::select('description')->distinct()->pluck('description');
         return view('expenses.index', compact('expenses', 'payment_methods', 'total_expenses', 'descriptions', 'categories'));
+    }
+
+    public function indicators(Request $request){
+        $startDate = $request->input('start_date') ?: now()->startOfMonth()->format('Y-m-d');
+        $endDate = $request->input('end_date') ?: now()->endOfMonth()->format('Y-m-d');
+
+        if ($startDate > $endDate) {
+            [$startDate, $endDate] = [$endDate, $startDate];
+        }
+
+        $start = Carbon::parse($startDate)->startOfDay();
+        $end = Carbon::parse($endDate)->startOfDay();
+        $categoryId = $request->input('expense_category_id');
+
+        $buildQuery = function ($from, $to) use ($categoryId) {
+            return Expense::with(['category', 'subcategory', 'payment_method'])
+                ->whereDate('date', '>=', $from)
+                ->whereDate('date', '<=', $to)
+                ->when($categoryId, function($query, $categoryId){
+                    return $query->where('expense_category_id', $categoryId);
+                });
+        };
+
+        $expenses = $buildQuery($startDate, $endDate)->get();
+        $expenseGroups = $expenses->groupBy(function($expense){
+            return $expense->description . '|' . $expense->date->format('Y-m-d H:i:s');
+        });
+
+        $periodDays = max(1, $start->diffInDays($end) + 1);
+        $previousStartDate = $start->copy()->subDays($periodDays)->format('Y-m-d');
+        $previousEndDate = $start->copy()->subDay()->format('Y-m-d');
+        $previousExpenses = $buildQuery($previousStartDate, $previousEndDate)->get();
+        $previousGroups = $previousExpenses->groupBy(function($expense){
+            return $expense->description . '|' . $expense->date->format('Y-m-d H:i:s');
+        });
+
+        $totalAmount = (float) $expenses->sum('amount');
+        $expenseCount = $expenseGroups->count();
+        $averageAmount = $expenseCount > 0 ? $totalAmount / $expenseCount : 0;
+
+        $previousTotal = (float) $previousExpenses->sum('amount');
+        $previousCount = $previousGroups->count();
+        $previousAverage = $previousCount > 0 ? $previousTotal / $previousCount : 0;
+
+        $percentChange = function ($current, $previous) {
+            if ((float) $previous === 0.0) {
+                return $current > 0 ? 100 : 0;
+            }
+
+            return round((($current - $previous) / $previous) * 100, 1);
+        };
+
+        $metricChanges = [
+            'total' => $percentChange($totalAmount, $previousTotal),
+            'count' => $percentChange($expenseCount, $previousCount),
+            'average' => $percentChange($averageAmount, $previousAverage),
+        ];
+
+        $palette = ['#3B82F6', '#22C55E', '#F59E0B', '#8B5CF6', '#06B6D4', '#EF4444', '#14B8A6', '#F97316'];
+
+        $categorySummary = $expenses->groupBy(function($expense){
+            return $expense->expense_category_id ?: 'none';
+        })->map(function($items) use ($totalAmount){
+            $first = $items->first();
+            $total = (float) $items->sum('amount');
+
+            return [
+                'name' => optional($first->category)->name ?: 'Sin categoria',
+                'total' => round($total, 2),
+                'percent' => $totalAmount > 0 ? round(($total / $totalAmount) * 100, 1) : 0,
+            ];
+        })->sortByDesc('total')->values()->map(function($item, $index) use ($palette){
+            $item['color'] = $palette[$index % count($palette)];
+            return $item;
+        });
+
+        $topCategory = $categorySummary->first() ?: [
+            'name' => 'Sin datos',
+            'total' => 0,
+            'percent' => 0,
+            'color' => $palette[0],
+        ];
+
+        $topCategories = $categorySummary->take(5)->values();
+
+        $subcategorySummary = $expenses->groupBy(function($expense){
+            return $expense->expense_subcategory_id ?: 'none';
+        })->map(function($items) use ($totalAmount){
+            $first = $items->first();
+            $total = (float) $items->sum('amount');
+
+            return [
+                'name' => optional($first->subcategory)->name ?: 'Sin subcategoria',
+                'total' => round($total, 2),
+                'percent' => $totalAmount > 0 ? round(($total / $totalAmount) * 100, 1) : 0,
+            ];
+        })->sortByDesc('total')->take(8)->values();
+
+        $monthNames = [
+            1 => 'Ene', 2 => 'Feb', 3 => 'Mar', 4 => 'Abr', 5 => 'May', 6 => 'Jun',
+            7 => 'Jul', 8 => 'Ago', 9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dic'
+        ];
+
+        $evolutionLabels = [];
+        $evolutionData = [];
+        $evolutionLabel = 'Gasto Diario (S/)';
+
+        if ($periodDays <= 62) {
+            $dailyTotals = $expenses->groupBy(function($expense){
+                return $expense->date->format('Y-m-d');
+            })->map(function($items){
+                return round((float) $items->sum('amount'), 2);
+            });
+
+            for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
+                $key = $date->format('Y-m-d');
+                $evolutionLabels[] = $date->format('d/m');
+                $evolutionData[] = $dailyTotals->get($key, 0);
+            }
+        } else {
+            $evolutionLabel = 'Gasto Mensual (S/)';
+            $monthlyTotals = $expenses->groupBy(function($expense){
+                return $expense->date->format('Y-m');
+            })->map(function($items){
+                return round((float) $items->sum('amount'), 2);
+            });
+
+            for ($date = $start->copy()->startOfMonth(); $date->lte($end); $date->addMonth()) {
+                $key = $date->format('Y-m');
+                $evolutionLabels[] = $monthNames[(int) $date->format('n')] . ' ' . $date->format('Y');
+                $evolutionData[] = $monthlyTotals->get($key, 0);
+            }
+        }
+
+        $categories = ExpenseCategory::orderBy('name')->get();
+
+        return view('expenses.indicators', compact(
+            'startDate',
+            'endDate',
+            'categoryId',
+            'categories',
+            'totalAmount',
+            'expenseCount',
+            'averageAmount',
+            'metricChanges',
+            'categorySummary',
+            'topCategory',
+            'topCategories',
+            'subcategorySummary',
+            'evolutionLabels',
+            'evolutionData',
+            'evolutionLabel'
+        ));
     }
 
     public function store(Request $request){

@@ -104,6 +104,18 @@
 									</span>
 								</a>
 							</li>
+							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer') || auth()->user()->hasRole('asistente'))
+								<li class="nav-item {{ request()->routeIs('expenses.indicators') ? 'active' : '' }}">
+									<a class="nav-link fw-bold" href="{{ route('expenses.indicators') }}">
+										<span class="nav-link-icon d-md-none d-lg-inline-block">
+											<i class="ti ti-chart-donut-3 icon"></i>
+										</span>
+										<span class="nav-link-title">
+											Indicadores de Gastos
+										</span>
+									</a>
+								</li>
+							@endif
 							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente'))
 								<li class="nav-item dropdown">
 									<a class="nav-link dropdown-toggle" href="#navbar-register" data-bs-toggle="dropdown"
@@ -195,7 +207,7 @@
 								</li> --}}
 							@endif
 							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer') || auth()->user()->hasRole('asistente'))
-								<li class="nav-item {{ request()->is('expenses*') ? 'active' : '' }}">
+								<li class="nav-item {{ request()->routeIs('expenses.index') ? 'active' : '' }}">
 									<a class="nav-link" href="{{ route('expenses.index') }}">
 										<span class="nav-link-icon d-md-none d-lg-inline-block">
 											<i class="ti ti-truck-loading icon"></i>

@@ -156,6 +156,7 @@ Route::middleware('auth')->group(function () {
 		Route::get('payments/excel', [PaymentController::class, 'excel'])->name('payments.excel');
 		Route::get('payments/pdf', [PaymentController::class, 'pdf'])->name('payments.pdf');
 
+		Route::get('expenses/indicators', [ExpenseController::class, 'indicators'])->name('expenses.indicators');
 		Route::get('expenses/excel', [ExpenseController::class, 'excel'])->name('expenses.excel');
 		Route::get('expenses/pdf', [ExpenseController::class, 'pdf'])->name('expenses.pdf');
 		Route::resource('expenses', ExpenseController::class);
