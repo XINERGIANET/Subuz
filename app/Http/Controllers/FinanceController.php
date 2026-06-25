@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\BankLoan;
 use App\Models\LoanPayment;
 use App\Models\Expense;
+use App\Models\ExpenseCategory;
+use App\Models\ExpenseSubcategory;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 
@@ -119,6 +121,8 @@ class FinanceController extends Controller
                 'notes' => $data['notes']
             ]);
         } else {
+            [$financeCategoryId, $financeSubcategoryId] = $this->financeExpenseCategoryForLoan($loan);
+
             foreach ($data['payments'] as $payment) {
                 if ($payment['amount'] > 0) {
                     LoanPayment::create([
@@ -134,7 +138,9 @@ class FinanceController extends Controller
                         'description' => 'Pago de Cuota ' . $data['installment_number'] . ' - Crédito Banco ' . $loan->bank_name,
                         'amount' => $payment['amount'],
                         'payment_method_id' => $payment['method_id'],
-                        'date' => now()
+                        'date' => now(),
+                        'expense_category_id' => $financeCategoryId,
+                        'expense_subcategory_id' => $financeSubcategoryId
                     ]);
                 }
             }
@@ -231,23 +237,31 @@ class FinanceController extends Controller
         $payment->update($data);
 
         if ($expense) {
+            [$financeCategoryId, $financeSubcategoryId] = $this->financeExpenseCategoryForLoan($loan);
+
             if ($data['payment_method_id']) {
                 $expense->update([
                     'amount' => $data['amount'],
                     'payment_method_id' => $data['payment_method_id'],
-                    'date' => $data['payment_date']
+                    'date' => $data['payment_date'],
+                    'expense_category_id' => $financeCategoryId,
+                    'expense_subcategory_id' => $financeSubcategoryId
                 ]);
             } else {
                 // If it became external, remove expense
                 $expense->delete();
             }
         } elseif ($data['payment_method_id']) {
+            [$financeCategoryId, $financeSubcategoryId] = $this->financeExpenseCategoryForLoan($loan);
+
             // If it wasn't internal but now it is, create expense
             Expense::create([
                 'description' => $description,
                 'amount' => $data['amount'],
                 'payment_method_id' => $data['payment_method_id'],
-                'date' => $data['payment_date']
+                'date' => $data['payment_date'],
+                'expense_category_id' => $financeCategoryId,
+                'expense_subcategory_id' => $financeSubcategoryId
             ]);
         }
 
@@ -287,5 +301,16 @@ class FinanceController extends Controller
         }
 
         return response()->json(['status' => true]);
+    }
+
+    private function financeExpenseCategoryForLoan(BankLoan $loan)
+    {
+        $category = ExpenseCategory::firstOrCreate(['name' => 'Finanzas']);
+        $subcategory = ExpenseSubcategory::firstOrCreate([
+            'expense_category_id' => $category->id,
+            'name' => trim($loan->bank_name),
+        ]);
+
+        return [$category->id, $subcategory->id];
     }
 }

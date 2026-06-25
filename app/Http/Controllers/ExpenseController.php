@@ -7,10 +7,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
+use App\Models\BankLoan;
 use App\Exports\ExpensesExport;
 use App\Models\Expense;
 use App\Models\PaymentMethod;
 use App\Models\ExpenseCategory;
+use App\Models\ExpenseSubcategory;
+use App\Models\LoanPayment;
 use Codedge\Fpdf\Fpdf\Fpdf;
 
 class ExpenseController extends Controller
@@ -31,10 +34,14 @@ class ExpenseController extends Controller
         $total_expenses = $query->sum('amount');
         $expenses = $query->latest('date')->paginate(10);
 
+        $financeCategory = $this->syncFinanceExpenseCategory();
+        $financeLoans = $this->getFinanceLoanOptions($financeCategory);
+
         $payment_methods = PaymentMethod::all();
         $categories = ExpenseCategory::with('subcategories')->get();
+        $financeCategoryId = $financeCategory->id;
         $descriptions = Expense::select('description')->distinct()->pluck('description');
-        return view('expenses.index', compact('expenses', 'payment_methods', 'total_expenses', 'descriptions', 'categories'));
+        return view('expenses.index', compact('expenses', 'payment_methods', 'total_expenses', 'descriptions', 'categories', 'financeCategoryId', 'financeLoans'));
     }
 
     public function indicators(Request $request){
@@ -208,18 +215,56 @@ class ExpenseController extends Controller
 
         $date = now()->format('Y-m-d H:i:s');
 
-        DB::transaction(function() use ($request, $date){
-            foreach($request->payments as $payment){
-                Expense::create([
-                    'description' => $request->description,
-                    'amount' => $payment['amount'],
-                    'payment_method_id' => $payment['method_id'],
-                    'date' => $date,
-                    'expense_category_id' => $request->expense_category_id,
-                    'expense_subcategory_id' => $request->expense_subcategory_id
-                ]);
-            }
-        });
+        try {
+            DB::transaction(function() use ($request, $date){
+                $loan = null;
+                $installmentNumber = null;
+
+                if ($request->bank_loan_id && $request->installment_number) {
+                    $loan = BankLoan::with('payments')->findOrFail($request->bank_loan_id);
+                    $installmentNumber = (int) $request->installment_number;
+
+                    $alreadyPaid = $loan->payments
+                        ->where('installment_number', $installmentNumber)
+                        ->count() > 0;
+
+                    if ($alreadyPaid) {
+                        throw new \RuntimeException('Esta cuota ya fue registrada en Finanzas.');
+                    }
+                }
+
+                foreach($request->payments as $payment){
+                    if ($loan) {
+                        LoanPayment::create([
+                            'bank_loan_id' => $loan->id,
+                            'amount' => $payment['amount'],
+                            'payment_date' => now()->format('Y-m-d'),
+                            'installment_number' => $installmentNumber,
+                            'payment_method_id' => $payment['method_id'],
+                            'notes' => 'Registrado desde Gastos'
+                        ]);
+                    }
+
+                    Expense::create([
+                        'description' => $request->description,
+                        'amount' => $payment['amount'],
+                        'payment_method_id' => $payment['method_id'],
+                        'date' => $date,
+                        'expense_category_id' => $request->expense_category_id,
+                        'expense_subcategory_id' => $request->expense_subcategory_id
+                    ]);
+                }
+
+                if ($loan && $loan->fresh()->remaining_balance <= 0.1) {
+                    $loan->update(['status' => 'Pagado']);
+                }
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'status' => false,
+                'error' => $e->getMessage()
+            ]);
+        }
 
         return response()->json([
             'status' => true
@@ -284,9 +329,15 @@ class ExpenseController extends Controller
     }
 
     public function destroy(Request $request, Expense $expense){
-        Expense::where('description', $expense->description)
+        $expenses = Expense::where('description', $expense->description)
             ->where('date', $expense->date)
-            ->delete();
+            ->get();
+
+        foreach ($expenses as $item) {
+            $this->deleteRelatedLoanPayments($item);
+        }
+
+        Expense::whereIn('id', $expenses->pluck('id'))->delete();
 
         return response()->json([
             'status' => true
@@ -445,5 +496,104 @@ class ExpenseController extends Controller
         $name = "ReporteGastos_".now()->format('dm').".pdf";
         if (ob_get_level() > 0) ob_end_clean();
         $fpdf->Output('D', $name);
+    }
+
+    private function syncFinanceExpenseCategory()
+    {
+        $financeCategory = ExpenseCategory::firstOrCreate(['name' => 'Finanzas']);
+
+        BankLoan::with('payments')
+            ->where('status', 'Activo')
+            ->orderBy('bank_name')
+            ->get()
+            ->filter(function($loan){
+                return $loan->remaining_balance > 0.1 && $this->nextPendingInstallment($loan);
+            })
+            ->each(function($loan) use ($financeCategory){
+                ExpenseSubcategory::firstOrCreate([
+                    'expense_category_id' => $financeCategory->id,
+                    'name' => $this->financeSubcategoryName($loan),
+                ]);
+            });
+
+        return $financeCategory;
+    }
+
+    private function getFinanceLoanOptions(ExpenseCategory $financeCategory)
+    {
+        return BankLoan::with('payments')
+            ->where('status', 'Activo')
+            ->orderBy('bank_name')
+            ->get()
+            ->filter(function($loan){
+                return $loan->remaining_balance > 0.1 && $this->nextPendingInstallment($loan);
+            })
+            ->map(function($loan) use ($financeCategory){
+                $installmentNumber = $this->nextPendingInstallment($loan);
+                $amount = $loan->monthly_amount ?: ($loan->total_amount / $loan->installments_total);
+                $dueDate = Carbon::parse($loan->start_date)->addMonths($installmentNumber - 1);
+                $subcategory = ExpenseSubcategory::firstOrCreate([
+                    'expense_category_id' => $financeCategory->id,
+                    'name' => $this->financeSubcategoryName($loan),
+                ]);
+                $symbol = $loan->currency === 'USD' ? '$' : 'S/';
+
+                return [
+                    'loan_id' => $loan->id,
+                    'subcategory_id' => $subcategory->id,
+                    'name' => $subcategory->name,
+                    'label' => $subcategory->name . ' - Cuota ' . $installmentNumber,
+                    'description' => 'Pago de Cuota ' . $installmentNumber . ' - Crédito Banco ' . $loan->bank_name,
+                    'installment_number' => $installmentNumber,
+                    'amount' => round((float) $amount, 2),
+                    'formatted_amount' => $symbol . number_format((float) $amount, 2),
+                    'currency' => $loan->currency,
+                    'due_date' => $dueDate->format('Y-m-d'),
+                    'due_date_label' => $dueDate->format('d/m/Y'),
+                ];
+            })
+            ->values();
+    }
+
+    private function nextPendingInstallment(BankLoan $loan)
+    {
+        $paidInstallments = $loan->payments->pluck('installment_number')->unique()->toArray();
+
+        for ($i = 1; $i <= $loan->installments_total; $i++) {
+            if (!in_array($i, $paidInstallments)) {
+                return $i;
+            }
+        }
+
+        return null;
+    }
+
+    private function financeSubcategoryName(BankLoan $loan)
+    {
+        return trim($loan->bank_name);
+    }
+
+    private function deleteRelatedLoanPayments(Expense $expense)
+    {
+        if (!preg_match('/Pago de Cuota\s+(\d+)\s+-\s+Cr[eÃ©]dito Banco\s+(.+)/i', $expense->description, $matches)) {
+            return;
+        }
+
+        $installmentNumber = (int) $matches[1];
+        $bankName = trim($matches[2]);
+        $loans = BankLoan::withTrashed()->where('bank_name', $bankName)->get();
+
+        foreach ($loans as $loan) {
+            LoanPayment::where('bank_loan_id', $loan->id)
+                ->where('installment_number', $installmentNumber)
+                ->whereDate('payment_date', $expense->date->toDateString())
+                ->where('payment_method_id', $expense->payment_method_id)
+                ->where('amount', $expense->amount)
+                ->delete();
+
+            if (!$loan->trashed() && $loan->fresh()->remaining_balance > 0.1) {
+                $loan->update(['status' => 'Activo']);
+            }
+        }
     }
 }

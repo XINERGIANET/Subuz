@@ -235,6 +235,8 @@
             <div class="modal-content">
                 <form id="storeForm" method="POST">
                     @csrf
+                    <input type="hidden" name="bank_loan_id" id="createBankLoanId">
+                    <input type="hidden" name="installment_number" id="createInstallmentNumber">
                     <div class="modal-header">
                         <h5 class="modal-title">Crear nuevo</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -265,6 +267,16 @@
                                 <select class="form-select" name="expense_subcategory_id" id="createSubcategory" disabled>
                                     <option value="">Seleccione Categoría Primero</option>
                                 </select>
+                            </div>
+                        </div>
+
+                        <div class="alert bg-blue-lt border border-blue text-blue d-none" id="financePaymentHint">
+                            <div class="d-flex align-items-start gap-2">
+                                <i class="ti ti-building-bank fs-3 mt-1"></i>
+                                <div>
+                                    <div class="fw-bold" id="financePaymentTitle">Cuota financiera seleccionada</div>
+                                    <div class="small" id="financePaymentText"></div>
+                                </div>
                             </div>
                         </div>
 
@@ -474,6 +486,71 @@
         });
 
         var categoriesData = @json($categories);
+        var financeCategoryId = @json($financeCategoryId);
+        var financeLoans = @json($financeLoans);
+        var financeLoansBySubcategory = {};
+
+        financeLoans.forEach(function(item) {
+            financeLoansBySubcategory[item.subcategory_id] = item;
+        });
+
+        function isFinanceCategory(categoryId) {
+            return financeCategoryId && String(categoryId) === String(financeCategoryId);
+        }
+
+        function resetFinanceSelection() {
+            $('#createBankLoanId').val('');
+            $('#createInstallmentNumber').val('');
+            $('#financePaymentHint').addClass('d-none');
+            $('#financePaymentTitle').text('Cuota financiera seleccionada');
+            $('#financePaymentText').text('');
+        }
+
+        function setCreateDescription(description) {
+            if (tsDescriptionCreate) {
+                if (!tsDescriptionCreate.options[description]) {
+                    tsDescriptionCreate.addOption({ value: description, text: description });
+                }
+                tsDescriptionCreate.setValue(description);
+            } else {
+                var $description = $('#createDescription');
+                var optionExists = false;
+                $description.find('option').each(function() {
+                    if ($(this).val() === description) {
+                        optionExists = true;
+                    }
+                });
+                if (!optionExists) {
+                    $description.append(new Option(description, description));
+                }
+                $description.val(description);
+            }
+        }
+
+        function applyFinanceSelection() {
+            var selectedSubcategoryId = $('#createSubcategory').val();
+            var financeData = financeLoansBySubcategory[selectedSubcategoryId];
+
+            if (!isFinanceCategory($('#createCategory').val()) || !financeData) {
+                resetFinanceSelection();
+                return;
+            }
+
+            $('#createBankLoanId').val(financeData.loan_id);
+            $('#createInstallmentNumber').val(financeData.installment_number);
+            setCreateDescription(financeData.description);
+
+            if ($('#payment-rows-create .payment-row').length === 0) {
+                addPaymentRowCreate(financeData.amount);
+            } else {
+                $('#payment-rows-create .txt-payment-amount-create').first().val(financeData.amount);
+                calculateTotalCreate();
+            }
+
+            $('#financePaymentTitle').text(financeData.label);
+            $('#financePaymentText').text('Vence el ' + financeData.due_date_label + ' · Monto de cuota: ' + financeData.formatted_amount);
+            $('#financePaymentHint').removeClass('d-none');
+        }
 
         function updateSubcategories(categoryId, selectElementId, selectedSubcategoryId = null) {
             var $subCatSelect = $('#' + selectElementId);
@@ -481,6 +558,24 @@
             if (!categoryId) {
                 $subCatSelect.append('<option value="">Seleccione Categoría Primero</option>');
                 $subCatSelect.prop('disabled', true);
+                return;
+            }
+
+            if (isFinanceCategory(categoryId)) {
+                $subCatSelect.append('<option value="">Seleccionar cuota pendiente...</option>');
+
+                if (financeLoans.length > 0) {
+                    financeLoans.forEach(function(item) {
+                        $subCatSelect.append('<option value="' + item.subcategory_id + '">' + item.label + ' - ' + item.formatted_amount + '</option>');
+                    });
+                    $subCatSelect.prop('disabled', false);
+                    if(selectedSubcategoryId) {
+                        $subCatSelect.val(selectedSubcategoryId);
+                    }
+                } else {
+                    $subCatSelect.empty().append('<option value="">Sin cuotas pendientes</option>');
+                    $subCatSelect.prop('disabled', true);
+                }
                 return;
             }
             
@@ -501,7 +596,12 @@
         }
 
         $('#createCategory').change(function() {
+            resetFinanceSelection();
             updateSubcategories($(this).val(), 'createSubcategory');
+        });
+
+        $('#createSubcategory').change(function() {
+            applyFinanceSelection();
         });
 
         $('#editCategory').change(function() {
@@ -582,6 +682,7 @@
                         $('#createModal').modal('hide');
                         $('#storeForm')[0].reset();
                         $('#payment-rows-create').empty();
+                        resetFinanceSelection();
 
                         ToastMessage.fire({
                                 text: 'Gasto registrado correctamente'
