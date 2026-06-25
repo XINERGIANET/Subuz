@@ -92,7 +92,7 @@
                                             <select name="products[{{ $index }}][id]" class="form-select product-select" required>
                                                 <option value="">Seleccione un producto</option>
                                                 @foreach($products as $p)
-                                                    <option value="{{ $p->id }}" data-price="{{ $p->price }}" {{ $p->id == $qp['id'] ? 'selected' : '' }}>{{ $p->name }}</option>
+                                                    <option value="{{ $p->id }}" data-price="{{ $p->calculated_price }}" {{ $p->id == $qp['id'] ? 'selected' : '' }}>{{ $p->name }}</option>
                                                 @endforeach
                                             </select>
                                         </td>
@@ -115,7 +115,7 @@
                                         <select name="products[0][id]" class="form-select product-select" required>
                                             <option value="">Seleccione un producto</option>
                                             @foreach($products as $p)
-                                                <option value="{{ $p->id }}" data-price="{{ $p->price }}">{{ $p->name }}</option>
+                                                <option value="{{ $p->id }}" data-price="{{ $p->calculated_price }}">{{ $p->name }}</option>
                                             @endforeach
                                         </select>
                                     </td>

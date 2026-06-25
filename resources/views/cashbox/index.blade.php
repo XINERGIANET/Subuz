@@ -332,7 +332,7 @@
                         <label class="form-label">{{ $pm->name }}</label>
                         <div class="input-group">
                             <span class="input-group-text">S/</span>
-                            <input type="number" step="0.01" class="form-control" name="opening_balances[{{ $pm->id }}]" value="0.00">
+                            <input type="number" step="0.01" class="form-control" name="opening_balances[{{ $pm->id }}]" value="{{ isset($suggested_opening_balances[$pm->id]) ? number_format($suggested_opening_balances[$pm->id], 2, '.', '') : '0.00' }}">
                         </div>
                     </div>
                     @endif

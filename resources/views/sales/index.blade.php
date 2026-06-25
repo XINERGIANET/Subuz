@@ -523,7 +523,7 @@
 											<option value="">Añadir producto...</option>
 											@foreach($products as $product)
 												<option value="{{ $product->id }}">{{ $product->name }} -
-													S/{{ $product->price }}</option>
+													S/{{ $product->calculated_price }}</option>
 											@endforeach
 										</select>
 									</div>

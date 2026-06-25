@@ -560,7 +560,7 @@ class SaleController extends Controller
 
     public function pdf(Request $request)
     {
-        $query = Sale::with(['payment_method', 'client'])
+        $query = Sale::with(['payment_method', 'client', 'details.product', 'payments.payment_method'])
             ->when($request->client_id, function ($q, $client_id) {
                 return $q->where('client_id', $client_id);
             })
@@ -573,19 +573,39 @@ class SaleController extends Controller
             ->when($request->end_date, function ($q, $end_date) {
                 return $q->whereDate('date', '<=', $end_date);
             })
-            ->when($request->is_pending, function ($q) {
-                return $q->whereIn('type', ['Contado', 'Pago pendiente'])
-                    ->where('paid', 0)
+            ->when($request->is_pending, function ($q) use ($request) {
+                $q = $q->whereIn('type', ['Contado', 'Pago pendiente'])
                     ->whereHas('movements', function ($mq) {
                         $mq->where('type', 'debt');
                     });
+                if ($request->client_id) {
+                    $q->where(function($subq) {
+                        $subq->where('paid', 0)
+                             ->orWhereHas('payments', function($pq) {
+                                 $pq->whereDate('date', today());
+                             });
+                    });
+                } else {
+                    $q->where('paid', 0);
+                }
+                return $q;
             })
-            ->when($request->is_credit, function ($q) {
-                return $q->where('type', 'Credito')
-                    ->where('paid', 0)
+            ->when($request->is_credit, function ($q) use ($request) {
+                $q = $q->where('type', 'Credito')
                     ->whereHas('movements', function ($mq) {
                         $mq->where('type', 'debt');
                     });
+                if ($request->client_id) {
+                    $q->where(function($subq) {
+                        $subq->where('paid', 0)
+                             ->orWhereHas('payments', function($pq) {
+                                 $pq->whereDate('date', today());
+                             });
+                    });
+                } else {
+                    $q->where('paid', 0);
+                }
+                return $q;
             });
 
         if (!$request->start_date && !$request->end_date && !$request->is_pending && !$request->is_credit && !$request->client_id) {
@@ -595,7 +615,7 @@ class SaleController extends Controller
         $sales = $query->latest('date')->get();
 
         $fpdf = new Fpdf;
-        $fpdf->AddPage();
+        $fpdf->AddPage('L');
 
         $fpdf->AddFont('Montserrat', '');
         $fpdf->AddFont('Montserrat', 'B');
@@ -606,7 +626,7 @@ class SaleController extends Controller
 
         $fpdf->SetFont('Montserrat', 'B', 16);
         $fpdf->SetTextColor(2, 93, 166);
-        $fpdf->Cell(190, 10, utf8_decode('REPORTE DE VENTAS'), 0, 1, 'C');
+        $fpdf->Cell(277, 10, utf8_decode('REPORTE DE VENTAS'), 0, 1, 'C');
 
         $period = "Filtro: ";
         if ($request->is_pending)
@@ -624,7 +644,7 @@ class SaleController extends Controller
 
         $fpdf->SetFont('Montserrat', '', 10);
         $fpdf->SetTextColor(80, 80, 80);
-        $fpdf->Cell(190, 8, utf8_decode($period), 0, 1, 'C');
+        $fpdf->Cell(277, 8, utf8_decode($period), 0, 1, 'C');
         $fpdf->Ln(10);
 
         $fpdf->SetFillColor(2, 93, 166);
@@ -633,39 +653,137 @@ class SaleController extends Controller
 
         $isDebtReport = $request->is_pending || $request->is_credit;
 
-        $fpdf->Cell(25, 10, utf8_decode('GUÍA'), 1, 0, 'C', true);
-        $fpdf->Cell(25, 10, utf8_decode('FECHA'), 1, 0, 'C', true);
-        $fpdf->Cell(60, 10, utf8_decode('CLIENTE'), 1, 0, 'C', true);
-        $fpdf->Cell(30, 10, utf8_decode('TIPO'), 1, 0, 'C', true);
-        $fpdf->Cell(25, 10, utf8_decode('PAGO'), 1, 0, 'C', true);
-        $fpdf->Cell(25, 10, utf8_decode($isDebtReport ? 'DEUDA' : 'TOTAL'), 1, 1, 'C', true);
+        if ($isDebtReport && $request->client_id) {
+            $fpdf->Cell(20, 10, utf8_decode('GUÍA'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 10, utf8_decode('FECHA'), 1, 0, 'C', true);
+            $fpdf->Cell(65, 10, utf8_decode('CLIENTE'), 1, 0, 'C', true);
+            $fpdf->Cell(112, 10, utf8_decode('PRODUCTOS'), 1, 0, 'C', true);
+            $fpdf->Cell(30, 10, utf8_decode('TIPO'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 10, utf8_decode('TOTAL'), 1, 1, 'C', true);
+        } else {
+            $fpdf->Cell(20, 10, utf8_decode('GUÍA'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 10, utf8_decode('FECHA'), 1, 0, 'C', true);
+            $fpdf->Cell(65, 10, utf8_decode('CLIENTE'), 1, 0, 'C', true);
+            $fpdf->Cell(87, 10, utf8_decode('PRODUCTOS'), 1, 0, 'C', true);
+            $fpdf->Cell(30, 10, utf8_decode('TIPO'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 10, utf8_decode('PAGO'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 10, utf8_decode($isDebtReport ? 'DEUDA' : 'TOTAL'), 1, 1, 'C', true);
+        }
 
         $fpdf->SetTextColor(0, 0, 0);
         $fpdf->SetFont('Montserrat', '', 9);
-        $total = 0;
+        $totalSales = 0;
+        $totalDebt = 0;
+        $allPayments = collect();
 
         foreach ($sales as $sale) {
             if ($sale->status == 'Anulado')
                 continue;
 
+            if ($sale->paid) {
+                $fpdf->SetTextColor(150, 150, 150); // Grey for paid
+            } else {
+                $fpdf->SetTextColor(0, 0, 0); // Black for unpaid
+            }
+
             $amount = $isDebtReport ? $sale->debt : $sale->total;
 
-            $fpdf->Cell(25, 8, utf8_decode($sale->guide), 1, 0, 'C');
-            $fpdf->Cell(25, 8, $sale->date->format('d/m/Y'), 1, 0, 'C');
-            $fpdf->Cell(60, 8, utf8_decode(optional($sale->client)->name ?? 'Consumidor Final'), 1, 0, 'L');
-            $fpdf->Cell(30, 8, utf8_decode($sale->type), 1, 0, 'C');
-            $fpdf->Cell(25, 8, $sale->paid ? 'SI' : 'NO', 1, 0, 'C');
-            $fpdf->Cell(25, 8, 'S/' . number_format($amount, 2), 1, 1, 'R');
-            $total += $amount;
+            // Guide and date are printed inside the conditionals below
+            
+            $clientName = optional($sale->client)->name ?? 'Consumidor Final';
+            
+            if ($isDebtReport && $request->client_id) {
+                if(strlen($clientName) > 33) $clientName = substr($clientName, 0, 30) . '...';
+                $productsStr = implode(', ', $sale->details->map(function($d) { return $d->quantity . ' ' . (optional($d->product)->name ?? 'Prod'); })->toArray());
+                if(strlen($productsStr) > 75) $productsStr = substr($productsStr, 0, 72) . '...';
+                
+                $fpdf->Cell(20, 8, utf8_decode($sale->guide), 1, 0, 'C');
+                $fpdf->Cell(25, 8, $sale->date->format('d/m/Y'), 1, 0, 'C');
+                $fpdf->Cell(65, 8, utf8_decode($clientName), 1, 0, 'L');
+                $fpdf->Cell(112, 8, utf8_decode($productsStr), 1, 0, 'L');
+                $fpdf->Cell(30, 8, utf8_decode($sale->type), 1, 0, 'C');
+                $fpdf->Cell(25, 8, 'S/' . number_format($sale->total, 2), 1, 1, 'R');
+                
+                $totalSales += $sale->total;
+            } else {
+                if(strlen($clientName) > 33) $clientName = substr($clientName, 0, 30) . '...';
+                $productsStr = implode(', ', $sale->details->map(function($d) { return $d->quantity . ' ' . (optional($d->product)->name ?? 'Prod'); })->toArray());
+                if(strlen($productsStr) > 52) $productsStr = substr($productsStr, 0, 49) . '...';
+                
+                $fpdf->Cell(20, 8, utf8_decode($sale->guide), 1, 0, 'C');
+                $fpdf->Cell(25, 8, $sale->date->format('d/m/Y'), 1, 0, 'C');
+                $fpdf->Cell(65, 8, utf8_decode($clientName), 1, 0, 'L');
+                $fpdf->Cell(87, 8, utf8_decode($productsStr), 1, 0, 'L');
+                $fpdf->Cell(30, 8, utf8_decode($sale->type), 1, 0, 'C');
+                $fpdf->Cell(25, 8, $sale->paid ? 'SI' : 'NO', 1, 0, 'C');
+                $amount = $isDebtReport ? $sale->debt : $sale->total;
+                $fpdf->Cell(25, 8, 'S/' . number_format($amount, 2), 1, 1, 'R');
+                
+                $totalSales += $sale->total;
+                $totalDebt += $sale->debt;
+            }
+            
+            if ($sale->payments) {
+                foreach ($sale->payments as $payment) {
+                    $payment->sale_guide = $sale->guide;
+                    $allPayments->push($payment);
+                }
+            }
         }
+        $fpdf->SetTextColor(0, 0, 0);
 
         $fpdf->SetFont('Montserrat', 'B', 10);
-        $fpdf->Cell(165, 10, utf8_decode($isDebtReport ? 'TOTAL DEUDA' : 'TOTAL EN VENTAS'), 1, 0, 'R');
-        $fpdf->Cell(25, 10, 'S/' . number_format($total, 2), 1, 1, 'R');
+        if ($isDebtReport && $request->client_id) {
+            $totalPaid = $allPayments->sum('amount');
+            $saldoRestante = $totalSales - $totalPaid;
+            
+            $fpdf->Cell(252, 8, utf8_decode('TOTAL EN VENTAS'), 1, 0, 'R');
+            $fpdf->Cell(25, 8, 'S/' . number_format($totalSales, 2), 1, 1, 'R');
+            
+            $fpdf->Cell(252, 8, utf8_decode('ABONOS REALIZADOS'), 1, 0, 'R');
+            $fpdf->Cell(25, 8, 'S/' . number_format($totalPaid, 2), 1, 1, 'R');
+            
+            $fpdf->Cell(252, 8, utf8_decode('SALDO RESTANTE'), 1, 0, 'R');
+            $fpdf->Cell(25, 8, 'S/' . number_format($saldoRestante, 2), 1, 1, 'R');
+        } elseif ($isDebtReport) {
+            $fpdf->Cell(252, 10, utf8_decode('TOTAL DEUDA'), 1, 0, 'R');
+            $fpdf->Cell(25, 10, 'S/' . number_format($totalDebt, 2), 1, 1, 'R');
+        } else {
+            $fpdf->Cell(252, 10, utf8_decode('TOTAL EN VENTAS'), 1, 0, 'R');
+            $fpdf->Cell(25, 10, 'S/' . number_format($totalSales, 2), 1, 1, 'R');
+        }
+
+        if ($allPayments->count() > 0 && $isDebtReport && $request->client_id) {
+            $fpdf->Ln(5);
+            $fpdf->SetFont('Montserrat', 'B', 10);
+            $fpdf->Cell(277, 8, utf8_decode('HISTORIAL DE PAGOS REGISTRADOS EN ESTAS VENTAS'), 0, 1, 'L');
+            
+            $fpdf->SetFont('Montserrat', 'B', 9);
+            $fpdf->SetFillColor(2, 93, 166);
+            $fpdf->SetTextColor(255, 255, 255);
+            
+            $fpdf->Cell(20, 8, 'NRO', 1, 0, 'C', true);
+            $fpdf->Cell(40, 8, utf8_decode('GUÍA'), 1, 0, 'C', true);
+            $fpdf->Cell(50, 8, 'FECHA Y HORA', 1, 0, 'C', true);
+            $fpdf->Cell(50, 8, utf8_decode('MÉTODO DE PAGO'), 1, 0, 'C', true);
+            $fpdf->Cell(40, 8, 'MONTO', 1, 1, 'C', true);
+            
+            $fpdf->SetFont('Montserrat', '', 9);
+            $fpdf->SetTextColor(0, 0, 0);
+            
+            $index = 1;
+            foreach ($allPayments->sortBy('date') as $payment) {
+                $fpdf->Cell(20, 7, $index++, 1, 0, 'C');
+                $fpdf->Cell(40, 7, utf8_decode($payment->sale_guide), 1, 0, 'C');
+                $fpdf->Cell(50, 7, optional($payment->date)->format('d/m/Y H:i'), 1, 0, 'C');
+                $fpdf->Cell(50, 7, utf8_decode(optional($payment->payment_method)->name ?? 'Efectivo'), 1, 0, 'C');
+                $fpdf->Cell(40, 7, 'S/' . number_format($payment->amount, 2), 1, 1, 'C');
+            }
+        }
 
         $fpdf->Ln(10);
         $fpdf->SetFont('Montserrat', '', 8);
-        $fpdf->Cell(190, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i')), 0, 1, 'R');
+        $fpdf->Cell(277, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i')), 0, 1, 'R');
 
         $name = "ReporteVentas_" . now()->format('dm') . ".pdf";
         if (ob_get_level() > 0)

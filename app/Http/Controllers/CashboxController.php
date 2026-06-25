@@ -18,6 +18,7 @@ class CashboxController extends Controller
         $total_manual_income = 0;
         $suggested_closing_amount = null;
         $suggested_opening_amount = 0;
+        $suggested_opening_balances = [];
 
         if($cashbox){
             $movements = CashboxMovement::with(['sale.client', 'payment_method', 'user'])
@@ -59,6 +60,7 @@ class CashboxController extends Controller
             $last_box = Cashbox::where('is_open', 0)->latest('closed_at')->first();
             if($last_box){
                 $suggested_opening_amount = $last_box->closing_amount;
+                $suggested_opening_balances = is_array($last_box->closing_balances) ? $last_box->closing_balances : [];
             }
         }
 
@@ -89,7 +91,7 @@ class CashboxController extends Controller
             }
         }
 
-        return view('cashbox.index', compact('cashbox', 'movements', 'total_paid', 'total_debt', 'total_expenses', 'total_manual_income', 'suggested_closing_amount', 'payment_methods', 'suggested_opening_amount', 'balances'));
+        return view('cashbox.index', compact('cashbox', 'movements', 'total_paid', 'total_debt', 'total_expenses', 'total_manual_income', 'suggested_closing_amount', 'payment_methods', 'suggested_opening_amount', 'suggested_opening_balances', 'balances'));
     }
 
     public function storeIncome(Request $request){

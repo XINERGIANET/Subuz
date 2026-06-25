@@ -89,7 +89,7 @@
 					<select class="form-select ts-products">
 						<option value="">Seleccionar</option>
 						@foreach($products as $product)
-						<option value="{{ $product->id }}">{{ $product->name }} - S/{{ $product->price }}</option>
+						<option value="{{ $product->id }}">{{ $product->name }} - S/{{ $product->calculated_price }}</option>
 						@endforeach
 					</select>
 				</div>

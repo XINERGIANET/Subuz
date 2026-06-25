@@ -32,47 +32,15 @@ class CartController extends Controller
         $product = Product::find($request->id);
 
         if($product){
-
-            $price_applied = $product->price;
-            $is_special = false;
-            if($request->client_id){
-                $special_price = \App\Models\Price::where('client_id', $request->client_id)
-                    ->where('product_id', $product->id)
-                    ->first();
-                if($special_price){
-                    $price_applied = $special_price->price;
-                    $is_special = true;
+            if($product->is_combo && is_array($product->combo_products)){
+                foreach($product->combo_products as $cp){
+                    $comboProduct = Product::find($cp['id']);
+                    if($comboProduct){
+                        $this->addProductToCart($cart, $comboProduct, $request->client_id, $cp['quantity'] ?? 1);
+                    }
                 }
-            }
-
-            $exists = false;
-            $itemKey = null;
-
-            foreach($cart['items'] as $key => $item){
-                if($item['id'] == $request->id && empty($item['is_loaned'])){
-                    $exists = true;
-                    $itemKey = $key;
-                }
-            }
-
-            if($exists){
-                $cart['items'][$itemKey]['quantity']++;
-                $cart['items'][$itemKey]['price'] = number_format($price_applied, 2, '.', ''); // Update price in case it changed
-                $cart['items'][$itemKey]['amount'] = number_format($cart['items'][$itemKey]['price'] * $cart['items'][$itemKey]['quantity'], 2, '.', '');
-                $cart['items'][$itemKey]['special'] = $is_special;
-                $cart['items'][$itemKey]['is_loanable'] = $product->is_loanable;
-            }else{
-                $cart['items'][] = [
-                    'id' => $product->id,
-                    'name' => $product->name,
-                    'price' => number_format($price_applied, 2, '.', ''),
-                    'original_price' => number_format($price_applied, 2, '.', ''),
-                    'quantity' => 1,
-                    'amount' => number_format($price_applied, 2, '.', ''),
-                    'special' => $is_special,
-                    'is_loanable' => $product->is_loanable,
-                    'is_loaned' => false
-                ];
+            } else {
+                $this->addProductToCart($cart, $product, $request->client_id, 1);
             }
 
             session()->put('cart', $cart);
@@ -244,6 +212,51 @@ class CartController extends Controller
         $this->summary();
         
         return response()->json(['status' => true]);
+    }
+
+    private function addProductToCart(&$cart, $product, $client_id, $quantityToAdd = 1){
+        $price_applied = $product->price;
+        $is_special = false;
+        if($client_id){
+            $special_price = \App\Models\Price::where('client_id', $client_id)
+                ->where('product_id', $product->id)
+                ->first();
+            if($special_price){
+                $price_applied = $special_price->price;
+                $is_special = true;
+            }
+        }
+
+        $exists = false;
+        $itemKey = null;
+
+        foreach($cart['items'] as $key => $item){
+            if($item['id'] == $product->id && empty($item['is_loaned'])){
+                $exists = true;
+                $itemKey = $key;
+                break;
+            }
+        }
+
+        if($exists){
+            $cart['items'][$itemKey]['quantity'] += $quantityToAdd;
+            $cart['items'][$itemKey]['price'] = number_format($price_applied, 2, '.', ''); // Update price in case it changed
+            $cart['items'][$itemKey]['amount'] = number_format($cart['items'][$itemKey]['price'] * $cart['items'][$itemKey]['quantity'], 2, '.', '');
+            $cart['items'][$itemKey]['special'] = $is_special;
+            $cart['items'][$itemKey]['is_loanable'] = $product->is_loanable;
+        }else{
+            $cart['items'][] = [
+                'id' => $product->id,
+                'name' => $product->name,
+                'price' => number_format($price_applied, 2, '.', ''),
+                'original_price' => number_format($price_applied, 2, '.', ''),
+                'quantity' => $quantityToAdd,
+                'amount' => number_format($price_applied * $quantityToAdd, 2, '.', ''),
+                'special' => $is_special,
+                'is_loanable' => $product->is_loanable,
+                'is_loaned' => false
+            ];
+        }
     }
 
     public function summary(){
