@@ -368,11 +368,7 @@ class SaleController extends Controller
         foreach ($cart['items'] as $item) {
             $product = Product::find($item['id']);
 
-            if ($product && $product->stock !== null) {
-                if ($product->reduces_stock) {
-                    $product->decrement('stock', $item['quantity']);
-                }
-            }
+            $this->consumeProductResources($product, $item['quantity']);
 
             SaleDetail::create([
                 'sale_id' => $sale->id,
@@ -438,6 +434,13 @@ class SaleController extends Controller
             'details.quantity.*' => 'required|integer'
         ]);
 
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'error' => 'El formulario no ha sido validado'
+            ]);
+        }
+
         $total = 0;
 
         $details = $request->details;
@@ -445,9 +448,11 @@ class SaleController extends Controller
         foreach ($details['id'] as $key => $value) {
 
             $detail = SaleDetail::findOrFail($value);
+            $oldQuantity = $detail->quantity;
 
             $price = $details['price'][$key];
             $quantity = $details['quantity'][$key];
+            $this->adjustProductResources($detail->product, $quantity - $oldQuantity);
 
             $detail->update([
                 'price' => $price,
@@ -472,13 +477,6 @@ class SaleController extends Controller
             'debt' => $debt > 0 ? $debt : 0
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'error' => 'El formulario no ha sido validado'
-            ]);
-        }
-
         return response()->json(['status' => true]);
     }
 
@@ -491,10 +489,7 @@ class SaleController extends Controller
                 DB::transaction(function () use ($sale) {
                     // Restore stock
                     foreach ($sale->details as $detail) {
-                        $product = $detail->product;
-                        if ($product && $product->stock !== null && $product->reduces_stock) {
-                            $product->increment('stock', $detail->quantity);
-                        }
+                        $this->restoreSaleDetailResources($detail);
                     }
 
                     // Delete related records
@@ -528,10 +523,7 @@ class SaleController extends Controller
         try {
             DB::transaction(function () use ($sale) {
                 foreach ($sale->details as $detail) {
-                    $product = $detail->product;
-                    if ($product && $product->stock !== null && $product->reduces_stock) {
-                        $product->increment('stock', $detail->quantity);
-                    }
+                    $this->restoreSaleDetailResources($detail);
                 }
                 $sale->update([
                     'status' => 'Anulado',
@@ -1580,19 +1572,40 @@ class SaleController extends Controller
             return response()->json(['status' => false, 'error' => $validator->errors()->first()]);
         }
 
-        $product = Product::find($request->product_id);
+        $mainProduct = Product::find($request->product_id);
+        $mainQuantity = $request->quantity;
 
-        $price = $product->price;
-        $special_price = \App\Models\Price::where('client_id', $sale->client_id)
-            ->where('product_id', $product->id)
-            ->first();
-        if ($special_price) {
-            $price = $special_price->price;
+        $productsToAdd = [];
+
+        if ($mainProduct->is_combo && is_array($mainProduct->combo_products)) {
+            foreach ($mainProduct->combo_products as $cp) {
+                $comboProduct = Product::find($cp['id']);
+                if ($comboProduct) {
+                    $productsToAdd[] = [
+                        'product' => $comboProduct,
+                        'quantity' => ($cp['quantity'] ?? 1) * $mainQuantity
+                    ];
+                }
+            }
+        } else {
+            $productsToAdd[] = [
+                'product' => $mainProduct,
+                'quantity' => $mainQuantity
+            ];
         }
 
-        $quantity = $request->quantity;
+        DB::transaction(function () use ($sale, $productsToAdd) {
+            foreach ($productsToAdd as $item) {
+                $product = $item['product'];
+                $quantity = $item['quantity'];
 
-        DB::transaction(function () use ($sale, $product, $price, $quantity) {
+                $price = $product->price;
+                $special_price = \App\Models\Price::where('client_id', $sale->client_id)
+                    ->where('product_id', $product->id)
+                    ->first();
+                if ($special_price) {
+                    $price = $special_price->price;
+                }
             // Check if product already in sale
             $detail = $sale->details()->where('product_id', $product->id)->first();
 
@@ -1634,9 +1647,7 @@ class SaleController extends Controller
                 }
             }
 
-            // Update stock
-            if ($product->stock !== null && $product->reduces_stock) {
-                $product->decrement('stock', $quantity);
+            $this->consumeProductResources($product, $quantity);
             }
         });
 
@@ -1689,11 +1700,7 @@ class SaleController extends Controller
                 }
             }
 
-            // Update stock
-            if ($product && $product->stock !== null && $product->reduces_stock) {
-                $diff = $newQuantity - $oldQuantity;
-                $product->decrement('stock', $diff);
-            }
+            $this->adjustProductResources($product, $newQuantity - $oldQuantity);
         });
 
         return response()->json(['status' => true]);
@@ -1750,14 +1757,7 @@ class SaleController extends Controller
                 ]);
             }
 
-            if ($product && $product->stock !== null && $product->reduces_stock) {
-                $diff = $newQuantity - $oldQuantity;
-                if ($diff > 0) {
-                    $product->decrement('stock', $diff);
-                } elseif ($diff < 0) {
-                    $product->increment('stock', abs($diff));
-                }
-            }
+            $this->adjustProductResources($product, $newQuantity - $oldQuantity);
 
             $realTotal = $sale->details()->get()->sum(function ($d) {
                 return $d->price * $d->quantity;
@@ -1819,14 +1819,77 @@ class SaleController extends Controller
                 }
             }
 
-            // Update stock
-            if ($product && $product->stock !== null && $product->reduces_stock) {
-                $product->increment('stock', $quantity);
-            }
+            $this->restoreSaleDetailResources($detail);
         });
 
         return response()->json(['status' => true]);
     }
+
+    private function adjustProductResources($product, $quantityDelta)
+    {
+        if (!$product || $quantityDelta == 0) {
+            return;
+        }
+
+        if ($quantityDelta > 0) {
+            $this->consumeProductResources($product, $quantityDelta);
+            return;
+        }
+
+        $this->restoreProductResources($product, abs($quantityDelta));
+    }
+
+    private function consumeProductResources($product, $quantity)
+    {
+        $quantity = (float) $quantity;
+
+        if (!$product || $quantity <= 0) {
+            return;
+        }
+
+        if ($product->stock !== null && $product->reduces_stock) {
+            $product->decrement('stock', $quantity);
+        }
+
+        $product->loadMissing('supplies');
+        foreach ($product->supplies as $supply) {
+            $supply->decrement('stock', (float) $supply->pivot->quantity * $quantity);
+        }
+    }
+
+    private function restoreProductResources($product, $quantity)
+    {
+        $quantity = (float) $quantity;
+
+        if (!$product || $quantity <= 0) {
+            return;
+        }
+
+        if ($product->stock !== null && $product->reduces_stock) {
+            $product->increment('stock', $quantity);
+        }
+
+        $product->loadMissing('supplies');
+        foreach ($product->supplies as $supply) {
+            $supply->increment('stock', (float) $supply->pivot->quantity * $quantity);
+        }
+    }
+
+    private function restoreSaleDetailResources(SaleDetail $detail)
+    {
+        $product = $detail->product;
+        $quantity = (float) $detail->quantity;
+
+        if ($quantity > 0) {
+            $this->restoreProductResources($product, $quantity);
+            return;
+        }
+
+        if ($product && $quantity < 0 && $product->stock !== null && $product->reduces_stock) {
+            $product->decrement('stock', abs($quantity));
+        }
+    }
+
     public function reportData(Request $request)
     {
         $start_date = $request->start_date ?? now()->toDateString();

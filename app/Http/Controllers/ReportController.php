@@ -22,6 +22,11 @@ class ReportController extends Controller
         return view('reports.liquidation');
     }
 
+    public function liquidationsHistory(){
+        $liquidations = \App\Models\Liquidation::with('client')->latest()->paginate(15);
+        return view('reports.liquidations_history', compact('liquidations'));
+    }
+
     public function cashbox(Request $request){
         $date = $request->date ? $request->date : now()->format('Y-m-d');
         
@@ -98,6 +103,17 @@ class ReportController extends Controller
 
         $total = $sales->sum('total');
         $paymentDate = $data['payment_date'] ?? $end_date;
+
+        \App\Models\Liquidation::create([
+            'client_id' => $client->id,
+            'start_date' => $start_date,
+            'end_date' => $end_date,
+            'payment_date' => $request->payment_date,
+            'correlative_type' => $request->correlative_type,
+            'general_correlative' => $request->general_correlative,
+            'sale_correlatives' => $request->sale_correlatives,
+            'total' => $total
+        ]);
 
         $fpdf->AddPage();
         $fpdf->AddFont('Montserrat', '');

@@ -11,6 +11,12 @@
   </ol>
 </nav>
 <div class="card">
+	<div class="card-header d-flex justify-content-between align-items-center">
+		<h4 class="mb-0">Generar Reporte de Liquidación</h4>
+		<a href="{{ route('reports.liquidations_history') }}" class="btn btn-outline-primary">
+			<i class="ti ti-history icon"></i> Ver historial
+		</a>
+	</div>
 	<div class="card-body">
 		<form class="mb-3" id="liquidation-form" action="{{ route('reports.pdf') }}">
 			<div class="row">

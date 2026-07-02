@@ -6,11 +6,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\Product;
+use App\Models\Supply;
 
 class ProductController extends Controller
 {
     public function index(Request $request){
-        $products = Product::where('is_combo', false)->when($request->search, function($query, $search){
+        $products = Product::with('supplies')->where('is_combo', false)->when($request->search, function($query, $search){
             return $query->where('name', 'like', '%'.$search.'%');
         })->paginate(5, ['*'], 'products_page');
 
@@ -18,7 +19,19 @@ class ProductController extends Controller
             return $query->where('name', 'like', '%'.$search.'%');
         })->paginate(5, ['*'], 'combos_page');
         $all_products = Product::where('is_combo', false)->get();
-        return view('products.index', compact('products', 'combos', 'all_products'));
+        $supplies = Supply::orderBy('name')->get();
+        $supplies_options = $supplies->map(function($supply) {
+            return [
+                'id' => $supply->id,
+                'name' => $supply->name,
+                'unit' => $supply->unit,
+            ];
+        })->values();
+        $supplies_list = Supply::when($request->search, function($query, $search){
+            return $query->where('name', 'like', '%'.$search.'%');
+        })->orderBy('name')->paginate(5, ['*'], 'supplies_page');
+
+        return view('products.index', compact('products', 'combos', 'all_products', 'supplies', 'supplies_options', 'supplies_list'));
     }
 
     public function store(Request $request){
@@ -38,7 +51,7 @@ class ProductController extends Controller
             ]);
         }
 
-        $data = $request->all();
+        $data = $request->except(['supply_ids', 'supply_quantities']);
         $data['reduces_stock'] = $request->has('reduces_stock');
         $data['is_loanable'] = $request->has('is_loanable');
         $data['is_combo'] = $request->has('is_combo') && $request->is_combo == '1';
@@ -64,7 +77,9 @@ class ProductController extends Controller
             $data['stock_updated_at'] = now();
         }
         
-        Product::create($data);
+        $product = Product::create($data);
+
+        $this->syncSupplies($product, $request);
 
         return response()->json([
             'status' => true
@@ -72,6 +87,8 @@ class ProductController extends Controller
     }
 
     public function edit(Request $request, Product $product){
+        $product->load('supplies');
+
         return response()->json($product);
     }
 
@@ -91,7 +108,7 @@ class ProductController extends Controller
             ]);
         }
 
-        $data = $request->all();
+        $data = $request->except(['supply_ids', 'supply_quantities']);
         $data['reduces_stock'] = $request->has('reduces_stock');
         $data['is_loanable'] = $request->has('is_loanable');
         $data['is_combo'] = $request->has('is_combo') && $request->is_combo == '1';
@@ -118,6 +135,7 @@ class ProductController extends Controller
         }
 
         $product->update($data);
+        $this->syncSupplies($product, $request);
 
         return response()->json([
             'status' => true
@@ -138,5 +156,33 @@ class ProductController extends Controller
         return response()->json([
             'items' => $products
         ]);
+    }
+
+    private function syncSupplies(Product $product, Request $request)
+    {
+        if ($product->is_combo) {
+            $product->supplies()->sync([]);
+            return;
+        }
+
+        $supplyIds = $request->input('supply_ids', []);
+        $quantities = $request->input('supply_quantities', []);
+        $sync = [];
+
+        foreach ($supplyIds as $index => $supplyId) {
+            $quantity = isset($quantities[$index]) ? (float) $quantities[$index] : 0;
+
+            if (!$supplyId || $quantity <= 0) {
+                continue;
+            }
+
+            if (isset($sync[$supplyId])) {
+                $sync[$supplyId]['quantity'] += $quantity;
+            } else {
+                $sync[$supplyId] = ['quantity' => $quantity];
+            }
+        }
+
+        $product->supplies()->sync($sync);
     }
 }

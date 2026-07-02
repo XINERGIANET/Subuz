@@ -19,6 +19,9 @@
 			<button class="btn btn-purple" data-bs-toggle="modal" data-bs-target="#createComboModal">
 				<i class="ti ti-box-multiple icon"></i> Crear paquete/combo
 			</button>
+			<button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createSupplyModal">
+				<i class="ti ti-tools icon"></i> Crear insumo
+			</button>
 		</div>
 		<div>
 			<form>
@@ -39,6 +42,9 @@
 			<li class="nav-item">
 				<a href="#tabs-combos" class="nav-link fw-bold text-purple" data-bs-toggle="tab">Paquetes / Combos</a>
 			</li>
+			<li class="nav-item">
+				<a href="#tabs-supplies" class="nav-link fw-bold text-success" data-bs-toggle="tab">Insumos</a>
+			</li>
 		</ul>
 	</div>
 	<div class="tab-content">
@@ -52,6 +58,7 @@
 							<th>Stock</th>
 							<th>¿Reduce stock?</th>
 							<th>¿Es prestable?</th>
+							<th>Insumos</th>
 							<th>Acción</th>
 						</tr>
 					</thead>
@@ -76,6 +83,17 @@
 								<span class="badge bg-secondary text-secondary-fg">No</span>
 								@endif
 							</td>
+							<td class="small text-muted">
+								@if($product->supplies->count() > 0)
+									@foreach($product->supplies as $supply)
+										<span class="badge bg-success-lt text-success me-1 mb-1">
+											{{ $supply->name }}: {{ rtrim(rtrim(number_format($supply->pivot->quantity, 2, '.', ''), '0'), '.') }} {{ $supply->unit }}
+										</span>
+									@endforeach
+								@else
+									<span class="text-muted">Sin insumos</span>
+								@endif
+							</td>
 							<td>
 								<div class="d-flex gap-2">
 									<div class="d-flex gap-2">
@@ -92,7 +110,7 @@
 						@endforeach
 						@else
 						<tr>
-							<td colspan="6" align="center" class="py-4 text-muted">No se han encontrado resultados</td>
+							<td colspan="7" align="center" class="py-4 text-muted">No se han encontrado resultados</td>
 						</tr>
 						@endif
 					</tbody>
@@ -158,11 +176,56 @@
 			</div>
 			@endif
 		</div>
+
+		<div class="tab-pane" id="tabs-supplies">
+			<div class="table-responsive">
+				<table class="table card-table table-vcenter">
+					<thead class="table-corporate-header" style="background: #eaf7ef !important;">
+						<tr>
+							<th>Nombre</th>
+							<th>Stock</th>
+							<th>Unidad</th>
+							<th>Acción</th>
+						</tr>
+					</thead>
+					<tbody>
+						@if($supplies_list->count() > 0)
+						@foreach($supplies_list as $supply)
+						<tr>
+							<td class="fw-bold">{{ $supply->name }}</td>
+							<td>{{ rtrim(rtrim(number_format($supply->stock, 2, '.', ''), '0'), '.') }}</td>
+							<td>{{ $supply->unit ?: '-' }}</td>
+							<td>
+								<div class="d-flex gap-2">
+									<button class="btn btn-icon btn-edit-corporate btn-edit-supply" data-id="{{ $supply->id }}" data-bs-toggle="tooltip" title="Editar">
+										<i class="ti ti-pencil icon"></i>
+									</button>
+									<button class="btn btn-icon btn-delete-corporate btn-delete-supply" data-id="{{ $supply->id }}" data-bs-toggle="tooltip" title="Eliminar">
+										<i class="ti ti-x icon"></i>
+									</button>
+								</div>
+							</td>
+						</tr>
+						@endforeach
+						@else
+						<tr>
+							<td colspan="4" align="center" class="py-4 text-muted">No se han encontrado insumos</td>
+						</tr>
+						@endif
+					</tbody>
+				</table>
+			</div>
+			@if($supplies_list->hasPages())
+			<div class="card-footer d-flex align-items-center">
+				{{ $supplies_list->withQueryString()->links() }}
+			</div>
+			@endif
+		</div>
 	</div>
 </div>
 
 <div class="modal modal-blur fade" id="createModal" tabindex="-1" role="dialog" aria-hidden="true">
-	<div class="modal-dialog modal-dialog-centered" role="document">
+	<div class="modal-dialog modal-lg modal-dialog-centered" role="document">
 		<div class="modal-content shadow-lg border-0">
 			<form id="storeForm" method="POST">
 				<div class="modal-header border-0 pb-0">
@@ -226,6 +289,20 @@
 								<div class="form-hint small">Si se marca, se podrá prestar en las ventas con precio 0.</div>
 							</div>
 						</div>
+						<div class="col-lg-12">
+							<div class="border rounded p-3 mt-2">
+								<div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+									<div>
+										<label class="form-label fw-bold mb-0">Insumos que consume</label>
+										<div class="form-hint small">Ej. por cada bidón: 2 sellos y 1 tapa.</div>
+									</div>
+									<button type="button" class="btn btn-sm btn-outline-success btn-add-supply-row" data-target="#createProductSupplies">
+										<i class="ti ti-plus icon"></i> Agregar insumo
+									</button>
+								</div>
+								<div id="createProductSupplies" class="d-flex flex-column gap-2"></div>
+							</div>
+						</div>
 					</div>
 				</div>
 				<div class="modal-footer border-0">
@@ -242,7 +319,7 @@
 </div>
 
 <div class="modal modal-blur fade" id="createComboModal" tabindex="-1" role="dialog" aria-hidden="true">
-	<div class="modal-dialog modal-dialog-centered" role="document">
+	<div class="modal-dialog modal-lg modal-dialog-centered" role="document">
 		<div class="modal-content shadow-lg border-0">
 			<form id="storeComboForm" method="POST">
 				<div class="modal-header border-0 pb-0">
@@ -357,6 +434,20 @@
 								</label>
 							</div>
 						</div>
+						<div class="col-lg-12">
+							<div class="border rounded p-3 mt-2">
+								<div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+									<div>
+										<label class="form-label fw-bold mb-0">Insumos que consume</label>
+										<div class="form-hint small">Se descontarán por cada unidad vendida o prestada.</div>
+									</div>
+									<button type="button" class="btn btn-sm btn-outline-success btn-add-supply-row" data-target="#editProductSupplies">
+										<i class="ti ti-plus icon"></i> Agregar insumo
+									</button>
+								</div>
+								<div id="editProductSupplies" class="d-flex flex-column gap-2"></div>
+							</div>
+						</div>
 					</div>
 				</div>
 				<div class="modal-footer border-0">
@@ -426,10 +517,151 @@
 		</div>
 	</div>
 </div>
+
+<div class="modal modal-blur fade" id="createSupplyModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-dialog-centered" role="document">
+		<div class="modal-content shadow-lg border-0">
+			<form id="storeSupplyForm" method="POST">
+				<div class="modal-header border-0 pb-0">
+					<h5 class="modal-title d-flex align-items-center gap-2 fs-2 fw-bold text-success">
+                        <i class="ti ti-tools text-success fs-1"></i>
+                        Crear nuevo insumo
+                    </h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+                <div class="px-3">
+                    <p class="text-muted small mb-0 px-1">Registra consumibles como sellos, tapas, etiquetas o bolsas.</p>
+                </div>
+				<div class="modal-body pt-3">
+					<div class="mb-3">
+						<label class="form-label fw-bold">Nombre <span class="text-danger">*</span></label>
+						<input type="text" class="form-control" name="name" placeholder="Ej. Sello de seguridad" required>
+					</div>
+					<div class="row">
+						<div class="col-lg-6">
+							<div class="mb-3">
+								<label class="form-label fw-bold">Stock <span class="text-danger">*</span></label>
+								<input type="number" step="0.01" class="form-control" name="stock" value="0" required>
+							</div>
+						</div>
+						<div class="col-lg-6">
+							<div class="mb-3">
+								<label class="form-label fw-bold">Unidad</label>
+								<input type="text" class="form-control" name="unit" placeholder="Ej. unid, kg, rollo">
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="modal-footer border-0">
+					<button type="button" class="btn btn-ghost-secondary px-4 fw-bold" data-bs-dismiss="modal">
+                        <i class="ti ti-x icon me-1"></i> Cancelar
+                    </button>
+					<button type="submit" class="btn btn-success px-4 shadow-sm fw-bold">
+                        <i class="ti ti-device-floppy icon me-1"></i> Guardar Insumo
+                    </button>
+				</div>
+			</form>
+		</div>
+	</div>
+</div>
+
+<div class="modal modal-blur fade" id="editSupplyModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-dialog-centered" role="document">
+		<div class="modal-content shadow-lg border-0">
+			<form id="editSupplyForm" method="POST">
+				<div class="modal-header border-0 pb-0">
+					<h5 class="modal-title d-flex align-items-center gap-2 fs-2 fw-bold text-success">
+                        <i class="ti ti-edit text-success fs-1"></i>
+                        Editar insumo
+                    </h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+				<div class="modal-body pt-3">
+					<div class="mb-3">
+						<label class="form-label fw-bold">Nombre <span class="text-danger">*</span></label>
+						<input type="text" class="form-control" name="name" id="editSupplyName" required>
+					</div>
+					<div class="row">
+						<div class="col-lg-6">
+							<div class="mb-3">
+								<label class="form-label fw-bold">Stock <span class="text-danger">*</span></label>
+								<input type="number" step="0.01" class="form-control" name="stock" id="editSupplyStock" required>
+							</div>
+						</div>
+						<div class="col-lg-6">
+							<div class="mb-3">
+								<label class="form-label fw-bold">Unidad</label>
+								<input type="text" class="form-control" name="unit" id="editSupplyUnit">
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="modal-footer border-0">
+					<input type="hidden" id="editSupplyId">
+					<button type="button" class="btn btn-ghost-secondary px-4 fw-bold" data-bs-dismiss="modal">
+                        <i class="ti ti-x icon me-1"></i> Cancelar
+                    </button>
+					<button type="submit" class="btn btn-success px-4 shadow-sm fw-bold">
+                        <i class="ti ti-device-floppy icon me-1"></i> Actualizar Insumo
+                    </button>
+				</div>
+			</form>
+		</div>
+	</div>
+</div>
 @endsection
 
 @section('scripts')
 <script>
+
+	const SUPPLIES = @json($supplies_options);
+
+	function formatNumber(value) {
+		const number = parseFloat(value);
+		return Number.isNaN(number) ? '' : number.toString();
+	}
+
+	function escapeHtml(value) {
+		return String(value ?? '')
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#039;');
+	}
+
+	function addSupplyRow(target, selectedId = '', quantity = '') {
+		if (SUPPLIES.length === 0) {
+			ToastError.fire({ text: 'Primero registra al menos un insumo.' });
+			return;
+		}
+
+		let options = '<option value="">Seleccione insumo</option>';
+		SUPPLIES.forEach(function(supply) {
+			const selected = String(supply.id) === String(selectedId) ? 'selected' : '';
+			const unit = supply.unit ? ` (${escapeHtml(supply.unit)})` : '';
+			options += `<option value="${supply.id}" ${selected}>${escapeHtml(supply.name)}${unit}</option>`;
+		});
+
+		const row = `
+			<div class="row g-2 align-items-end supply-row">
+				<div class="col-lg-7">
+					<select class="form-select" name="supply_ids[]">
+						${options}
+					</select>
+				</div>
+				<div class="col-lg-4">
+					<input type="number" step="0.01" min="0" class="form-control" name="supply_quantities[]" value="${formatNumber(quantity)}" placeholder="Cantidad por unidad">
+				</div>
+				<div class="col-lg-1">
+					<button type="button" class="btn btn-icon btn-outline-danger btn-remove-supply-row" title="Quitar">
+						<i class="ti ti-x icon"></i>
+					</button>
+				</div>
+			</div>`;
+
+		$(target).append(row);
+	}
 
 	var tsCreate = new TomSelect('.ts-combo', {
 		placeholder: 'Selecciona los productos...',
@@ -437,6 +669,14 @@
 	
 	var tsEdit = new TomSelect('.ts-combo-edit', {
 		placeholder: 'Selecciona los productos...',
+	});
+
+	$(document).on('click', '.btn-add-supply-row', function(){
+		addSupplyRow($(this).data('target'));
+	});
+
+	$(document).on('click', '.btn-remove-supply-row', function(){
+		$(this).closest('.supply-row').remove();
 	});
 
 	$('#storeForm, #storeComboForm').submit(function(e){
@@ -451,6 +691,7 @@
 					$('#createModal, #createComboModal').modal('hide');
 					$('#storeForm')[0].reset();
 					$('#storeComboForm')[0].reset();
+					$('#createProductSupplies').empty();
 					tsCreate.clear();
 					
 					ToastMessage.fire({ text: 'Registro guardado' })
@@ -464,6 +705,30 @@
 			}
 		});
 
+	});
+
+	$('#storeSupplyForm').submit(function(e){
+		e.preventDefault();
+
+		$.ajax({
+			url: '{{ route('supplies.store') }}',
+			method: 'POST',
+			data: $(this).serialize(),
+			success: function(data){
+				if(data.status){
+					$('#createSupplyModal').modal('hide');
+					$('#storeSupplyForm')[0].reset();
+
+					ToastMessage.fire({ text: 'Insumo guardado' })
+					.then(() => location.reload());
+				}else{
+					ToastError.fire({ text: data.error ? data.error : 'Ocurrió un error' });
+				}
+			},
+			error: function(){
+				ToastError.fire({ text: 'Ocurrió un error' });
+			}
+		});
 	});
 
 	$(document).on('click', '.btn-edit, .btn-edit-combo', function(){
@@ -491,6 +756,12 @@
 					$('#editIsBidon').prop('checked', data.reduces_stock == 1);
 					$('#editIsLoanable').prop('checked', data.is_loanable == 1);
 					$('#editId').val(data.id);
+					$('#editProductSupplies').empty();
+					if(data.supplies && data.supplies.length > 0) {
+						data.supplies.forEach(function(supply) {
+							addSupplyRow('#editProductSupplies', supply.id, supply.pivot.quantity);
+						});
+					}
 					$('#editModal').modal('show');
 				}
 			},
@@ -499,6 +770,25 @@
 			}
 		});
 
+	});
+
+	$(document).on('click', '.btn-edit-supply', function(){
+		var id = $(this).data('id');
+
+		$.ajax({
+			url: '{{ route('supplies.store') }}' + '/' + id + '/edit/',
+			method: 'GET',
+			success: function(data){
+				$('#editSupplyName').val(data.name);
+				$('#editSupplyStock').val(data.stock);
+				$('#editSupplyUnit').val(data.unit);
+				$('#editSupplyId').val(data.id);
+				$('#editSupplyModal').modal('show');
+			},
+			error: function(){
+				ToastError.fire({ text: 'Ocurrió un error' });
+			}
+		});
 	});
 
 	$('#editForm, #editComboForm').submit(function(e){
@@ -528,6 +818,30 @@
 
 	});
 
+	$('#editSupplyForm').submit(function(e){
+		e.preventDefault();
+		var id = $('#editSupplyId').val();
+
+		$.ajax({
+			url: '{{ route('supplies.store') }}' + '/' + id,
+			method: 'PATCH',
+			data: $(this).serialize(),
+			success: function(data){
+				if(data.status){
+					$('#editSupplyModal').modal('hide');
+
+					ToastMessage.fire({ text: 'Insumo actualizado' })
+					.then(() => location.reload());
+				}else{
+					ToastError.fire({ text: data.error ? data.error : 'Ocurrió un error' });
+				}
+			},
+			error: function(){
+				ToastError.fire({ text: 'Ocurrió un error' });
+			}
+		});
+	});
+
 	$(document).on('click', '.btn-delete', function(){
 
 		var id = $(this).data('id');
@@ -544,6 +858,30 @@
 							.then(() => location.reload());
 					},
 					error: function(err){
+						ToastError.fire({ text: 'Ocurrió un error' });
+					}
+				});
+			}
+		});
+
+	});
+
+	$(document).on('click', '.btn-delete-supply', function(){
+
+		var id = $(this).data('id');
+
+		ToastConfirm.fire({
+			text: '¿Estás seguro que deseas borrar este insumo?',
+		}).then((result) => {
+			if(result.isConfirmed){
+				$.ajax({
+					url: '{{ route('supplies.store') }}' + '/' + id,
+					method: 'DELETE',
+					success: function(){
+						ToastMessage.fire({ text: 'Insumo eliminado' })
+							.then(() => location.reload());
+					},
+					error: function(){
 						ToastError.fire({ text: 'Ocurrió un error' });
 					}
 				});

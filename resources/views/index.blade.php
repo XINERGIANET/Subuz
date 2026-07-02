@@ -268,7 +268,7 @@
                 <!-- Filters -->
                 <form id="filter_form" class="m-0 d-flex flex-column gap-2">
                     <div>
-                        <div class="filter-btn-red">Seleccione Año</div>
+                        <div class="filter-btn-red">Seleccione A&ntilde;o</div>
                         <select class="filter-select" id="filter_year">
                             @for($i = 2023; $i <= 2030; $i++)
                                 <option value="{{ $i }}" {{ $i == date('Y') ? 'selected' : '' }}>{{ $i }}</option>
@@ -278,11 +278,17 @@
                     <div>
                         <div class="filter-btn-red mt-1">Seleccione Mes</div>
                         <select class="filter-select" id="filter_month">
-                            <option value="">Todo el Año</option>
+                            <option value="">Todo el A&ntilde;o</option>
                             @php $months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']; @endphp
                             @foreach($months as $index => $name)
                                 <option value="{{ str_pad($index + 1, 2, '0', STR_PAD_LEFT) }}" {{ ($index + 1) == date('m') ? 'selected' : '' }}>{{ $name }}</option>
                             @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <div class="filter-btn-red mt-1">Seleccione D&iacute;a</div>
+                        <select class="filter-select" id="filter_day">
+                            <option value="">Todo el Mes</option>
                         </select>
                     </div>
                     <button type="submit" class="btn btn-sm btn-danger w-100 mt-1 fw-bold"
@@ -411,7 +417,7 @@
                         <!-- We map Subuz metrics to these 6 cards -->
                         <div class="kpi-card">
                             <div class="metric-value text-dark" id="kpi_1">S/0.00</div>
-                            <div class="metric-title metric-title-red mt-1">Pendiente / Crédito</div>
+                            <div class="metric-title metric-title-red mt-1">Pendiente / Cr&eacute;dito</div>
                         </div>
                         <div class="kpi-card">
                             <div class="metric-value text-dark" id="kpi_2">S/0.00</div>
@@ -427,11 +433,11 @@
                         </div>
                         <div class="kpi-card">
                             <div class="metric-value text-dark" id="kpi_5">0</div>
-                            <div class="metric-title metric-title-red mt-1">Ventas Hoy</div>
+                            <div class="metric-title metric-title-red mt-1" id="kpi_5_label">Ventas Hoy</div>
                         </div>
                         <div class="kpi-card">
                             <div class="metric-value text-dark" id="kpi_6">0</div>
-                            <div class="metric-title metric-title-red mt-1">Despachados Hoy</div>
+                            <div class="metric-title metric-title-red mt-1" id="kpi_6_label">Despachados Hoy</div>
                         </div>
                     </div>
 
@@ -439,7 +445,7 @@
                     <div class="card card-full"
                         style="flex: 1; min-width: 0; border: 1px solid rgba(211, 47, 47, 0.3); border-radius: 10px;">
                         <div class="card-body p-2 d-flex flex-column" style="min-height: 0;">
-                            <div class="text-center metric-title metric-title-red mb-1">Ingresos y Egresos por Mes</div>
+                            <div class="text-center metric-title metric-title-red mb-1" id="bar_chart_title">Ingresos y Egresos por Mes</div>
                             <div class="chart-container flex-grow-1" style="position: relative; width: 100%; height: 100%; min-height: 0; padding: 0 10px 15px 10px;">
                                 <canvas id="bar_chart_mensual"></canvas>
                             </div>
@@ -462,10 +468,20 @@
 
         // Chart instances
         let chartRentabilidad, chartDonut, chartVentas, chartSparkline, chartBar;
+        const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const MONTH_SHORT_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        const DEFAULT_YEAR = '{{ date('Y') }}';
+        const DEFAULT_MONTH = '{{ date('m') }}';
+        const DEFAULT_DAY = '{{ date('d') }}';
 
         $(document).ready(function () {
+            populateDayOptions();
             initCharts();
             loadDashboardData();
+
+            $('#filter_year, #filter_month').on('change', function () {
+                populateDayOptions();
+            });
 
             $('#filter_form').submit(function (e) {
                 e.preventDefault();
@@ -566,9 +582,9 @@
             chartSparkline = new Chart(ctxSpark, {
                 type: 'line',
                 data: {
-                    labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
+                    labels: MONTH_SHORT_NAMES,
                     datasets: [{
-                        label: 'Ventas',
+                        label: 'Ingresos a Caja',
                         data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                         borderColor: '#2e8b57', // Green
                         backgroundColor: 'rgba(46, 139, 87, 0.15)',
@@ -594,7 +610,7 @@
             chartBar = new Chart(ctxBar, {
                 type: 'bar',
                 data: {
-                    labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
+                    labels: MONTH_SHORT_NAMES,
                     datasets: [
                         {
                             label: 'Ingresos',
@@ -622,26 +638,122 @@
             });
         }
 
-        function loadDashboardData() {
+        function pad2(value) {
+            return String(value).padStart(2, '0');
+        }
+
+        function getTodayString() {
+            const now = new Date();
+            return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+        }
+
+        function populateDayOptions() {
             const year = $('#filter_year').val();
             const month = $('#filter_month').val();
+            const previousDay = $('#filter_day').val();
+            const $day = $('#filter_day');
 
-            let startDate, endDate;
-            if (month) {
-                startDate = `${year}-${month}-01`;
-                const lastDay = new Date(year, month, 0).getDate();
-                endDate = `${year}-${month}-${lastDay}`;
-            } else {
-                startDate = `${year}-01-01`;
-                endDate = `${year}-12-31`;
+            $day.empty();
+            $day.append('<option value="">Todo el Mes</option>');
+
+            if (!month) {
+                $day.val('');
+                $day.prop('disabled', true);
+                return;
             }
+
+            const lastDay = new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate();
+
+            for (let day = 1; day <= lastDay; day++) {
+                const value = pad2(day);
+                $day.append(`<option value="${value}">${day}</option>`);
+            }
+
+            if (previousDay && parseInt(previousDay, 10) <= lastDay) {
+                $day.val(previousDay);
+            } else if (year === DEFAULT_YEAR && month === DEFAULT_MONTH && parseInt(DEFAULT_DAY, 10) <= lastDay) {
+                $day.val(DEFAULT_DAY);
+            } else {
+                $day.val('');
+            }
+
+            $day.prop('disabled', false);
+        }
+
+        function getSelectedRange() {
+            const year = $('#filter_year').val();
+            const month = $('#filter_month').val();
+            const day = $('#filter_day').val();
+
+            if (month && day) {
+                const selectedDate = `${year}-${month}-${day}`;
+
+                return {
+                    year,
+                    month,
+                    day,
+                    period: 'day',
+                    startDate: selectedDate,
+                    endDate: selectedDate,
+                    label: `D\u00eda: ${day}/${month}/${year}`,
+                    chartTitle: 'Ingresos y Egresos del D\u00eda',
+                    dailyStatsDate: selectedDate
+                };
+            }
+
+            if (month) {
+                const lastDay = new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate();
+
+                return {
+                    year,
+                    month,
+                    day: '',
+                    period: 'month',
+                    startDate: `${year}-${month}-01`,
+                    endDate: `${year}-${month}-${lastDay}`,
+                    label: `Mes: ${MONTH_NAMES[parseInt(month, 10) - 1]} ${year}`,
+                    chartTitle: 'Ingresos y Egresos por Semana del Mes',
+                    dailyStatsDate: getTodayString()
+                };
+            }
+
+            return {
+                year,
+                month: '',
+                day: '',
+                period: 'year',
+                startDate: `${year}-01-01`,
+                endDate: `${year}-12-31`,
+                label: `A\u00f1o: ${year}`,
+                chartTitle: 'Ingresos y Egresos por Mes',
+                dailyStatsDate: getTodayString()
+            };
+        }
+
+        function updatePeriodTexts(range) {
+            $('#ventas_gauge_sub').text(range.label);
+            $('#bar_chart_title').text(range.chartTitle);
+
+            if (range.period === 'day') {
+                $('#kpi_5_label').text('Ventas D\u00eda');
+                $('#kpi_6_label').text('Despachados D\u00eda');
+            } else {
+                $('#kpi_5_label').text('Ventas Hoy');
+                $('#kpi_6_label').text('Despachados Hoy');
+            }
+        }
+
+        function loadDashboardData() {
+            const range = getSelectedRange();
+            updatePeriodTexts(range);
 
             $.ajax({
                 url: '{{ route("dashboard.api") }}',
                 method: 'GET',
                 data: {
-                    start_date: startDate,
-                    end_date: endDate
+                    start_date: range.startDate,
+                    end_date: range.endDate,
+                    period: range.period
                 },
                 success: function (res) {
                     // Parse values safely
@@ -656,11 +768,6 @@
 
                     // Update texts
                     $('#ventas_gauge_text').text('S/' + res.sales);
-
-                    // Optional sub-text for gauge
-                    let pctIncrease = '';
-                    if (month) pctIncrease = `Mes: ${month}`; else pctIncrease = `Año: ${year}`;
-                    $('#ventas_gauge_sub').text(pctIncrease);
 
                     $('#balance_total').text('S/' + res.total_balance);
                     $('#gastos_totales').text('S/' + res.expenses);
@@ -685,7 +792,7 @@
                         $('#status_alert').parent().parent().removeClass('bg-danger-lt border-danger').addClass('bg-success-lt border-success');
                         $('#status_alert').siblings('i').removeClass('ti-alert-triangle text-danger').addClass('ti-check text-success');
                     } else {
-                        $('#status_alert').text('Atención, los gastos superan ingresos.');
+                        $('#status_alert').text('Atenci\u00f3n, los gastos superan ingresos.');
                         $('#status_alert').parent().parent().removeClass('bg-success-lt border-success').addClass('bg-danger-lt border-danger');
                         $('#status_alert').siblings('i').removeClass('ti-check text-success').addClass('ti-alert-triangle text-danger');
                     }
@@ -701,11 +808,14 @@
                     chartRentabilidad.update();
 
                     // Update Bar & Sparkline
+                    const chartLabels = (res.chartLabels && res.chartLabels.length) ? res.chartLabels : MONTH_SHORT_NAMES;
+                    chartBar.data.labels = chartLabels;
                     chartBar.data.datasets[0].data = res.totalSales;
                     chartBar.data.datasets[1].data = res.totalExpenses;
                     chartBar.update();
 
-                    chartSparkline.data.datasets[0].data = res.totalSales;
+                    chartSparkline.data.labels = chartLabels;
+                    chartSparkline.data.datasets[0].data = res.totalManualIncome || res.totalSales;
                     chartSparkline.update();
 
                     // Update KPIs from Payment Methods
@@ -718,7 +828,7 @@
                     }
 
                     // Fetch daily stats for the other 2 KPIs
-                    fetchDailyStats(new Date().toISOString().split('T')[0]);
+                    fetchDailyStats(range.dailyStatsDate);
                 }
             });
         }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleDetail;
@@ -33,6 +34,7 @@ class WebController extends Controller
         $today = now()->toDateString();
         $start_date = $isAssistant ? $today : $request->start_date;
         $end_date = $isAssistant ? $today : $request->end_date;
+        $period = $isAssistant ? 'day' : $request->get('period');
 
         $query = Sale::query();
         
@@ -118,32 +120,27 @@ class WebController extends Controller
             ];
         }
         
-        $chart = [];
-        
-        $salesByMonth = Sale::select(
-            DB::raw('MONTH(date) as month'),
-            DB::raw('SUM(total) as total'),
-        )->whereYear('date', date('Y'))->groupBy('month')
-            ->orderBy('month', 'asc')
-            ->get();
+        $chartStart = $start_date ?: now()->startOfYear()->toDateString();
+        $chartEnd = $end_date ?: now()->endOfYear()->toDateString();
+        $chart = $this->dashboardChartPeriods($chartStart, $chartEnd, $period);
 
-        $expensesByMonth = Expense::select(
-            DB::raw('MONTH(date) as month'),
-            DB::raw('SUM(amount) as total'),
-        )->whereYear('date', date('Y'))->groupBy('month')
-            ->orderBy('month', 'asc')
-            ->get();
+        $totalSalesByPeriod = [];
+        $totalExpensesByPeriod = [];
+        $totalManualIncomeByPeriod = [];
 
-        $totalSalesByMonth = [0,0,0,0,0,0,0,0,0,0,0,0];
-        
-        $totalExpensesByMonth = [0,0,0,0,0,0,0,0,0,0,0,0];
+        foreach($chart['ranges'] as $range){
+            $totalSalesByPeriod[] = (float) Sale::whereDate('date', '>=', $range['start'])
+                ->whereDate('date', '<=', $range['end'])
+                ->sum('total');
 
-        foreach($salesByMonth as $sale){
-            $totalSalesByMonth[$sale->month-1] = $sale->total;
-        }
+            $totalExpensesByPeriod[] = (float) Expense::whereDate('date', '>=', $range['start'])
+                ->whereDate('date', '<=', $range['end'])
+                ->sum('amount');
 
-        foreach($expensesByMonth as $expense){
-            $totalExpensesByMonth[$expense->month-1] = $expense->total;
+            $totalManualIncomeByPeriod[] = (float) CashboxMovement::where('type', 'income')
+                ->whereDate('date', '>=', $range['start'])
+                ->whereDate('date', '<=', $range['end'])
+                ->sum('amount');
         }
 
         $total_sales_paid = Sale::when($isAssistant, function($q){ return $q->whereDate('date', now()); })
@@ -166,9 +163,106 @@ class WebController extends Controller
             'total_sales_paid' => number_format($total_sales_paid, 2),
             'total_credit' => number_format($total_credit, 2),
             'methods' => $methods_totals,
-            'totalSales' => $totalSalesByMonth,
-            'totalExpenses' => $totalExpensesByMonth
+            'period' => $chart['period'],
+            'chartLabels' => $chart['labels'],
+            'totalSales' => $totalSalesByPeriod,
+            'totalExpenses' => $totalExpensesByPeriod,
+            'totalManualIncome' => $totalManualIncomeByPeriod
         ]);
+    }
+
+    private function dashboardChartPeriods($startDate, $endDate, $period = null)
+    {
+        $start = Carbon::parse($startDate)->startOfDay();
+        $end = Carbon::parse($endDate)->startOfDay();
+
+        if ($start->gt($end)) {
+            [$start, $end] = [$end, $start];
+        }
+
+        if (!in_array($period, ['year', 'month', 'day'])) {
+            if ($start->toDateString() === $end->toDateString()) {
+                $period = 'day';
+            } elseif ($start->format('Y-m') === $end->format('Y-m')) {
+                $period = 'month';
+            } else {
+                $period = 'year';
+            }
+        }
+
+        if ($period === 'day') {
+            return [
+                'period' => 'day',
+                'labels' => [$start->format('d/m')],
+                'ranges' => [[
+                    'start' => $start->toDateString(),
+                    'end' => $start->toDateString(),
+                ]],
+            ];
+        }
+
+        if ($period === 'month') {
+            $labels = [];
+            $ranges = [];
+            $cursor = $start->copy();
+            $week = 1;
+
+            while ($cursor->lte($end)) {
+                $rangeStart = $cursor->copy();
+                $rangeEnd = $cursor->copy()->addDays(6);
+
+                if ($rangeEnd->gt($end)) {
+                    $rangeEnd = $end->copy();
+                }
+
+                $labels[] = 'Sem ' . $week . ' (' . $rangeStart->day . '-' . $rangeEnd->day . ')';
+                $ranges[] = [
+                    'start' => $rangeStart->toDateString(),
+                    'end' => $rangeEnd->toDateString(),
+                ];
+
+                $cursor = $rangeEnd->copy()->addDay();
+                $week++;
+            }
+
+            return [
+                'period' => 'month',
+                'labels' => $labels,
+                'ranges' => $ranges,
+            ];
+        }
+
+        $labels = [];
+        $ranges = [];
+        $monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        $cursor = $start->copy()->startOfMonth();
+
+        while ($cursor->lte($end)) {
+            $rangeStart = $cursor->copy()->startOfMonth();
+            $rangeEnd = $cursor->copy()->endOfMonth();
+
+            if ($rangeStart->lt($start)) {
+                $rangeStart = $start->copy();
+            }
+
+            if ($rangeEnd->gt($end)) {
+                $rangeEnd = $end->copy();
+            }
+
+            $labels[] = $monthNames[$cursor->month - 1];
+            $ranges[] = [
+                'start' => $rangeStart->toDateString(),
+                'end' => $rangeEnd->toDateString(),
+            ];
+
+            $cursor->addMonthNoOverflow();
+        }
+
+        return [
+            'period' => 'year',
+            'labels' => $labels,
+            'ranges' => $ranges,
+        ];
     }
 
     public function dashboardProduct(Request $request){
@@ -232,19 +326,27 @@ class WebController extends Controller
     public function dashboardDaily(Request $request){
         $date = $request->date ?? date('Y-m-d');
 
-        // Total sold quantity for the day
-        $sold = DB::table('sale_details')
-            ->join('sales', 'sales.id', '=', 'sale_details.sale_id')
+        // Total sales/orders for the day. A sale can contain several products.
+        $sold = DB::table('sales')
             ->whereDate('sales.date', $date)
-            ->sum('sale_details.quantity');
+            ->where('sales.status', '!=', 'Anulado')
+            ->count();
 
-        // Total dispatched quantity for the day
-        // Logic: Sales that have a corresponding entry in cashbox_movements (markDispatch creates one)
-        $dispatched = DB::table('sale_details')
-            ->join('sales', 'sales.id', '=', 'sale_details.sale_id')
-            ->join('cashbox_movements', 'cashbox_movements.sale_id', '=', 'sales.id')
+        // Total dispatched sales/orders for the day, using the same delivered logic as SaleController.
+        $dispatched = DB::table('sales')
             ->whereDate('sales.date', $date)
-            ->sum('sale_details.quantity');
+            ->where('sales.status', '!=', 'Anulado')
+            ->where(function ($q) {
+                $q->where('sales.paid', 1)
+                    ->orWhere('sales.type', 'Pago pendiente')
+                    ->orWhereExists(function ($subquery) {
+                        $subquery->select(DB::raw(1))
+                            ->from('cashbox_movements')
+                            ->whereColumn('cashbox_movements.sale_id', 'sales.id')
+                            ->where('cashbox_movements.type', 'debt');
+                    });
+            })
+            ->count();
 
         return response()->json([
             'sold' => (int)$sold,

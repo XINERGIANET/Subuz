@@ -21,6 +21,7 @@ use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\QuoteController;
+use App\Http\Controllers\SupplyController;
 
 
 Route::get('login', [AuthController::class, 'login'])->name('auth.login');
@@ -127,6 +128,7 @@ Route::middleware('auth')->group(function () {
 		Route::get('prices/special/{client_id}', [PriceController::class, 'getSpecialPrices'])->name('prices.special');
 
 		Route::resource('payment_methods', PaymentMethodController::class);
+		Route::resource('supplies', SupplyController::class)->except(['index', 'create', 'show']);
 
 		Route::get('sales/excel', [SaleController::class, 'excel'])->name('sales.excel');
 
@@ -184,6 +186,7 @@ Route::middleware('auth')->group(function () {
 		Route::get('reports/products', [ReportController::class, 'products'])->name('reports.products');
 		Route::get('reports/liquidation', [ReportController::class, 'liquidation'])->name('reports.liquidation');
 		Route::get('reports/liquidation/sales', [ReportController::class, 'getSalesForLiquidation'])->name('reports.liquidation.sales');
+		Route::get('reports/liquidations-history', [ReportController::class, 'liquidationsHistory'])->name('reports.liquidations_history');
 		Route::get('reports/cashbox', [ReportController::class, 'cashbox'])->name('reports.cashbox');
 		
 		Route::get('jerry-can-report', [SaleController::class, 'jerryCanReportView'])->name('reports.jerryCan');

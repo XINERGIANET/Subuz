@@ -41,5 +41,11 @@ class Product extends Model
         return $this->price;
     }
 
+    public function supplies()
+    {
+        return $this->belongsToMany(Supply::class, 'product_supplies')
+            ->withPivot('quantity');
+    }
+
     public $timestamps = false;
 }
