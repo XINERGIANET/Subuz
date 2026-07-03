@@ -17,10 +17,11 @@ class ApiDocumentController extends Controller
             ], 422);
         }
 
-        $response = Http::timeout(15)->get((string) config('apireniec.url'), [
-            'document' => $dni,
-            'key' => (string) config('apireniec.key'),
-        ]);
+        $response = Http::withToken((string) config('apireniec.key'))
+            ->timeout(15)
+            ->post((string) config('apireniec.url'), [
+                'dni' => $dni,
+            ]);
 
         if (!$response->successful()) {
             return response()->json([
@@ -30,55 +31,23 @@ class ApiDocumentController extends Controller
         }
 
         $data = (array) $response->json();
-        $estado = (bool) ($data['estado'] ?? $data['status'] ?? false);
-        $resultado = (array) ($data['resultado'] ?? []);
-        $mensaje = (string) ($data['mensaje'] ?? $data['message'] ?? '');
+        $estado = (bool) ($data['success'] ?? false);
+        $resultado = (array) ($data['data'] ?? []);
+        $mensaje = (string) ($data['message'] ?? '');
 
-        if ($estado && $resultado === []) {
-            $hasPersonFields = ($data['nombres'] ?? '') !== ''
-                || ($data['apellido_paterno'] ?? '') !== ''
-                || ($data['apellido_materno'] ?? '') !== ''
-                || ($data['nombre_completo'] ?? '') !== ''
-                || ($data['name'] ?? '') !== '';
-            if ($hasPersonFields) {
-                $resultado = $data;
-            }
-        }
-
-        if (!$estado || $resultado === []) {
+        if (!$estado || empty($resultado)) {
             return response()->json([
                 'status' => false,
                 'message' => $mensaje !== '' ? $mensaje : 'No se encontró información en RENIEC.',
             ], 422);
         }
 
-        $id = (string) ($resultado['id'] ?? $dni);
+        $id = (string) ($resultado['numero'] ?? $dni);
         $nombres = trim((string) ($resultado['nombres'] ?? ''));
-        $apellidoPaterno = trim((string) ($resultado['apellido_paterno'] ?? ($resultado['apellidoPaterno'] ?? '')));
-        $apellidoMaterno = trim((string) ($resultado['apellido_materno'] ?? ($resultado['apellidoMaterno'] ?? '')));
+        $apellidoPaterno = trim((string) ($resultado['apellido_paterno'] ?? ''));
+        $apellidoMaterno = trim((string) ($resultado['apellido_materno'] ?? ''));
+        $nombreCompleto = trim((string) ($resultado['nombre_completo'] ?? ''));
 
-        if ($nombres === '' && $apellidoPaterno === '' && $apellidoMaterno === '') {
-            $full = trim((string) ($resultado['nombre_completo'] ?? ($resultado['name'] ?? '')));
-            if ($full !== '') {
-                $parts = preg_split('/\s+/', $full) ?: [];
-                if (count($parts) >= 4) {
-                    $nombres = trim(implode(' ', array_slice($parts, 0, count($parts) - 2)));
-                    $apellidoPaterno = (string) ($parts[count($parts) - 2] ?? '');
-                    $apellidoMaterno = (string) ($parts[count($parts) - 1] ?? '');
-                } elseif (count($parts) === 3) {
-                    $nombres = (string) ($parts[0] ?? '');
-                    $apellidoPaterno = (string) ($parts[1] ?? '');
-                    $apellidoMaterno = (string) ($parts[2] ?? '');
-                } elseif (count($parts) === 2) {
-                    $nombres = (string) ($parts[0] ?? '');
-                    $apellidoPaterno = (string) ($parts[1] ?? '');
-                } elseif (count($parts) === 1) {
-                    $nombres = (string) ($parts[0] ?? '');
-                }
-            }
-        }
-
-        $nombreCompleto = trim(implode(' ', array_filter([$nombres, $apellidoPaterno, $apellidoMaterno])));
         if ($nombreCompleto === '') {
             return response()->json([
                 'status' => false,
@@ -95,7 +64,7 @@ class ApiDocumentController extends Controller
             'nombres' => $nombres,
             'apellido_paterno' => $apellidoPaterno,
             'apellido_materno' => $apellidoMaterno,
-            'nombre_completo' => (string) ($resultado['nombre_completo'] ?? $nombreCompleto),
+            'nombre_completo' => $nombreCompleto,
             'first_name' => $nombres,
             'last_name' => $apellidosUnificados,
             'name' => $nombreCompleto,
@@ -112,10 +81,11 @@ class ApiDocumentController extends Controller
             ], 422);
         }
 
-        $response = Http::timeout(15)->get((string) config('apireniec.ruc_url'), [
-            'document' => $ruc,
-            'key' => (string) config('apireniec.key'),
-        ]);
+        $response = Http::withToken((string) config('apireniec.key'))
+            ->timeout(15)
+            ->post((string) config('apireniec.ruc_url'), [
+                'ruc' => $ruc,
+            ]);
 
         if (!$response->successful()) {
             return response()->json([
@@ -125,9 +95,9 @@ class ApiDocumentController extends Controller
         }
 
         $data = (array) $response->json();
-        $estado = (bool) ($data['estado'] ?? $data['status'] ?? false);
-        $resultado = (array) ($data['resultado'] ?? []);
-        $mensaje = (string) ($data['mensaje'] ?? $data['message'] ?? '');
+        $estado = (bool) ($data['success'] ?? false);
+        $resultado = (array) ($data['data'] ?? []);
+        $mensaje = (string) ($data['message'] ?? '');
 
         if (!$estado || empty($resultado)) {
             return response()->json([
@@ -139,8 +109,8 @@ class ApiDocumentController extends Controller
         return response()->json([
             'status' => true,
             'message' => $mensaje !== '' ? $mensaje : 'Encontrado',
-            'ruc' => (string) ($resultado['id'] ?? $ruc),
-            'legal_name' => trim((string) ($resultado['razon_social'] ?? ($resultado['nombre'] ?? ''))),
+            'ruc' => (string) ($resultado['ruc'] ?? $ruc),
+            'legal_name' => trim((string) ($resultado['nombre_o_razon_social'] ?? '')),
             'address' => trim((string) ($resultado['direccion'] ?? '')),
             'department' => trim((string) ($resultado['departamento'] ?? '')),
             'province' => trim((string) ($resultado['provincia'] ?? '')),

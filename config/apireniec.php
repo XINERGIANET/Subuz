@@ -1,10 +1,10 @@
 <?php
 
 return [
-    // Endpoint base para consulta DNI (PeruDevs).
-    'url' => env('APIRENIEC_URL', 'https://api.perudevs.com/api/v1/dni/simple'),
-    // Endpoint base para consulta RUC (PeruDevs).
-    'ruc_url' => env('APIRENIEC_URL_RUC', 'https://api.perudevs.com/api/v1/ruc'),
-    // KEY de PeruDevs.
-    'key' => env('APIRENIEC_KEY', 'cGVydWRldnMucHJvZHVjdGlvbi5maXRjb2RlcnMuNjlhMGJlN2YwNGEyNjc2MDk2ZjkzZDYz'),
+    // Endpoint base para consulta DNI (json.pe).
+    'url' => env('APIRENIEC_URL', 'https://api.json.pe/api/dni'),
+    // Endpoint base para consulta RUC (json.pe).
+    'ruc_url' => env('APIRENIEC_URL_RUC', 'https://api.json.pe/api/ruc'),
+    // KEY de json.pe.
+    'key' => env('APIRENIEC_KEY', ''),
 ];
