@@ -637,6 +637,27 @@ class SaleController extends Controller
         $fpdf->SetFont('Montserrat', '', 10);
         $fpdf->SetTextColor(80, 80, 80);
         $fpdf->Cell(277, 8, utf8_decode($period), 0, 1, 'C');
+        $fpdf->Ln(5);
+
+        // Fetch accounts marked for reports
+        $accountsForReport = \App\Models\PaymentMethod::where('show_in_reports', 1)->get();
+        if ($accountsForReport->count() > 0 && ($request->is_credit || $request->is_pending)) {
+            $fpdf->SetFont('Montserrat', 'B', 10);
+            $fpdf->SetTextColor(2, 93, 166);
+            $fpdf->Cell(277, 6, utf8_decode('Cuentas para transferencias:'), 0, 1, 'C');
+            $fpdf->SetFont('Montserrat', '', 9);
+            $fpdf->SetTextColor(80, 80, 80);
+            $accountsStr = '';
+            foreach ($accountsForReport as $acc) {
+                $accInfo = $acc->name;
+                if ($acc->account_number) $accInfo .= ': ' . $acc->account_number;
+                if ($acc->holder_name) $accInfo .= ' (' . $acc->holder_name . ')';
+                $accountsStr .= $accInfo . '   |   ';
+            }
+            $accountsStr = rtrim($accountsStr, '   |   ');
+            $fpdf->Cell(277, 6, utf8_decode($accountsStr), 0, 1, 'C');
+        }
+
         $fpdf->Ln(10);
 
         $fpdf->SetFillColor(2, 93, 166);

@@ -26,7 +26,10 @@ class PaymentMethodController extends Controller
             ]);
         }
 
-        PaymentMethod::create($request->all());
+        $data = $request->all();
+        $data['show_in_reports'] = $request->has('show_in_reports');
+
+        PaymentMethod::create($data);
 
         return response()->json([
             'status' => true
@@ -49,7 +52,10 @@ class PaymentMethodController extends Controller
             ]);
         }
 
-        $paymentMethod->update($request->all());
+        $data = $request->all();
+        $data['show_in_reports'] = $request->has('show_in_reports');
+
+        $paymentMethod->update($data);
 
         return response()->json([
             'status' => true

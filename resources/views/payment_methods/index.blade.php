@@ -23,6 +23,10 @@
 				<tr>
 					<th>#</th>
 					<th>Nombre de la Cuenta</th>
+					<th>Número de Cuenta</th>
+					<th>Titular</th>
+					<th>En Reportes</th>
+					<th>Saldo Actual</th>
 					<th>Acción</th>
 				</tr>
 			</thead>
@@ -32,6 +36,16 @@
 					<tr>
 						<td>{{ $loop->iteration }}</td>
 						<td>{{ $method->name }}</td>
+						<td>{{ $method->account_number ?? '-' }}</td>
+						<td>{{ $method->holder_name ?? '-' }}</td>
+						<td>
+							@if($method->show_in_reports)
+								<span class="badge bg-success">Sí</span>
+							@else
+								<span class="badge bg-secondary">No</span>
+							@endif
+						</td>
+						<td><span class="fw-bold text-success">S/ {{ number_format($method->current_balance, 2) }}</span></td>
 						<td>
 							<div class="d-flex gap-2">
 								<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $method->id }}" data-bs-toggle="tooltip" title="Editar">
@@ -73,6 +87,20 @@
   			  	<label class="form-label">Nombre de la Cuenta</label>
   			  	<input type="text" class="form-control" name="name" placeholder="Ej: BCP, Yape, Efectivo...">
   			  </div>
+			  <div class="mb-3">
+  			  	<label class="form-label">Número de Cuenta (Opcional)</label>
+  			  	<input type="text" class="form-control" name="account_number" placeholder="Ej: 191-123456...">
+  			  </div>
+			  <div class="mb-3">
+  			  	<label class="form-label">Titular (Opcional)</label>
+  			  	<input type="text" class="form-control" name="holder_name" placeholder="Ej: Juan Pérez">
+  			  </div>
+			  <div class="mb-3">
+			  	<label class="form-check">
+				  <input class="form-check-input" type="checkbox" name="show_in_reports">
+				  <span class="form-check-label">Mostrar en reportes de cobranza</span>
+				</label>
+			  </div>
   			</div>
   			<div class="modal-footer">
   			  <button type="button" class="btn me-auto" data-bs-dismiss="modal">Cerrar</button>
@@ -97,6 +125,20 @@
   			  	<label class="form-label">Nombre de la Cuenta</label>
   			  	<input type="text" class="form-control" name="name" id="editName">
   			  </div>
+			  <div class="mb-3">
+  			  	<label class="form-label">Número de Cuenta (Opcional)</label>
+  			  	<input type="text" class="form-control" name="account_number" id="editAccountNumber">
+  			  </div>
+			  <div class="mb-3">
+  			  	<label class="form-label">Titular (Opcional)</label>
+  			  	<input type="text" class="form-control" name="holder_name" id="editHolderName">
+  			  </div>
+			  <div class="mb-3">
+			  	<label class="form-check">
+				  <input class="form-check-input" type="checkbox" name="show_in_reports" id="editShowInReports">
+				  <span class="form-check-label">Mostrar en reportes de cobranza</span>
+				</label>
+			  </div>
   			</div>
   			<div class="modal-footer">
   				<input type="hidden" id="editId">
@@ -139,6 +181,9 @@
 			method: 'GET',
 			success: function(data){
 				$('#editName').val(data.name);
+				$('#editAccountNumber').val(data.account_number);
+				$('#editHolderName').val(data.holder_name);
+				$('#editShowInReports').prop('checked', data.show_in_reports == 1);
 				$('#editId').val(data.id);
 				$('#editModal').modal('show');
 			}
