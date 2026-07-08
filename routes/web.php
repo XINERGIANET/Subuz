@@ -164,6 +164,7 @@ Route::middleware('auth')->group(function () {
 	});
 
 	Route::middleware('role:admin|viewer|asistente|despachador')->group(function () {
+		Route::post('expenses/stock', [ExpenseController::class, 'storeStockPurchase'])->name('expenses.storeStock');
 		Route::resource('expenses', ExpenseController::class);
 	});
 

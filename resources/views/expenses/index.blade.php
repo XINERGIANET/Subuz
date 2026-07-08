@@ -62,6 +62,10 @@
                     <i class="ti ti-chart-donut-3 me-1 fs-3"></i> Ver gr&aacute;ficos
                 </a>
                 @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente') || auth()->user()->hasRole('despachador'))
+                    <button class="btn btn-warning btn-pill px-4 shadow-sm" data-bs-toggle="modal"
+                        data-bs-target="#stockModal">
+                        <i class="ti ti-box me-1 fs-3"></i> Gastos por stock
+                    </button>
                     <button class="btn btn-brand btn-pill px-4 shadow-sm" data-bs-toggle="modal"
                         data-bs-target="#createModal">
                         <i class="ti ti-plus me-1 fs-3"></i> Crear nuevo gasto
@@ -255,6 +259,95 @@
             </div>
         @endif
     </div>
+    <div class="modal modal-blur fade" id="stockModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+            <div class="modal-content">
+                <form id="storeStockForm" method="POST">
+                    @csrf
+                    <div class="modal-header bg-warning-lt">
+                        <h5 class="modal-title"><i class="ti ti-box me-2"></i>Comprar Stock (Gasto)</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Tipo de Ítem</label>
+                                <select class="form-select" name="item_type" id="stockItemType" required>
+                                    <option value="product">Producto</option>
+                                    <option value="supply">Insumo</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label" id="stockItemLabel">Producto</label>
+                                <div id="containerStockProducts">
+                                    <select class="form-select ts-stock-products" name="item_id_product" id="stockProductId">
+                                        <option value="">Seleccionar producto...</option>
+                                        @foreach($stockProducts as $p)
+                                            <option value="{{ $p->id }}">
+                                                {{ $p->name }} (Stock: {{ $p->stock }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div id="containerStockSupplies" class="d-none">
+                                    <select class="form-select ts-stock-supplies" name="item_id_supply" id="stockSupplyId">
+                                        <option value="">Seleccionar insumo...</option>
+                                        @foreach($stockSupplies as $s)
+                                            <option value="{{ $s->id }}">
+                                                {{ $s->name }} (Stock: {{ $s->stock }} {{ $s->unit ?? 'unidades' }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Cantidad a sumar al stock</label>
+                                <input type="number" class="form-control" name="quantity" min="0.01" step="0.01" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Monto cobrado por el proveedor (S/)</label>
+                                <input type="number" class="form-control fw-bold text-danger" name="amount" min="0" step="0.01" required>
+                            </div>
+                        </div>
+                        <hr>
+                        <h4 class="mb-3">Datos Financieros del Egreso</h4>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Método de Pago</label>
+                                <select class="form-select" name="payment_method_id" required>
+                                    <option value="">Seleccionar...</option>
+                                    @foreach ($payment_methods as $pm)
+                                        <option value="{{ $pm->id }}">{{ $pm->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">N° Comprobante (Opcional)</label>
+                                <input type="text" class="form-control" name="receipt_number">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">N° Operación (Opcional)</label>
+                                <input type="text" class="form-control" name="operation_number">
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Fecha (Opcional)</label>
+                                <input type="date" class="form-control" name="real_date">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn me-auto" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-warning"><i class="ti ti-check me-1"></i> Confirmar Compra</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <div class="modal modal-blur fade" id="createModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
@@ -1040,6 +1133,90 @@
             if($('#filterCategory').val()) {
                 updateFilterSubcategories();
             }
+
+            // Stock Purchase Logic
+            var tsStockProducts, tsStockSupplies;
+
+            if (document.getElementById('stockProductId')) {
+                tsStockProducts = new TomSelect('#stockProductId', {
+                    create: false,
+                    sortField: { field: "text", direction: "asc" }
+                });
+            }
+
+            if (document.getElementById('stockSupplyId')) {
+                tsStockSupplies = new TomSelect('#stockSupplyId', {
+                    create: false,
+                    sortField: { field: "text", direction: "asc" }
+                });
+                tsStockSupplies.disable(); // initially disabled because product is default
+            }
+
+            $('#stockItemType').change(function() {
+                var type = $(this).val();
+                if (type === 'product') {
+                    $('#stockItemLabel').text('Producto');
+                    $('#containerStockProducts').removeClass('d-none');
+                    if (tsStockProducts) tsStockProducts.enable();
+                    $('#stockProductId').prop('required', true);
+
+                    $('#containerStockSupplies').addClass('d-none');
+                    if (tsStockSupplies) {
+                        tsStockSupplies.disable();
+                        tsStockSupplies.clear();
+                    }
+                    $('#stockSupplyId').prop('required', false);
+                } else {
+                    $('#stockItemLabel').text('Insumo');
+                    $('#containerStockSupplies').removeClass('d-none');
+                    if (tsStockSupplies) tsStockSupplies.enable();
+                    $('#stockSupplyId').prop('required', true);
+
+                    $('#containerStockProducts').addClass('d-none');
+                    if (tsStockProducts) {
+                        tsStockProducts.disable();
+                        tsStockProducts.clear();
+                    }
+                    $('#stockProductId').prop('required', false);
+                }
+            });
+
+            $('#storeStockForm').submit(function(e) {
+                e.preventDefault();
+                var form = $(this);
+                
+                var data = {
+                    _token: $('input[name="_token"]').val(),
+                    item_type: $('#stockItemType').val(),
+                    item_id: $('#stockItemType').val() === 'product' ? $('#stockProductId').val() : $('#stockSupplyId').val(),
+                    quantity: form.find('input[name="quantity"]').val(),
+                    amount: form.find('input[name="amount"]').val(),
+                    payment_method_id: form.find('select[name="payment_method_id"]').val(),
+                    receipt_number: form.find('input[name="receipt_number"]').val(),
+                    operation_number: form.find('input[name="operation_number"]').val(),
+                    real_date: form.find('input[name="real_date"]').val()
+                };
+
+                $.ajax({
+                    url: '{{ route("expenses.storeStock") }}',
+                    method: 'POST',
+                    data: data,
+                    success: function(response) {
+                        if (response.status) {
+                            $('#stockModal').modal('hide');
+                            form[0].reset();
+                            ToastMessage.fire({ text: 'Compra de stock registrada exitosamente' })
+                                .then(() => location.reload());
+                        } else {
+                            ToastError.fire({ text: response.error ? response.error : 'Ocurrió un error al registrar la compra' });
+                        }
+                    },
+                    error: function(err) {
+                        ToastError.fire({ text: 'Ocurrió un error de conexión' });
+                    }
+                });
+            });
+
         });
     </script>
 @endsection

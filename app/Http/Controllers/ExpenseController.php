@@ -60,7 +60,10 @@ class ExpenseController extends Controller
             $descriptions = Expense::select('description')->distinct()->pluck('description');
         }
         
-        return view('expenses.index', compact('expenses', 'payment_methods', 'total_expenses', 'descriptions', 'categories', 'financeCategoryId', 'financeLoans'));
+        $stockProducts = \App\Models\Product::orderBy('name')->get();
+        $stockSupplies = \App\Models\Supply::orderBy('name')->get();
+
+        return view('expenses.index', compact('expenses', 'payment_methods', 'total_expenses', 'descriptions', 'categories', 'financeCategoryId', 'financeLoans', 'stockProducts', 'stockSupplies'));
     }
 
     public function indicators(Request $request){
@@ -641,6 +644,77 @@ class ExpenseController extends Controller
             if (!$loan->trashed() && $loan->fresh()->remaining_balance > 0.1) {
                 $loan->update(['status' => 'Activo']);
             }
+        }
+    }
+
+    public function storeStockPurchase(Request $request) {
+        $validator = Validator::make($request->all(), [
+            'item_type' => 'required|in:product,supply',
+            'item_id' => 'required|integer',
+            'quantity' => 'required|numeric|min:0.01',
+            'amount' => 'required|numeric|min:0',
+            'payment_method_id' => 'required|exists:payment_methods,id',
+            'receipt_number' => 'nullable|string',
+            'operation_number' => 'nullable|string',
+            'operation_number' => 'nullable|string',
+            'date' => 'nullable|date',
+            'real_date' => 'nullable|date'
+        ]);
+
+        if($validator->fails()){
+            return response()->json([
+                'status' => false,
+                'error' => $validator->errors()->first()
+            ]);
+        }
+
+        try {
+            DB::transaction(function() use ($request) {
+                // Update stock
+                $itemName = '';
+                if ($request->item_type === 'product') {
+                    $product = \App\Models\Product::findOrFail($request->item_id);
+                    $product->stock += $request->quantity;
+                    $product->save();
+                    $itemName = $product->name;
+                } else {
+                    $supply = \App\Models\Supply::findOrFail($request->item_id);
+                    $supply->stock += $request->quantity;
+                    $supply->save();
+                    $itemName = $supply->name;
+                }
+
+                $descriptionType = $request->item_type === 'product' ? 'Producto' : 'Insumo';
+                $description = "Compra de stock: $itemName ($descriptionType) - Cant: " . $request->quantity;
+
+                // Auto-assign category
+                $category = \App\Models\ExpenseCategory::firstOrCreate(['name' => 'Compra de Stock']);
+                $subcategory = \App\Models\ExpenseSubcategory::firstOrCreate([
+                    'expense_category_id' => $category->id,
+                    'name' => $descriptionType
+                ]);
+
+                // Create Expense
+                Expense::create([
+                    'description' => $description,
+                    'amount' => $request->amount,
+                    'date' => $request->date ?: now()->format('Y-m-d H:i:s'),
+                    'real_date' => $request->real_date,
+                    'receipt_number' => $request->receipt_number,
+                    'operation_number' => $request->operation_number,
+                    'expense_category_id' => $category->id,
+                    'expense_subcategory_id' => $subcategory->id,
+                    'payment_method_id' => $request->payment_method_id,
+                    'user_id' => auth()->id()
+                ]);
+            });
+
+            return response()->json(['status' => true]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error' => 'Ocurrió un error al registrar la compra de stock: ' . $e->getMessage()
+            ]);
         }
     }
 }
