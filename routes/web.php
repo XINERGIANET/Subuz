@@ -65,6 +65,7 @@ Route::middleware('auth')->group(function () {
 	Route::get('/', [WebController::class, 'index']);
 
 	Route::get('sales', [SaleController::class, 'index'])->name('sales.index');
+	Route::get('sales/product-payments/{id}', [SaleController::class, 'productPayments'])->name('sales.product_payments');
 	Route::get('sales/{sale}/details', [SaleController::class, 'details'])->name('sales.details');
 	Route::post('sales/{sale}/dispatch', [SaleController::class, 'markDispatch'])->name('sales.dispatch');
 	Route::post('sales/{sale}/delivery-status', [SaleController::class, 'updateDeliveryStatus'])->name('sales.updateDeliveryStatus');
@@ -217,4 +218,5 @@ Route::middleware('auth')->group(function () {
 Route::get('fixed-assets', function () {
     return view('fixed_assets.index');
 })->name('fixed-assets.index')->middleware('auth');
+
 

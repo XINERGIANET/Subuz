@@ -41,6 +41,14 @@
 		.ts-dropdown {
 			z-index: 9999 !important;
 		}
+
+		.product-summary-item {
+			transition: transform 0.2s, opacity 0.2s;
+		}
+		.product-summary-item:hover {
+			transform: scale(1.05);
+			opacity: 0.8;
+		}
 	</style>
 	<script>
 		console.log("Sales view loaded");
@@ -76,7 +84,7 @@
 			<div class="card-body border-bottom pt-3 pb-3">
 				<div class="d-flex text-center gap-3 flex-wrap justify-content-center justify-content-md-start align-items-center">
 					@foreach($products_sold as $ps)
-						<div>
+						<div class="product-summary-item cursor-pointer" data-id="{{ $ps->id }}" data-name="{{ $ps->name }}">
 							<span class="d-block small text-muted">{{ $ps->name }}</span>
 							<span class="fs-3 fw-bold text-primary">{{ $ps->total_quantity }} <span class="fs-5 text-muted fw-normal">(S/{{ number_format($ps->total_amount, 2) }})</span></span>
 						</div>
@@ -1889,5 +1897,71 @@
 			});
 		});
 
+		$(document).on('click', '.product-summary-item', function() {
+			var id = $(this).data('id');
+			var name = $(this).data('name');
+			
+			$('#payment-product-name').text(name);
+			$('#product-payments-loading').show();
+			$('#product-payments-list').hide().empty();
+			
+			$('#modal-product-payments').modal('show');
+			
+			$.ajax({
+				url: '/sales/product-payments/' + id,
+				method: 'GET',
+				success: function(response) {
+					$('#product-payments-loading').hide();
+					$('#product-payments-list').show();
+					
+					if (response.status && response.data.length > 0) {
+						var html = '';
+						response.data.forEach(function(pt) {
+							html += `
+								<div class="list-group-item d-flex justify-content-between align-items-center">
+									<div>
+										<span class="text-muted d-block small">Total</span>
+										<span class="fw-bold fs-3">${pt.name}</span>
+									</div>
+									<div class="text-success fw-bold fs-2">
+										S/${pt.amount.toFixed(2)}
+									</div>
+								</div>
+							`;
+						});
+						$('#product-payments-list').html(html);
+					} else {
+						$('#product-payments-list').html('<div class="list-group-item text-center py-4 text-muted">No hay cobros registrados</div>');
+					}
+				},
+				error: function() {
+					$('#product-payments-loading').hide();
+					$('#product-payments-list').show().html('<div class="list-group-item text-center py-4 text-danger">Ocurrió un error</div>');
+				}
+			});
+		});
+
 	</script>
+
+<div class="modal modal-blur fade" id="modal-product-payments" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Cobros: <span id="payment-product-name" class="text-primary"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="product-payments-loading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+                <div class="list-group list-group-flush" id="product-payments-list" style="display: none;">
+                    <!-- Llenado por AJAX -->
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-outline-secondary w-100" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection

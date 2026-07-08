@@ -292,6 +292,7 @@ class SaleController extends Controller
                 ->where('sales.paid', 1)
                 ->where('sales.date', '>=', $cashbox->opened_at)
                 ->select(
+                    'products.id',
                     'products.name', 
                     \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity) as total_quantity'),
                     \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity * sale_details.price) as total_amount')
@@ -300,27 +301,77 @@ class SaleController extends Controller
                 ->get();
         }
 
+        $pending_sale_ids = (clone $not_delivered_query)->pluck('id');
         $pending_products = collect();
-        if ($cashbox) {
-            $pending_products = \App\Models\SaleDetail::whereHas('sale', function ($q) use ($cashbox) {
-                $q->where('status', '!=', 'Anulado')
-                  ->where('paid', 0)
-                  ->where('type', '!=', 'Pago pendiente')
-                  ->where('date', '>=', $cashbox->opened_at)
-                  ->whereDoesntHave('movements', function ($mq) {
-                      $mq->where('type', 'debt');
-                  });
-            })
-            ->join('products', 'sale_details.product_id', '=', 'products.id')
-            ->select(
-                'products.name', 
-                \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity) as total_quantity')
-            )
-            ->groupBy('products.id', 'products.name')
-            ->get();
+        
+        if ($pending_sale_ids->isNotEmpty()) {
+            $pending_products = \App\Models\SaleDetail::whereIn('sale_id', $pending_sale_ids)
+                ->join('products', 'sale_details.product_id', '=', 'products.id')
+                ->select(
+                    'products.name', 
+                    \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity) as total_quantity')
+                )
+                ->groupBy('products.id', 'products.name')
+                ->get();
         }
 
         return view('sales.index', compact('sales', 'total_sales', 'total_sales_details', 'total_cash', 'payment_totals', 'payment_total_details', 'total_not_delivered', 'total_not_delivered_details', 'total_unpaid_delivered', 'total_unpaid_delivered_details', 'total_by_type', 'total_by_type_delivered', 'total_by_type_not_delivered', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox', 'products', 'selected_client', 'delivered_count', 'products_sold', 'pending_products'));
+    }
+
+    public function productPayments($product_id)
+    {
+        $cashbox = Cashbox::currentOpen();
+        if (!$cashbox) {
+            return response()->json(['error' => 'No hay caja abierta'], 400);
+        }
+
+        $saleDetails = \App\Models\SaleDetail::with(['sale.payments.payment_method'])
+            ->where('product_id', $product_id)
+            ->whereHas('sale', function ($q) use ($cashbox) {
+                $q->where('status', '!=', 'Anulado')
+                  ->where('paid', 1)
+                  ->where('date', '>=', $cashbox->opened_at);
+            })
+            ->get();
+
+        $payment_breakdown = [];
+
+        foreach ($saleDetails as $detail) {
+            $sale = $detail->sale;
+            if (!$sale || $sale->total <= 0) continue;
+
+            $product_value = $detail->quantity * $detail->price;
+            $ratio = $product_value / $sale->total;
+
+            foreach ($sale->payments as $payment) {
+                $allocated_amount = $payment->amount * $ratio;
+                $method_name = optional($payment->payment_method)->name ?? 'Efectivo';
+
+                if (!isset($payment_breakdown[$method_name])) {
+                    $payment_breakdown[$method_name] = 0;
+                }
+                $payment_breakdown[$method_name] += $allocated_amount;
+            }
+        }
+
+        $formatted_breakdown = [];
+        foreach ($payment_breakdown as $name => $amount) {
+            if ($amount > 0) {
+                $formatted_breakdown[] = [
+                    'name' => $name,
+                    'amount' => round($amount, 2)
+                ];
+            }
+        }
+
+        usort($formatted_breakdown, function($a, $b) {
+            return $b['amount'] <=> $a['amount'];
+        });
+
+        return response()->json([
+            'status' => true,
+            'data' => $formatted_breakdown
+        ]);
     }
 
     public function create(Request $request)
