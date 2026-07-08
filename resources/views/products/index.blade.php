@@ -97,6 +97,9 @@
 							<td>
 								<div class="d-flex gap-2">
 									<div class="d-flex gap-2">
+										<button class="btn btn-icon btn-history" data-id="{{ $product->id }}" data-type="product" data-bs-toggle="tooltip" title="Historial de Compras">
+											<i class="ti ti-history icon text-blue"></i>
+										</button>
 										<button class="btn btn-icon btn-edit-corporate btn-edit" data-id="{{ $product->id }}" data-bs-toggle="tooltip" title="Editar">
 											<i class="ti ti-pencil icon"></i>
 										</button>
@@ -197,6 +200,9 @@
 							<td>{{ $supply->unit ?: '-' }}</td>
 							<td>
 								<div class="d-flex gap-2">
+									<button class="btn btn-icon btn-history" data-id="{{ $supply->id }}" data-type="supply" data-bs-toggle="tooltip" title="Historial de Compras">
+										<i class="ti ti-history icon text-blue"></i>
+									</button>
 									<button class="btn btn-icon btn-edit-corporate btn-edit-supply" data-id="{{ $supply->id }}" data-bs-toggle="tooltip" title="Editar">
 										<i class="ti ti-pencil icon"></i>
 									</button>
@@ -609,6 +615,82 @@
 		</div>
 	</div>
 </div>
+
+<div class="modal modal-blur fade" id="historyModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+		<div class="modal-content shadow-lg border-0">
+			<div class="modal-header border-0 pb-0">
+				<h5 class="modal-title d-flex align-items-center gap-2 fs-2 fw-bold text-blue">
+					<i class="ti ti-history text-blue fs-1"></i>
+					Historial de Compras de Stock
+				</h5>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+			</div>
+			<div class="modal-body pt-3">
+				<div class="table-responsive">
+					<table class="table card-table table-vcenter table-striped">
+						<thead>
+							<tr>
+								<th>Fecha de Registro</th>
+								<th>Fecha Real</th>
+								<th>Cantidad Comprada</th>
+								<th>Monto Invertido (S/)</th>
+								<th>MÃ©todo de Pago</th>
+								<th>Comprobante / OperaciÃ³n</th>
+							</tr>
+						</thead>
+						<tbody id="historyTableBody">
+							<!-- Populated via AJAX -->
+						</tbody>
+					</table>
+				</div>
+			</div>
+			<div class="modal-footer border-0">
+				<button type="button" class="btn btn-ghost-secondary px-4 fw-bold" data-bs-dismiss="modal">
+					<i class="ti ti-x icon me-1"></i> Cerrar
+				</button>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="modal modal-blur fade" id="historyModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+		<div class="modal-content shadow-lg border-0">
+			<div class="modal-header border-0 pb-0">
+				<h5 class="modal-title d-flex align-items-center gap-2 fs-2 fw-bold text-blue">
+					<i class="ti ti-history text-blue fs-1"></i>
+					Historial de Compras de Stock
+				</h5>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+			</div>
+			<div class="modal-body pt-3">
+				<div class="table-responsive">
+					<table class="table card-table table-vcenter table-striped">
+						<thead>
+							<tr>
+								<th>Fecha de Registro</th>
+								<th>Fecha Real</th>
+								<th>Cantidad Comprada</th>
+								<th>Monto Invertido (S/)</th>
+								<th>Método de Pago</th>
+								<th>Comprobante / Operación</th>
+							</tr>
+						</thead>
+						<tbody id="historyTableBody">
+							<!-- Populated via AJAX -->
+						</tbody>
+					</table>
+				</div>
+			</div>
+			<div class="modal-footer border-0">
+				<button type="button" class="btn btn-ghost-secondary px-4 fw-bold" data-bs-dismiss="modal">
+					<i class="ti ti-x icon me-1"></i> Cerrar
+				</button>
+			</div>
+		</div>
+	</div>
+</div>
 @endsection
 
 @section('scripts')
@@ -893,5 +975,52 @@
 
 
 
+	$(document).on('click', '.btn-history', function() {
+		var id = $(this).data('id');
+		var type = $(this).data('type');
+		var url = type === 'product' 
+			? '{{ url("products") }}/' + id + '/purchase-history'
+			: '{{ url("supplies") }}/' + id + '/purchase-history';
+
+		$('#historyTableBody').html('<tr><td colspan="6" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>');
+		$('#historyModal').modal('show');
+
+		$.ajax({
+			url: url,
+			method: 'GET',
+			success: function(data) {
+				var tbody = $('#historyTableBody');
+				tbody.empty();
+
+				if(data.length === 0) {
+					tbody.append('<tr><td colspan="6" align="center" class="py-4 text-muted">No se han registrado compras de stock para este ítem.</td></tr>');
+				} else {
+					data.forEach(function(item) {
+						var receipt_op = (item.receipt_number !== '-' ? 'Comp: ' + item.receipt_number : '') + 
+										 (item.receipt_number !== '-' && item.operation_number !== '-' ? ' / ' : '') + 
+										 (item.operation_number !== '-' ? 'Op: ' + item.operation_number : '');
+						if (receipt_op === '') receipt_op = '-';
+
+						var row = `<tr>
+							<td>${item.date}</td>
+							<td>${item.real_date}</td>
+							<td class="fw-bold text-success">+${item.quantity}</td>
+							<td class="text-danger fw-bold">S/${item.amount}</td>
+							<td><span class="badge bg-blue-lt">${item.payment_method}</span></td>
+							<td><span class="text-muted small">${receipt_op}</span></td>
+						</tr>`;
+						tbody.append(row);
+					});
+				}
+			},
+			error: function() {
+				$('#historyTableBody').html('<tr><td colspan="6" class="text-center py-4 text-danger">Ocurrió un error al cargar el historial.</td></tr>');
+			}
+		});
+	});
+
 </script>
 @endsection
+
+
+

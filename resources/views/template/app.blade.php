@@ -229,6 +229,16 @@
 								</li>
 							@endif
 							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer'))
+								<li class="nav-item {{ request()->is('fixed-assets*') ? 'active' : '' }}">
+									<a class="nav-link" href="{{ route('fixed-assets.index') }}">
+										<span class="nav-link-icon d-md-none d-lg-inline-block">
+											<i class="ti ti-snowflake icon"></i>
+										</span>
+										<span class="nav-link-title">
+											Activos Fijos
+										</span>
+									</a>
+								</li>
 								<li class="nav-item {{ request()->is('finances*') ? 'active' : '' }}">
 									<a class="nav-link" href="{{ route('finances.index') }}">
 										<span class="nav-link-icon d-md-none d-lg-inline-block">

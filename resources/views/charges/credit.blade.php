@@ -277,9 +277,9 @@
 	function addPaymentLine() {
 		var index = $('.payment-line').length;
 		var html = `
-			<div class="row payment-line mb-2">
-				<div class="col-lg-6">
-					<div class="mb-1">
+			<div class="row payment-line mb-3 pb-3 border-bottom">
+				<div class="col-lg-5">
+					<div class="mb-2">
 						<label class="form-label">Forma de pago</label>
 						<select class="form-select" name="payments[${index}][payment_method_id]" required>
 							${paymentMethodOptions}
@@ -287,13 +287,25 @@
 					</div>
 				</div>
 				<div class="col-lg-5">
-					<div class="mb-1">
+					<div class="mb-2">
 						<label class="form-label">Monto</label>
 						<input type="number" step="0.01" class="form-control payment-amount" name="payments[${index}][amount]" required>
 					</div>
 				</div>
-				<div class="col-lg-1 d-flex align-items-end mb-1">
-					${index > 0 ? '<button type="button" class="btn btn-icon btn-danger remove-line"><i class="ti ti-x icon"></i></button>' : ''}
+				<div class="col-lg-2 d-flex align-items-end mb-2">
+					${index > 0 ? '<button type="button" class="btn btn-icon btn-danger remove-line w-100"><i class="ti ti-x icon"></i></button>' : ''}
+				</div>
+				<div class="col-lg-6">
+					<div class="mb-1">
+						<label class="form-label small text-muted">Fecha del depósito (Opcional)</label>
+						<input type="date" class="form-control form-control-sm" name="payments[${index}][real_date]">
+					</div>
+				</div>
+				<div class="col-lg-6">
+					<div class="mb-1">
+						<label class="form-label small text-muted">N° Operación (Opcional)</label>
+						<input type="text" class="form-control form-control-sm" name="payments[${index}][operation_number]" placeholder="Ej: 12345678">
+					</div>
 				</div>
 			</div>
 		`;
@@ -488,3 +500,4 @@
     });
 </script>
 @endsection
+

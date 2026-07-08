@@ -13,7 +13,9 @@ class Payment extends Model
         'sale_id',
         'payment_method_id',
         'amount',
-        'date'
+        'date',
+        'real_date',
+        'operation_number'
     ];
 
     protected $dates = ['date'];

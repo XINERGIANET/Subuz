@@ -118,6 +118,8 @@ Route::middleware('auth')->group(function () {
 
 	Route::middleware('role:admin|seller|asistente')->group(function () {
 		Route::get('products/api', [ProductController::class, 'api'])->name('products.api');
+		Route::get('products/{product}/purchase-history', [ProductController::class, 'purchaseHistory'])->name('products.purchase-history');
+		Route::get('supplies/{supply}/purchase-history', [SupplyController::class, 'purchaseHistory'])->name('supplies.purchase-history');
 		Route::resource('products', ProductController::class);
 		Route::resource('stocks', StockController::class);
 
@@ -211,3 +213,8 @@ Route::middleware('auth')->group(function () {
 		Route::delete('cashbox/movements/{movement}', [CashboxController::class, 'destroyMovement'])->name('cashbox.movements.destroy');
 	});
 });
+
+Route::get('fixed-assets', function () {
+    return view('fixed_assets.index');
+})->name('fixed-assets.index')->middleware('auth');
+

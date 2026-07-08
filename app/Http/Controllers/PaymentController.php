@@ -127,7 +127,9 @@ class PaymentController extends Controller
                 foreach ($request->payments as $p) {
                     $funds[] = [
                         'payment_method_id' => $p['payment_method_id'],
-                        'amount' => floatval($p['amount'])
+                        'amount' => floatval($p['amount']),
+                        'real_date' => $p['real_date'] ?? null,
+                        'operation_number' => $p['operation_number'] ?? null
                     ];
                 }
 
@@ -153,7 +155,9 @@ class PaymentController extends Controller
 
                         $salePaymentsToRecord[] = [
                             'payment_method_id' => $fund['payment_method_id'],
-                            'amount' => $draw
+                            'amount' => $draw,
+                            'real_date' => $fund['real_date'],
+                            'operation_number' => $fund['operation_number']
                         ];
                     }
 
@@ -175,7 +179,9 @@ class PaymentController extends Controller
                                 'sale_id' => $sale->id,
                                 'payment_method_id' => $sp['payment_method_id'],
                                 'amount' => $sp['amount'],
-                                'date' => now()
+                                'date' => now(),
+                                'real_date' => $sp['real_date'],
+                                'operation_number' => $sp['operation_number']
                             ]);
 
                             CashboxMovement::create([

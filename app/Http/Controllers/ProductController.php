@@ -185,4 +185,28 @@ class ProductController extends Controller
 
         $product->supplies()->sync($sync);
     }
+
+    public function purchaseHistory(Product $product)
+    {
+        $expenses = \App\Models\Expense::with('payment_method')
+            ->where('description', 'like', "Compra de stock: {$product->name} (Producto)%")
+            ->orderBy('date', 'desc')
+            ->get()
+            ->map(function($e) {
+                preg_match('/Cant: ([\d\.]+)/', $e->description, $matches);
+                $quantity = $matches[1] ?? '0';
+
+                return [
+                    'date' => $e->date->format('d/m/Y H:i'),
+                    'real_date' => $e->real_date ? \Carbon\Carbon::parse($e->real_date)->format('d/m/Y') : '-',
+                    'quantity' => $quantity,
+                    'amount' => $e->amount,
+                    'payment_method' => $e->payment_method ? $e->payment_method->name : '-',
+                    'receipt_number' => $e->receipt_number ?: '-',
+                    'operation_number' => $e->operation_number ?: '-'
+                ];
+            });
+
+        return response()->json($expenses);
+    }
 }

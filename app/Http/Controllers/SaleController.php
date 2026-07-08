@@ -812,22 +812,46 @@ class SaleController extends Controller
             $fpdf->SetFillColor(2, 93, 166);
             $fpdf->SetTextColor(255, 255, 255);
             
-            $fpdf->Cell(20, 8, 'NRO', 1, 0, 'C', true);
-            $fpdf->Cell(40, 8, utf8_decode('GUÍA'), 1, 0, 'C', true);
-            $fpdf->Cell(50, 8, 'FECHA Y HORA', 1, 0, 'C', true);
-            $fpdf->Cell(50, 8, utf8_decode('MÉTODO DE PAGO'), 1, 0, 'C', true);
-            $fpdf->Cell(40, 8, 'MONTO', 1, 1, 'C', true);
+            $fpdf->Cell(12, 8, 'NRO', 1, 0, 'C', true);
+            $fpdf->Cell(60, 8, utf8_decode('GUÍA'), 1, 0, 'C', true);
+            $fpdf->Cell(35, 8, 'FECHA Y HORA', 1, 0, 'C', true);
+            $fpdf->Cell(35, 8, utf8_decode('FECHA DEPÓSITO'), 1, 0, 'C', true);
+            $fpdf->Cell(45, 8, utf8_decode('N° OPERACIÓN'), 1, 0, 'C', true);
+            $fpdf->Cell(45, 8, utf8_decode('MÉTODO DE PAGO'), 1, 0, 'C', true);
+            $fpdf->Cell(45, 8, 'MONTO', 1, 1, 'C', true);
             
             $fpdf->SetFont('Montserrat', '', 9);
             $fpdf->SetTextColor(0, 0, 0);
+            $groupedPayments = $allPayments->groupBy(function($item) {
+                return optional($item->date)->format('Y-m-d H:i') . '|' . $item->payment_method_id . '|' . $item->real_date . '|' . $item->operation_number;
+            })->map(function($group) {
+                $first = $group->first();
+                $guide_array = $group->pluck('sale_guide')->unique()->toArray();
+                if (count($guide_array) > 4) {
+                    $guides = implode(', ', array_slice($guide_array, 0, 3)) . ' (+ ' . (count($guide_array) - 3) . ' más)';
+                } else {
+                    $guides = implode(', ', $guide_array);
+                }
+                
+                return (object)[
+                    'date' => $first->date,
+                    'real_date' => $first->real_date,
+                    'operation_number' => $first->operation_number,
+                    'payment_method' => $first->payment_method,
+                    'amount' => $group->sum('amount'),
+                    'sale_guide' => $guides
+                ];
+            });
             
             $index = 1;
-            foreach ($allPayments->sortBy('date') as $payment) {
-                $fpdf->Cell(20, 7, $index++, 1, 0, 'C');
-                $fpdf->Cell(40, 7, utf8_decode($payment->sale_guide), 1, 0, 'C');
-                $fpdf->Cell(50, 7, optional($payment->date)->format('d/m/Y H:i'), 1, 0, 'C');
-                $fpdf->Cell(50, 7, utf8_decode(optional($payment->payment_method)->name ?? 'Efectivo'), 1, 0, 'C');
-                $fpdf->Cell(40, 7, 'S/' . number_format($payment->amount, 2), 1, 1, 'C');
+            foreach ($groupedPayments->sortBy('date') as $payment) {
+                $fpdf->Cell(12, 7, $index++, 1, 0, 'C');
+                $fpdf->Cell(60, 7, utf8_decode($payment->sale_guide), 1, 0, 'L');
+                $fpdf->Cell(35, 7, optional($payment->date)->format('d/m/Y H:i'), 1, 0, 'C');
+                $fpdf->Cell(35, 7, $payment->real_date ? date('d/m/Y', strtotime($payment->real_date)) : '-', 1, 0, 'C');
+                $fpdf->Cell(45, 7, utf8_decode($payment->operation_number ?? '-'), 1, 0, 'C');
+                $fpdf->Cell(45, 7, utf8_decode(optional($payment->payment_method)->name ?? 'Efectivo'), 1, 0, 'C');
+                $fpdf->Cell(45, 7, 'S/' . number_format($payment->amount, 2), 1, 1, 'C');
             }
         }
 
