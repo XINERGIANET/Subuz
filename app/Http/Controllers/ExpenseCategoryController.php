@@ -23,6 +23,20 @@ class ExpenseCategoryController extends Controller
         return response()->json(['status' => true, 'subcategory' => $subcategory]);
     }
 
+    public function update(Request $request, ExpenseCategory $expense_category)
+    {
+        $request->validate(['name' => 'required']);
+        $expense_category->update(['name' => $request->name]);
+        return response()->json(['status' => true]);
+    }
+
+    public function updateSubcategory(Request $request, ExpenseSubcategory $subcategory)
+    {
+        $request->validate(['name' => 'required']);
+        $subcategory->update(['name' => $request->name]);
+        return response()->json(['status' => true]);
+    }
+
     public function destroySubcategory(ExpenseSubcategory $subcategory)
     {
         $subcategory->delete();

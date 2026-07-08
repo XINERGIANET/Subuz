@@ -161,10 +161,16 @@ Route::middleware('auth')->group(function () {
 		Route::get('expenses/indicators', [ExpenseController::class, 'indicators'])->name('expenses.indicators');
 		Route::get('expenses/excel', [ExpenseController::class, 'excel'])->name('expenses.excel');
 		Route::get('expenses/pdf', [ExpenseController::class, 'pdf'])->name('expenses.pdf');
-		Route::resource('expenses', ExpenseController::class);
+	});
 
+	Route::middleware('role:admin|viewer|asistente|despachador')->group(function () {
+		Route::resource('expenses', ExpenseController::class);
+	});
+
+	Route::middleware('role:admin|viewer|asistente')->group(function () {
 		Route::resource('expense-categories', ExpenseCategoryController::class);
 		Route::post('expense-categories/{category}/subcategories', [ExpenseCategoryController::class, 'storeSubcategory'])->name('expense-categories.subcategories.store');
+		Route::put('expense-subcategories/{subcategory}', [ExpenseCategoryController::class, 'updateSubcategory'])->name('expense-subcategories.update');
 		Route::delete('expense-subcategories/{subcategory}', [ExpenseCategoryController::class, 'destroySubcategory'])->name('expense-subcategories.destroy');
 	});
 

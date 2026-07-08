@@ -45,7 +45,10 @@ class ExpensesExport implements FromCollection, WithHeadings, WithMapping, WithS
             $expense->description,
             $expense->amount,
             optional($expense->payment_method)->name ?? 'N/A',
-            optional($expense->date)->format('d/m/Y')
+            optional($expense->date)->format('d/m/Y'),
+            $expense->real_date ? date('d/m/Y', strtotime($expense->real_date)) : '',
+            $expense->receipt_number,
+            $expense->operation_number,
         ];
     }
 
@@ -55,7 +58,10 @@ class ExpensesExport implements FromCollection, WithHeadings, WithMapping, WithS
             'Descripción',
             'Monto',
             'Método de pago',
-            'Fecha'
+            'Fecha Registro',
+            'Fecha Real',
+            'N° Comprobante',
+            'N° Operación',
         ];
     }
 

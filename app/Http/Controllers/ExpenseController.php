@@ -29,6 +29,12 @@ class ExpenseController extends Controller
             return $query->whereDate('date', '<=', $to);
         })->when($request->payment_method_id, function($query, $payment_method_id){
             return $query->where('payment_method_id', $payment_method_id);
+        })->when($request->expense_category_id, function($query, $expense_category_id){
+            return $query->where('expense_category_id', $expense_category_id);
+        })->when($request->expense_subcategory_id, function($query, $expense_subcategory_id){
+            return $query->where('expense_subcategory_id', $expense_subcategory_id);
+        })->when(auth()->check() && auth()->user()->hasRole('despachador'), function($query){
+            return $query->where('user_id', auth()->id());
         });
 
         $total_expenses = $query->sum('amount');
@@ -39,8 +45,21 @@ class ExpenseController extends Controller
 
         $payment_methods = PaymentMethod::all();
         $categories = ExpenseCategory::with('subcategories')->get();
+
+        if (auth()->check() && auth()->user()->hasRole('despachador')) {
+            $categories = $categories->filter(function($category) {
+                return strtolower(trim($category->name)) === 'operativos';
+            })->values();
+        }
+
         $financeCategoryId = $financeCategory->id;
-        $descriptions = Expense::select('description')->distinct()->pluck('description');
+        
+        if (auth()->check() && auth()->user()->hasRole('despachador')) {
+            $descriptions = collect();
+        } else {
+            $descriptions = Expense::select('description')->distinct()->pluck('description');
+        }
+        
         return view('expenses.index', compact('expenses', 'payment_methods', 'total_expenses', 'descriptions', 'categories', 'financeCategoryId', 'financeLoans'));
     }
 
@@ -215,6 +234,16 @@ class ExpenseController extends Controller
 
         $date = now()->format('Y-m-d H:i:s');
 
+        if (auth()->check() && auth()->user()->hasRole('despachador')) {
+            $category = ExpenseCategory::find($request->expense_category_id);
+            if (!$category || strtolower(trim($category->name)) !== 'operativos') {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Solo tienes permiso para registrar gastos en la categoría operativos.'
+                ]);
+            }
+        }
+
         try {
             DB::transaction(function() use ($request, $date){
                 $loan = null;
@@ -250,8 +279,12 @@ class ExpenseController extends Controller
                         'amount' => $payment['amount'],
                         'payment_method_id' => $payment['method_id'],
                         'date' => $date,
+                        'real_date' => $request->real_date,
+                        'receipt_number' => $request->receipt_number,
+                        'operation_number' => $request->operation_number,
                         'expense_category_id' => $request->expense_category_id,
-                        'expense_subcategory_id' => $request->expense_subcategory_id
+                        'expense_subcategory_id' => $request->expense_subcategory_id,
+                        'user_id' => auth()->id()
                     ]);
                 }
 
@@ -281,6 +314,9 @@ class ExpenseController extends Controller
             'description' => $expense->description,
             'expense_category_id' => $expense->expense_category_id,
             'expense_subcategory_id' => $expense->expense_subcategory_id,
+            'real_date' => $expense->real_date ? Carbon::parse($expense->real_date)->format('Y-m-d') : null,
+            'receipt_number' => $expense->receipt_number,
+            'operation_number' => $expense->operation_number,
             'payments' => $payments->map(function($p){
                 return [
                     'method_id' => $p->payment_method_id,
@@ -306,6 +342,8 @@ class ExpenseController extends Controller
         }
 
         DB::transaction(function() use ($request, $expense){
+            $originalUserId = $expense->user_id;
+
             // Group update: delete all existing parts of this expense
             Expense::where('description', $expense->description)
                 ->where('date', $expense->date)
@@ -316,9 +354,13 @@ class ExpenseController extends Controller
                     'description' => $request->description,
                     'amount' => $payment['amount'],
                     'payment_method_id' => $payment['method_id'],
-                    'date' => $expense->date, // Keep original date
+                    'date' => $expense->date, // Keep original auto date
+                    'real_date' => $request->real_date,
+                    'receipt_number' => $request->receipt_number,
+                    'operation_number' => $request->operation_number,
                     'expense_category_id' => $request->expense_category_id,
-                    'expense_subcategory_id' => $request->expense_subcategory_id
+                    'expense_subcategory_id' => $request->expense_subcategory_id,
+                    'user_id' => $originalUserId
                 ]);
             }
         });
@@ -367,7 +409,7 @@ class ExpenseController extends Controller
             })->latest('date')->get();
 
         $fpdf = new Fpdf;
-        $fpdf->AddPage();
+        $fpdf->AddPage('L');
         
         $fpdf->AddFont('Montserrat', '');
         $fpdf->AddFont('Montserrat', 'B');
@@ -376,8 +418,7 @@ class ExpenseController extends Controller
             $fpdf->Image(public_path('assets/images/logo.jpg'), 10, 10, 30);
         }
         
-        // Fecha de generación arriba a la derecha
-        $fpdf->SetXY(130, 10);
+        $fpdf->SetXY(210, 10);
         $fpdf->SetFont('Montserrat', '', 8);
         $fpdf->SetTextColor(80, 80, 80);
         $fpdf->Cell(70, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i')), 0, 1, 'R');
@@ -386,7 +427,7 @@ class ExpenseController extends Controller
 
         $fpdf->SetFont('Montserrat', 'B', 16);
         $fpdf->SetTextColor(2, 93, 166);
-        $fpdf->Cell(190, 10, utf8_decode('REPORTE DE GASTOS'), 0, 1, 'C');
+        $fpdf->Cell(277, 10, utf8_decode('REPORTE DE GASTOS'), 0, 1, 'C');
         
         $months = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
         $period = "Periodo: ";
@@ -401,7 +442,7 @@ class ExpenseController extends Controller
         
         $fpdf->SetFont('Montserrat', '', 10);
         $fpdf->SetTextColor(80, 80, 80);
-        $fpdf->Cell(190, 8, utf8_decode($period), 0, 1, 'C');
+        $fpdf->Cell(277, 8, utf8_decode($period), 0, 1, 'C');
         $fpdf->Ln(5);
 
         // --- RESUMEN ---
@@ -410,7 +451,7 @@ class ExpenseController extends Controller
         $fpdf->SetFillColor(2, 93, 166);
         $fpdf->SetTextColor(255, 255, 255);
         $fpdf->SetFont('Montserrat', 'B', 10);
-        $fpdf->Cell(190, 8, utf8_decode('RESUMEN DE GASTOS'), 1, 1, 'C', true);
+        $fpdf->Cell(277, 8, utf8_decode('RESUMEN DE GASTOS'), 1, 1, 'C', true);
 
         // Totales por Categoría
         $byCategory = $expenses->groupBy('expense_category_id');
@@ -452,7 +493,7 @@ class ExpenseController extends Controller
         $fpdf->SetFillColor(2, 93, 166);
         $fpdf->SetTextColor(255, 255, 255);
         $fpdf->SetFont('Montserrat', 'B', 10);
-        $fpdf->Cell(190, 8, utf8_decode('DETALLE DE GASTOS'), 1, 1, 'C', true);
+        $fpdf->Cell(277, 8, utf8_decode('DETALLE DE GASTOS'), 1, 1, 'C', true);
 
         $fpdf->SetFillColor(240, 240, 240);
         $fpdf->SetTextColor(0, 0, 0);
@@ -462,7 +503,7 @@ class ExpenseController extends Controller
             
             $fpdf->SetFont('Montserrat', 'B', 9);
             $fpdf->SetFillColor(220, 220, 220);
-            $fpdf->Cell(190, 7, utf8_decode($catName), 1, 1, 'L', true);
+            $fpdf->Cell(277, 7, utf8_decode($catName), 1, 1, 'L', true);
 
             $bySubcat = $catItems->groupBy('expense_subcategory_id');
 
@@ -471,27 +512,33 @@ class ExpenseController extends Controller
                 
                 $fpdf->SetFont('Montserrat', 'B', 8);
                 $fpdf->SetFillColor(240, 240, 240);
-                $fpdf->Cell(190, 6, utf8_decode('    ' . $subName), 1, 1, 'L', true);
+                $fpdf->Cell(277, 6, utf8_decode('    ' . $subName), 1, 1, 'L', true);
 
                 $fpdf->SetFont('Montserrat', 'B', 8);
-                $fpdf->Cell(90, 6, utf8_decode('DESCRIPCIÓN'), 1, 0, 'C');
-                $fpdf->Cell(30, 6, utf8_decode('MONTO'), 1, 0, 'C');
-                $fpdf->Cell(40, 6, utf8_decode('MÉTODO'), 1, 0, 'C');
-                $fpdf->Cell(30, 6, utf8_decode('FECHA'), 1, 1, 'C');
+                $fpdf->Cell(80, 6, utf8_decode('DESCRIPCIÓN'), 1, 0, 'C');
+                $fpdf->Cell(25, 6, utf8_decode('MONTO'), 1, 0, 'C');
+                $fpdf->Cell(35, 6, utf8_decode('MÉTODO'), 1, 0, 'C');
+                $fpdf->Cell(25, 6, utf8_decode('F. REGT.'), 1, 0, 'C');
+                $fpdf->Cell(25, 6, utf8_decode('F. REAL'), 1, 0, 'C');
+                $fpdf->Cell(45, 6, utf8_decode('COMPROBANTE'), 1, 0, 'C');
+                $fpdf->Cell(45, 6, utf8_decode('N° OPERACIÓN'), 1, 1, 'C');
 
                 $fpdf->SetFont('Montserrat', '', 8);
                 foreach($subItems as $expense) {
-                    $fpdf->Cell(90, 6, utf8_decode(substr($expense->description, 0, 45)), 1);
-                    $fpdf->Cell(30, 6, 'S/'.number_format($expense->amount, 2), 1, 0, 'R');
-                    $fpdf->Cell(40, 6, utf8_decode(optional($expense->payment_method)->name ?? 'N/A'), 1, 0, 'C');
-                    $fpdf->Cell(30, 6, $expense->date->format('d/m/Y'), 1, 1, 'C');
+                    $fpdf->Cell(80, 6, utf8_decode(substr($expense->description, 0, 45)), 1);
+                    $fpdf->Cell(25, 6, 'S/'.number_format($expense->amount, 2), 1, 0, 'R');
+                    $fpdf->Cell(35, 6, utf8_decode(optional($expense->payment_method)->name ?? 'N/A'), 1, 0, 'C');
+                    $fpdf->Cell(25, 6, $expense->date->format('d/m/Y'), 1, 0, 'C');
+                    $fpdf->Cell(25, 6, $expense->real_date ? date('d/m/Y', strtotime($expense->real_date)) : '-', 1, 0, 'C');
+                    $fpdf->Cell(45, 6, utf8_decode(substr($expense->receipt_number ?: '-', 0, 25)), 1, 0, 'C');
+                    $fpdf->Cell(45, 6, utf8_decode(substr($expense->operation_number ?: '-', 0, 25)), 1, 1, 'C');
                 }
             }
         }
 
         $fpdf->Ln(10);
         $fpdf->SetFont('Montserrat', '', 8);
-        $fpdf->Cell(190, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i')), 0, 1, 'R');
+        $fpdf->Cell(277, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i')), 0, 1, 'R');
 
         $name = "ReporteGastos_".now()->format('dm').".pdf";
         if (ob_get_level() > 0) ob_end_clean();

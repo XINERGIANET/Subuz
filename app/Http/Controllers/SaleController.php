@@ -283,7 +283,44 @@ class SaleController extends Controller
         $selected_client = $request->client_id ? Client::find($request->client_id) : null;
 
         $products = Product::all();
-        return view('sales.index', compact('sales', 'total_sales', 'total_sales_details', 'total_cash', 'payment_totals', 'payment_total_details', 'total_not_delivered', 'total_not_delivered_details', 'total_unpaid_delivered', 'total_unpaid_delivered_details', 'total_by_type', 'total_by_type_delivered', 'total_by_type_not_delivered', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox', 'products', 'selected_client', 'delivered_count'));
+
+        $products_sold = collect();
+        if ($cashbox) {
+            $products_sold = \App\Models\SaleDetail::join('sales', 'sale_details.sale_id', '=', 'sales.id')
+                ->join('products', 'sale_details.product_id', '=', 'products.id')
+                ->where('sales.status', '!=', 'Anulado')
+                ->where('sales.paid', 1)
+                ->where('sales.date', '>=', $cashbox->opened_at)
+                ->select(
+                    'products.name', 
+                    \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity) as total_quantity'),
+                    \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity * sale_details.price) as total_amount')
+                )
+                ->groupBy('products.id', 'products.name')
+                ->get();
+        }
+
+        $pending_products = collect();
+        if ($cashbox) {
+            $pending_products = \App\Models\SaleDetail::whereHas('sale', function ($q) use ($cashbox) {
+                $q->where('status', '!=', 'Anulado')
+                  ->where('paid', 0)
+                  ->where('type', '!=', 'Pago pendiente')
+                  ->where('date', '>=', $cashbox->opened_at)
+                  ->whereDoesntHave('movements', function ($mq) {
+                      $mq->where('type', 'debt');
+                  });
+            })
+            ->join('products', 'sale_details.product_id', '=', 'products.id')
+            ->select(
+                'products.name', 
+                \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity) as total_quantity')
+            )
+            ->groupBy('products.id', 'products.name')
+            ->get();
+        }
+
+        return view('sales.index', compact('sales', 'total_sales', 'total_sales_details', 'total_cash', 'payment_totals', 'payment_total_details', 'total_not_delivered', 'total_not_delivered_details', 'total_unpaid_delivered', 'total_unpaid_delivered_details', 'total_by_type', 'total_by_type_delivered', 'total_by_type_not_delivered', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox', 'products', 'selected_client', 'delivered_count', 'products_sold', 'pending_products'));
     }
 
     public function create(Request $request)

@@ -72,6 +72,27 @@
 				@endif
 			</div>
 		</div>
+		@if(isset($products_sold) && $products_sold->count() > 0)
+			<div class="card-body border-bottom pt-3 pb-3">
+				<div class="d-flex text-center gap-3 flex-wrap justify-content-center justify-content-md-start align-items-center">
+					@foreach($products_sold as $ps)
+						<div>
+							<span class="d-block small text-muted">{{ $ps->name }}</span>
+							<span class="fs-3 fw-bold text-primary">{{ $ps->total_quantity }} <span class="fs-5 text-muted fw-normal">(S/{{ number_format($ps->total_amount, 2) }})</span></span>
+						</div>
+						@if(!$loop->last)
+							<div class="vr mx-1"></div>
+						@endif
+					@endforeach
+					
+					<div class="ms-auto border-start ps-3">
+						<button class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#modal-pending-products">
+							<i class="fas fa-truck-loading me-1"></i> Por entregar
+						</button>
+					</div>
+				</div>
+			</div>
+		@endif
 		@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente') || auth()->user()->hasRole('seller'))
 			<div class="d-flex text-center gap-3 flex-wrap justify-content-center justify-content-md-end">
 				<div>
@@ -424,6 +445,34 @@
 				</div>
 				<div class="modal-footer bg-light-subtle">
 					<button type="button" class="btn btn-brand w-100" onclick="location.reload()">Aceptar</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="modal modal-blur fade" id="modal-pending-products" tabindex="-1" role="dialog" aria-hidden="true">
+		<div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">Productos por entregar</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+				<div class="modal-body">
+					@if(isset($pending_products) && $pending_products->count() > 0)
+						<ul class="list-group list-group-flush">
+							@foreach($pending_products as $pp)
+								<li class="list-group-item d-flex justify-content-between align-items-center">
+									{{ $pp->name }}
+									<span class="badge bg-warning rounded-pill fs-4">{{ $pp->total_quantity }}</span>
+								</li>
+							@endforeach
+						</ul>
+					@else
+						<p class="text-muted text-center mb-0">No hay productos por entregar en el turno actual.</p>
+					@endif
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-primary w-100" data-bs-dismiss="modal">Entendido</button>
 				</div>
 			</div>
 		</div>

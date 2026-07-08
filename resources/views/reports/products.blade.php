@@ -27,14 +27,35 @@
                             </select>
                         </div>
                         
-                        <div class="col-md-3 custom-date" style="{{ $period == 'custom' ? '' : 'display: none;' }}">
+                        <div class="col-md-2 custom-date" style="{{ $period == 'custom' ? '' : 'display: none;' }}">
                             <label class="form-label">Fecha Inicio</label>
                             <input type="date" name="start_date" class="form-control" value="{{ $start_date }}">
                         </div>
                         
-                        <div class="col-md-3 custom-date" style="{{ $period == 'custom' ? '' : 'display: none;' }}">
+                        <div class="col-md-2 custom-date" style="{{ $period == 'custom' ? '' : 'display: none;' }}">
                             <label class="form-label">Fecha Fin</label>
                             <input type="date" name="end_date" class="form-control" value="{{ $end_date }}">
+                        </div>
+
+                        <div class="col-md-2 month-date" style="{{ $period == 'month' ? '' : 'display: none;' }}">
+                            <label class="form-label">Mes</label>
+                            <select class="form-select" name="month">
+                                @php
+                                    $months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+                                @endphp
+                                @foreach($months as $index => $m)
+                                    <option value="{{ $index + 1 }}" {{ $month == ($index + 1) ? 'selected' : '' }}>{{ $m }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-2 year-date" style="{{ in_array($period, ['month', 'year']) ? '' : 'display: none;' }}">
+                            <label class="form-label">Año</label>
+                            <select class="form-select" name="year">
+                                @for($y = 2023; $y <= 2030; $y++)
+                                    <option value="{{ $y }}" {{ $year == $y ? 'selected' : '' }}>{{ $y }}</option>
+                                @endfor
+                            </select>
                         </div>
 
                         <div class="col-md-3">
@@ -69,6 +90,7 @@
                         <tr>
                             <th>Producto</th>
                             <th class="text-end">Cantidad</th>
+                            <th class="text-end">Total Ventas (S/)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -76,10 +98,11 @@
                         <tr>
                             <td>{{ $item->name }}</td>
                             <td class="text-end fw-bold">{{ $item->total_quantity }}</td>
+                            <td class="text-end fw-bold text-success">S/ {{ number_format($item->total_sales_amount, 2) }}</td>
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="2" class="text-center">No hay datos para mostrar</td>
+                            <td colspan="3" class="text-center">No hay datos para mostrar</td>
                         </tr>
                         @endforelse
                     </tbody>
@@ -97,10 +120,18 @@
     document.addEventListener('DOMContentLoaded', function() {
         // Toggle custom date fields
         document.getElementById('period-select').addEventListener('change', function() {
-            var isCustom = this.value === 'custom';
-            var customFields = document.querySelectorAll('.custom-date');
-            customFields.forEach(function(field) {
-                field.style.display = isCustom ? 'block' : 'none';
+            var period = this.value;
+            
+            document.querySelectorAll('.custom-date').forEach(function(field) {
+                field.style.display = period === 'custom' ? 'block' : 'none';
+            });
+            
+            document.querySelectorAll('.month-date').forEach(function(field) {
+                field.style.display = period === 'month' ? 'block' : 'none';
+            });
+            
+            document.querySelectorAll('.year-date').forEach(function(field) {
+                field.style.display = (period === 'month' || period === 'year') ? 'block' : 'none';
             });
         });
 

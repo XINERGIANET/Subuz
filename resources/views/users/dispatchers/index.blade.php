@@ -170,6 +170,28 @@
                             </table>
                         </div>
                     </div>
+
+                    <!-- Expenses Table -->
+                    <div id="modal-expenses-container" class="card border-0 shadow-sm overflow-hidden mt-3 d-none">
+                        <div class="card-header bg-danger-lt py-2">
+                            <h6 class="card-title mb-0 fw-bold text-danger"><i class="ti ti-receipt me-1"></i> Gastos Registrados</h6>
+                        </div>
+                        <div class="table-responsive" style="max-height: 400px;">
+                            <table class="table table-vcenter table-nowrap card-table bg-white">
+                                <thead class="table-corporate-header sticky-top">
+                                    <tr>
+                                        <th>Fecha/Hora</th>
+                                        <th>Descripción</th>
+                                        <th>Categoría</th>
+                                        <th class="text-center">Método</th>
+                                        <th class="text-end">Monto</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="modal-expenses-table-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="modal-loader" class="text-center py-5 d-none">
@@ -274,6 +296,30 @@
             </div>
         `;
 
+        // Expenses Summary
+        if (data.summary.expenses_total > 0) {
+            summaryHtml += '<div class="col-12 mt-3 mb-1"><h6 class="text-danger fw-bold border-bottom pb-1 mb-0"><i class="ti ti-receipt me-1"></i> Resumen de Gastos</h6></div>';
+            Object.keys(data.summary.expenses_methods).forEach(method => {
+                summaryHtml += `
+                    <div class="col-6 col-md-3">
+                        <div class="card p-2 border-0 shadow-sm text-center border-bottom border-danger border-3">
+                            <div class="small fw-bold text-muted text-uppercase mb-1">${method}</div>
+                            <div class="h4 mb-0 fw-bold text-danger">S/ ${parseFloat(data.summary.expenses_methods[method]).toFixed(2)}</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            summaryHtml += `
+                <div class="col-12 col-md-3">
+                    <div class="card p-2 border-0 shadow-sm text-center bg-danger-lt border-bottom border-danger border-3">
+                        <div class="small fw-bold text-danger text-uppercase mb-1">Total Gastos</div>
+                        <div class="h3 mb-0 fw-bold text-danger">S/ ${data.summary.expenses_total}</div>
+                    </div>
+                </div>
+            `;
+        }
+
         $('#modal-summary-container').html(summaryHtml);
 
         // Render Previous Payments Table
@@ -322,6 +368,26 @@
             tableHtml = '<tr><td colspan="6" class="text-center py-4 text-muted small italic">No hay registros para este periodo</td></tr>';
         }
         $('#modal-table-body').html(tableHtml);
+
+        // Render Expenses Table
+        let expensesTableHtml = '';
+        if (data.expenses && data.expenses.length > 0) {
+            data.expenses.forEach(exp => {
+                expensesTableHtml += `
+                    <tr>
+                        <td class="small">${exp.date}</td>
+                        <td class="text-truncate" style="max-width: 150px;">${exp.description}</td>
+                        <td>${exp.category}</td>
+                        <td class="text-center small">${exp.payment_method}</td>
+                        <td class="text-end fw-bold">S/ ${exp.amount}</td>
+                    </tr>
+                `;
+            });
+            $('#modal-expenses-table-body').html(expensesTableHtml);
+            $('#modal-expenses-container').removeClass('d-none');
+        } else {
+            $('#modal-expenses-container').addClass('d-none');
+        }
     }
 </script>
 @endsection

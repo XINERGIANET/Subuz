@@ -44,7 +44,9 @@ class ReportController extends Controller
                 ->get();
         }
 
-        return view('reports.cashbox', compact('cashboxes', 'date'));
+        $payment_methods = \App\Models\PaymentMethod::all();
+
+        return view('reports.cashbox', compact('cashboxes', 'date', 'payment_methods'));
     }
 
     public function getSalesForLiquidation(Request $request){
@@ -202,6 +204,7 @@ class ReportController extends Controller
         $fpdf->SetTextColor(0,0,0);
 
         $i = 1;
+        $product_totals = [];
         
         foreach($sales as $sale){
 
@@ -224,17 +227,46 @@ class ReportController extends Controller
                 $fpdf->Cell(30, 8, 'S/'.number_format($detail->price * $detail->quantity, 2),0,0,'C');
                 $fpdf->Ln();
             
+                if(!isset($product_totals[$product_name])){
+                    $product_totals[$product_name] = [
+                        'quantity' => 0,
+                        'subtotal' => 0
+                    ];
+                }
+                $product_totals[$product_name]['quantity'] += $detail->quantity;
+                $product_totals[$product_name]['subtotal'] += ($detail->price * $detail->quantity);
             }
 
             $i++;
 
         }
 
+        $fpdf->Ln(5);
+
+        // Header for summary
+        $fpdf->SetFont('Montserrat', 'B', 12);
+        $fpdf->SetTextColor(255,255,255);
+        $fpdf->SetFillColor(2,93,166);
+        $fpdf->Cell(130, 8, utf8_decode('RESUMEN POR PRODUCTO'),0,0,'C',1);
+        $fpdf->Cell(30, 8, utf8_decode('CANTIDAD'),0,0,'C',1);
+        $fpdf->Cell(30, 8, utf8_decode('SUBTOTAL'),0,0,'C',1);
         $fpdf->Ln();
+
+        $fpdf->SetFont('Montserrat', '', 10);
+        $fpdf->SetTextColor(0,0,0);
+
+        foreach($product_totals as $name => $totals) {
+            $fpdf->Cell(130, 8, utf8_decode($name), 'B', 0, 'L');
+            $fpdf->Cell(30, 8, $totals['quantity'], 'B', 0, 'C');
+            $fpdf->Cell(30, 8, 'S/'.number_format($totals['subtotal'], 2), 'B', 0, 'C');
+            $fpdf->Ln();
+        }
+
+        $fpdf->Ln(5);
 
         $fpdf->SetFont('Montserrat', 'B', 12);
         $fpdf->Cell(130, 8);
-        $fpdf->Cell(30, 8, 'TOTAL',0,0,'C');
+        $fpdf->Cell(30, 8, 'TOTAL GENERAL',0,0,'C');
         $fpdf->Cell(30, 8, 'S/'.number_format($total, 2),0,0,'C');
 
         $fpdf->Ln();
@@ -266,20 +298,22 @@ class ReportController extends Controller
         $period = $request->get('period', 'day'); // day, month, year, custom
         $start_date = $request->get('start_date', now()->format('Y-m-d'));
         $end_date = $request->get('end_date', now()->format('Y-m-d'));
+        $month = $request->get('month', now()->format('m'));
+        $year = $request->get('year', now()->format('Y'));
 
         $query = \App\Models\SaleDetail::join('sales', 'sale_details.sale_id', '=', 'sales.id')
             ->join('products', 'sale_details.product_id', '=', 'products.id')
-            ->select('products.name', \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity) as total_quantity'))
+            ->select('products.name', \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity) as total_quantity'), \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity * sale_details.price) as total_sales_amount'))
             ->groupBy('products.id', 'products.name')
             ->orderBy('total_quantity', 'desc');
 
         if ($period == 'day') {
             $query->whereDate('sales.date', now()->format('Y-m-d'));
         } elseif ($period == 'month') {
-            $query->whereMonth('sales.date', now()->format('m'))
-                  ->whereYear('sales.date', now()->format('Y'));
+            $query->whereMonth('sales.date', $month)
+                  ->whereYear('sales.date', $year);
         } elseif ($period == 'year') {
-            $query->whereYear('sales.date', now()->format('Y'));
+            $query->whereYear('sales.date', $year);
         } elseif ($period == 'custom') {
             if ($start_date && $end_date) {
                 $query->whereBetween('sales.date', [$start_date . ' 00:00:00', $end_date . ' 23:59:59']);
@@ -288,7 +322,7 @@ class ReportController extends Controller
 
         $data = $query->get();
 
-        return view('reports.products', compact('data', 'period', 'start_date', 'end_date'));
+        return view('reports.products', compact('data', 'period', 'start_date', 'end_date', 'month', 'year'));
     }
 
 }

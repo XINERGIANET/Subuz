@@ -165,6 +165,11 @@ class UserController extends Controller
             ->with(['sale.client', 'payment_method'])
             ->get();
 
+        $expenses = \App\Models\Expense::where('user_id', $dispatcher->id)
+            ->whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
+            ->with(['category', 'subcategory', 'payment_method'])
+            ->get();
+
         $fpdf = new Fpdf;
         $fpdf->AddPage();
         
@@ -230,6 +235,34 @@ class UserController extends Controller
         $fpdf->Cell(60, 10, utf8_decode('TOTAL ENTREGADO:'), 0, 0, 'L');
         $fpdf->Cell(30, 10, 'S/ '.number_format($total_delivered, 2), 0, 1, 'R');
         $fpdf->Ln(5);
+
+        if($expenses->count() > 0) {
+            $fpdf->SetFont('Montserrat', 'B', 12);
+            $fpdf->SetTextColor(2, 93, 166);
+            $fpdf->Cell(190, 10, utf8_decode('RESUMEN DE GASTOS'), 0, 1, 'L');
+            
+            $fpdf->SetFont('Montserrat', '', 11);
+            $fpdf->SetTextColor(0, 0, 0);
+
+            $expenses_totals = [];
+            $total_expenses = 0;
+            foreach($expenses as $exp) {
+                $method_name = optional($exp->payment_method)->name ?? 'Manual';
+                if(!isset($expenses_totals[$method_name])) $expenses_totals[$method_name] = 0;
+                $expenses_totals[$method_name] += $exp->amount;
+                $total_expenses += $exp->amount;
+            }
+
+            foreach($expenses_totals as $name => $amount){
+                $fpdf->Cell(60, 8, utf8_decode($name . ':'), 0, 0, 'L');
+                $fpdf->Cell(30, 8, 'S/ '.number_format($amount, 2), 0, 1, 'R');
+            }
+
+            $fpdf->SetFont('Montserrat', 'B', 11);
+            $fpdf->Cell(60, 10, utf8_decode('TOTAL GASTOS:'), 0, 0, 'L');
+            $fpdf->Cell(30, 10, 'S/ '.number_format($total_expenses, 2), 0, 1, 'R');
+            $fpdf->Ln(5);
+        }
 
         $current_movements = [];
         $prev_payments_data = [];
@@ -318,6 +351,35 @@ class UserController extends Controller
             $fpdf->Cell(25, 8, 'S/ '.number_format($mov->amount, 2), 1, 1, 'R');
         }
 
+        if($expenses->count() > 0) {
+            $fpdf->Ln(5);
+            $fpdf->SetFont('Montserrat', 'B', 12);
+            $fpdf->SetTextColor(200, 50, 50); // Red color for expenses
+            $fpdf->Cell(190, 10, utf8_decode('GASTOS REGISTRADOS'), 0, 1, 'L');
+
+            // Detailed Table
+            $fpdf->SetFillColor(200, 50, 50);
+            $fpdf->SetTextColor(255, 255, 255);
+            $fpdf->SetFont('Montserrat', 'B', 9);
+            
+            $fpdf->Cell(25, 10, utf8_decode('FECHA'), 1, 0, 'C', true);
+            $fpdf->Cell(60, 10, utf8_decode('DESCRIPCIÓN'), 1, 0, 'C', true);
+            $fpdf->Cell(50, 10, utf8_decode('CATEGORÍA'), 1, 0, 'C', true);
+            $fpdf->Cell(30, 10, utf8_decode('MÉTODO'), 1, 0, 'C', true);
+            $fpdf->Cell(25, 10, utf8_decode('MONTO'), 1, 1, 'C', true);
+
+            $fpdf->SetTextColor(0, 0, 0);
+            $fpdf->SetFont('Montserrat', '', 8);
+
+            foreach($expenses as $exp){
+                $fpdf->Cell(25, 8, date('d/m/Y', strtotime($exp->date)), 1, 0, 'C');
+                $fpdf->Cell(60, 8, utf8_decode(substr($exp->description, 0, 35)), 1, 0, 'L');
+                $fpdf->Cell(50, 8, utf8_decode(substr(optional($exp->category)->name, 0, 25)), 1, 0, 'L');
+                $fpdf->Cell(30, 8, utf8_decode(optional($exp->payment_method)->name ?? 'N/A'), 1, 0, 'C');
+                $fpdf->Cell(25, 8, 'S/ '.number_format($exp->amount, 2), 1, 1, 'R');
+            }
+        }
+
         $fpdf->Ln(10);
         $fpdf->SetFont('Montserrat', '', 8);
         $fpdf->Cell(190, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i')), 0, 1, 'R');
@@ -342,6 +404,11 @@ class UserController extends Controller
             })
             ->whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
             ->with(['sale.client', 'payment_method'])
+            ->get();
+
+        $expenses = \App\Models\Expense::where('user_id', $dispatcher->id)
+            ->whereBetween('date', [$start_date . " 00:00:00", $end_date . " 23:59:59"])
+            ->with(['category', 'subcategory', 'payment_method'])
             ->get();
 
         $methods_totals = [];
@@ -400,6 +467,25 @@ class UserController extends Controller
             }
         }
 
+        $formatted_expenses = [];
+        $expenses_totals = [];
+        $total_expenses_amount = 0;
+
+        foreach($expenses as $exp) {
+            $method_name = optional($exp->payment_method)->name ?? 'Manual';
+            if(!isset($expenses_totals[$method_name])) $expenses_totals[$method_name] = 0;
+            $expenses_totals[$method_name] += $exp->amount;
+            $total_expenses_amount += $exp->amount;
+
+            $formatted_expenses[] = [
+                'date' => date('d/m/Y H:i', strtotime($exp->date)),
+                'description' => $exp->description,
+                'category' => optional($exp->category)->name ?? 'N/A',
+                'payment_method' => $method_name,
+                'amount' => number_format($exp->amount, 2, '.', '')
+            ];
+        }
+
         return response()->json([
             'status' => true,
             'dispatcher' => $dispatcher->name,
@@ -411,11 +497,14 @@ class UserController extends Controller
                 'methods' => $methods_totals,
                 'credit' => number_format($total_actual_credit, 2, '.', ''),
                 'pending' => number_format($total_pending_cash, 2, '.', ''),
-                'total' => number_format($total_delivered, 2, '.', '')
+                'total' => number_format($total_delivered, 2, '.', ''),
+                'expenses_methods' => $expenses_totals,
+                'expenses_total' => number_format($total_expenses_amount, 2, '.', '')
             ],
             'movements' => $current_movements,
             'previous_payments' => $prev_payments_data,
-            'previous_payments_count' => count($prev_payments_data)
+            'previous_payments_count' => count($prev_payments_data),
+            'expenses' => $formatted_expenses
         ]);
     }
 }

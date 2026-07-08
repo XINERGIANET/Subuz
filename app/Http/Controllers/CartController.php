@@ -96,7 +96,7 @@ class CartController extends Controller
                 if ($is_loaned) {
                     $cart['items'][$itemKey]['price'] = '0.00';
                 } else {
-                    $cart['items'][$itemKey]['price'] = $cart['items'][$itemKey]['original_price'] ?? number_format($request->price, 2, '.', '');
+                    $cart['items'][$itemKey]['price'] = number_format($request->price, 2, '.', '');
                 }
             } else {
                 if (empty($cart['items'][$itemKey]['is_loaned'])) {

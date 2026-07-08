@@ -83,6 +83,16 @@
 									</span>
 								</a>
 							</li>
+							<li class="nav-item {{ request()->routeIs('expenses.index') ? 'active' : '' }}">
+								<a class="nav-link" href="{{ route('expenses.index') }}">
+									<span class="nav-link-icon d-md-none d-lg-inline-block">
+										<i class="ti ti-truck-loading icon"></i>
+									</span>
+									<span class="nav-link-title">
+										Gastos
+									</span>
+								</a>
+							</li>
 						@else
 							<li class="nav-item {{ request()->is('/') ? 'active' : '' }}">
 								<a class="nav-link fw-bold" href="{{ url('/') }}">

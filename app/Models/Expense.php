@@ -12,10 +12,14 @@ class Expense extends Model
     protected $fillable = [
         'description',
         'amount',
-        'payment_method_id',
         'date',
+        'real_date',
+        'receipt_number',
+        'operation_number',
         'expense_category_id',
-        'expense_subcategory_id'
+        'expense_subcategory_id',
+        'payment_method_id',
+        'user_id'
     ];
 
     protected $dates = ['date'];

@@ -61,11 +61,13 @@
                     href="{{ route('expenses.indicators', $indicatorQuery) }}">
                     <i class="ti ti-chart-donut-3 me-1 fs-3"></i> Ver gr&aacute;ficos
                 </a>
-                @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente'))
+                @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente') || auth()->user()->hasRole('despachador'))
                     <button class="btn btn-brand btn-pill px-4 shadow-sm" data-bs-toggle="modal"
                         data-bs-target="#createModal">
                         <i class="ti ti-plus me-1 fs-3"></i> Crear nuevo gasto
                     </button>
+                @endif
+                @if (auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente'))
                     <button class="btn btn-outline-brand btn-pill px-4 shadow-sm" data-bs-toggle="modal"
                         data-bs-target="#categoryModal">
                         <i class="ti ti-tags me-1 fs-3"></i> Categorías
@@ -138,6 +140,23 @@
                             @endforeach
                         </select>
                     </div>
+                    @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente'))
+                    <div class="col-md-2">
+                        <label class="form-label small fw-medium text-muted text-uppercase mb-1">Categoría</label>
+                        <select class="form-select text-dark" name="expense_category_id" id="filterCategory">
+                            <option value="">Todas</option>
+                            @foreach ($categories as $cat)
+                                <option value="{{ $cat->id }}" @if(request()->expense_category_id == $cat->id) selected @endif>{{ $cat->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-medium text-muted text-uppercase mb-1">Subcategoría</label>
+                        <select class="form-select text-dark" name="expense_subcategory_id" id="filterSubcategory" disabled>
+                            <option value="">Todas</option>
+                        </select>
+                    </div>
+                    @endif
                     <div class="col-md-2">
                         <button type="submit" class="btn btn-brand w-100 py-2 fw-bold"><i
                                 class="ti ti-search me-1 fs-3"></i> Buscar</button>
@@ -161,10 +180,11 @@
                 <thead class="table-corporate-header">
                     <tr>
                         <th>Descripción</th>
+                        <th>Detalles Extra</th>
                         <th>Categoría</th>
                         <th class="text-center">Monto Total</th>
                         <th>Desglose de Pago</th>
-                        <th class="text-center">Fecha</th>
+                        <th class="text-center">F. Registro</th>
                         <th class="text-end">Acciones</th>
                     </tr>
                 </thead>
@@ -173,6 +193,11 @@
                         @php $first = $group->first(); @endphp
                         <tr>
                             <td class="fw-bold">{{ $first->description }}</td>
+                            <td class="small text-muted">
+                                @if($first->real_date) <div class="mb-1"><i class="ti ti-calendar-event me-1"></i> F. Real: {{ date('d/m/Y', strtotime($first->real_date)) }}</div> @endif
+                                @if($first->receipt_number) <div class="mb-1"><i class="ti ti-file-invoice me-1"></i> Comp: {{ $first->receipt_number }}</div> @endif
+                                @if($first->operation_number) <div><i class="ti ti-hash me-1"></i> Op: {{ $first->operation_number }}</div> @endif
+                            </td>
                             <td>
                                 @if($first->category)
                                     <span class="badge bg-blue-lt">{{ $first->category->name }}</span>
@@ -253,6 +278,20 @@
                             </select>
                         </div>
                         <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Fecha Real (Opcional)</label>
+                                <input type="date" class="form-control" name="real_date" id="createRealDate">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">N° Comprobante (Opcional)</label>
+                                <input type="text" class="form-control" name="receipt_number" id="createReceiptNumber">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">N° Operación (Opcional)</label>
+                                <input type="text" class="form-control" name="operation_number" id="createOperationNumber">
+                            </div>
+                        </div>
+                        <div class="row mb-3">
                             <div class="col-md-6">
                                 <label class="form-label">Categoría</label>
                                 <select class="form-select" name="expense_category_id" id="createCategory">
@@ -326,6 +365,20 @@
                             </select>
                         </div>
                         <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Fecha Real (Opcional)</label>
+                                <input type="date" class="form-control" name="real_date" id="editRealDate">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">N° Comprobante (Opcional)</label>
+                                <input type="text" class="form-control" name="receipt_number" id="editReceiptNumber">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">N° Operación (Opcional)</label>
+                                <input type="text" class="form-control" name="operation_number" id="editOperationNumber">
+                            </div>
+                        </div>
+                        <div class="row mb-3">
                             <div class="col-md-6">
                                 <label class="form-label">Categoría</label>
                                 <select class="form-select" name="expense_category_id" id="editCategory">
@@ -372,7 +425,7 @@
     </div>
 
     <!-- Modal Categorias -->
-    <div class="modal modal-blur fade" id="categoryModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal modal-blur fade" id="categoryModal" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
             <div class="modal-content">
                 <div class="modal-header">
@@ -391,13 +444,19 @@
                     <div class="accordion" id="categoriesAccordion">
                         @foreach($categories as $category)
                         <div class="accordion-item">
-                            <h2 class="accordion-header" id="heading-{{ $category->id }}">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ $category->id }}" aria-expanded="false" aria-controls="collapse-{{ $category->id }}">
-                                    {{ $category->name }}
+                            <h2 class="accordion-header d-flex" id="heading-{{ $category->id }}">
+                                <button class="accordion-button collapsed flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ $category->id }}" aria-expanded="false" aria-controls="collapse-{{ $category->id }}">
+                                    <span class="category-name-text">{{ $category->name }}</span>
                                 </button>
+                                @if(strtolower(trim($category->name)) !== 'finanzas' && strtolower(trim($category->name)) !== 'operativos')
+                                <button type="button" class="btn btn-icon btn-ghost-primary btn-edit-category align-self-center me-3" data-id="{{ $category->id }}" data-name="{{ $category->name }}" title="Editar Categoría">
+                                    <i class="ti ti-pencil"></i>
+                                </button>
+                                @endif
                             </h2>
                             <div id="collapse-{{ $category->id }}" class="accordion-collapse collapse" aria-labelledby="heading-{{ $category->id }}" data-bs-parent="#categoriesAccordion">
                                 <div class="accordion-body">
+                                    @if(strtolower(trim($category->name)) !== 'finanzas')
                                     <form class="addSubcategoryForm mb-3" data-category-id="{{ $category->id }}">
                                         @csrf
                                         <div class="input-group input-group-sm">
@@ -405,13 +464,23 @@
                                             <button class="btn btn-outline-secondary" type="submit">Agregar</button>
                                         </div>
                                     </form>
+                                    @else
+                                    <div class="alert alert-info alert-sm text-center mb-3">Esta categoría y sus subcategorías son gestionadas automáticamente por el módulo de Finanzas.</div>
+                                    @endif
                                     <ul class="list-group list-group-flush subcategories-list-{{ $category->id }}">
                                         @foreach($category->subcategories as $subcategory)
                                         <li class="list-group-item d-flex justify-content-between align-items-center py-1">
-                                            {{ $subcategory->name }}
-                                            <button type="button" class="btn btn-sm btn-icon btn-ghost-danger btn-delete-subcategory" data-id="{{ $subcategory->id }}">
-                                                <i class="ti ti-trash"></i>
-                                            </button>
+                                            <span class="subcategory-name-text">{{ $subcategory->name }}</span>
+                                            <div>
+                                                @if(strtolower(trim($category->name)) !== 'finanzas')
+                                                <button type="button" class="btn btn-sm btn-icon btn-ghost-primary btn-edit-subcategory" data-id="{{ $subcategory->id }}" data-name="{{ $subcategory->name }}" title="Editar Subcategoría">
+                                                    <i class="ti ti-pencil"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-icon btn-ghost-danger btn-delete-subcategory" data-id="{{ $subcategory->id }}">
+                                                    <i class="ti ti-trash"></i>
+                                                </button>
+                                                @endif
+                                            </div>
                                         </li>
                                         @endforeach
                                     </ul>
@@ -657,6 +726,81 @@
             });
         });
 
+        $('.btn-edit-category').click(function(e) {
+            e.stopPropagation();
+            var id = $(this).data('id');
+            var name = $(this).data('name');
+            var url = '{{ route("expense-categories.update", ":id") }}'.replace(':id', id);
+
+            Swal.fire({
+                title: 'Editar Categoría',
+                input: 'text',
+                inputValue: name,
+                showCancelButton: true,
+                confirmButtonText: 'Guardar',
+                cancelButtonText: 'Cancelar',
+                target: document.getElementById('categoryModal'),
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'El nombre es obligatorio'
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: url,
+                        method: 'PUT',
+                        data: {
+                            _token: '{{ csrf_token() }}',
+                            name: result.value
+                        },
+                        success: function(res) {
+                            if (res.status) {
+                                ToastMessage.fire({ text: 'Categoría actualizada' }).then(() => location.reload());
+                            }
+                        }
+                    });
+                }
+            });
+        });
+
+        $('.btn-edit-subcategory').click(function() {
+            var id = $(this).data('id');
+            var name = $(this).data('name');
+            var url = '{{ route("expense-subcategories.update", ":id") }}'.replace(':id', id);
+
+            Swal.fire({
+                title: 'Editar Subcategoría',
+                input: 'text',
+                inputValue: name,
+                showCancelButton: true,
+                confirmButtonText: 'Guardar',
+                cancelButtonText: 'Cancelar',
+                target: document.getElementById('categoryModal'),
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'El nombre es obligatorio'
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: url,
+                        method: 'PUT',
+                        data: {
+                            _token: '{{ csrf_token() }}',
+                            name: result.value
+                        },
+                        success: function(res) {
+                            if (res.status) {
+                                ToastMessage.fire({ text: 'Subcategoría actualizada' }).then(() => location.reload());
+                            }
+                        }
+                    });
+                }
+            });
+        });
+
         $('#createModal').on('show.bs.modal', function() {
             if ($('#payment-rows-create').is(':empty')) {
                 addPaymentRowCreate();
@@ -770,6 +914,9 @@
                     }
                     tsDescriptionEdit.setValue(data.description);
                     $('#editId').val(data.id);
+                    $('#editRealDate').val(data.real_date || '');
+                    $('#editReceiptNumber').val(data.receipt_number || '');
+                    $('#editOperationNumber').val(data.operation_number || '');
 
                     if (data.expense_category_id) {
                         $('#editCategory').val(data.expense_category_id);
@@ -863,6 +1010,35 @@
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.has('create')) {
                 $('#createModal').modal('show');
+            }
+
+            // Filtrado de subcategorías
+            var allCategories = @json($categories);
+            var preselectedSubcategoryId = "{{ request()->expense_subcategory_id }}";
+
+            function updateFilterSubcategories() {
+                var catId = $('#filterCategory').val();
+                var subcatSelect = $('#filterSubcategory');
+                subcatSelect.empty().append('<option value="">Todas</option>');
+
+                if (catId) {
+                    subcatSelect.prop('disabled', false);
+                    var category = allCategories.find(c => c.id == catId);
+                    if (category && category.subcategories) {
+                        category.subcategories.forEach(function(sub) {
+                            var selected = (sub.id == preselectedSubcategoryId) ? 'selected' : '';
+                            subcatSelect.append('<option value="' + sub.id + '" ' + selected + '>' + sub.name + '</option>');
+                        });
+                    }
+                } else {
+                    subcatSelect.prop('disabled', true);
+                }
+            }
+
+            $('#filterCategory').change(updateFilterSubcategories);
+            
+            if($('#filterCategory').val()) {
+                updateFilterSubcategories();
             }
         });
     </script>
