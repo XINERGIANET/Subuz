@@ -285,12 +285,12 @@ class SaleController extends Controller
         $products = Product::all();
 
         $products_sold = collect();
-        if ($cashbox) {
-            $products_sold = \App\Models\SaleDetail::join('sales', 'sale_details.sale_id', '=', 'sales.id')
+        $paid_sale_ids = (clone $query)->where('status', '!=', 'Anulado')->where('paid', 1)->pluck('id');
+        
+        if ($paid_sale_ids->isNotEmpty()) {
+            $products_sold = \App\Models\SaleDetail::whereIn('sale_details.sale_id', $paid_sale_ids)
                 ->join('products', 'sale_details.product_id', '=', 'products.id')
-                ->where('sales.status', '!=', 'Anulado')
-                ->where('sales.paid', 1)
-                ->where('sales.date', '>=', $cashbox->opened_at)
+                ->join('sales', 'sale_details.sale_id', '=', 'sales.id')
                 ->select(
                     'products.id',
                     'products.name', 
@@ -309,13 +309,29 @@ class SaleController extends Controller
                 ->join('products', 'sale_details.product_id', '=', 'products.id')
                 ->select(
                     'products.name', 
-                    \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity) as total_quantity')
+                    \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity) as total_quantity'),
+                    \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity * sale_details.price) as total_amount')
                 )
                 ->groupBy('products.id', 'products.name')
                 ->get();
         }
 
-        return view('sales.index', compact('sales', 'total_sales', 'total_sales_details', 'total_cash', 'payment_totals', 'payment_total_details', 'total_not_delivered', 'total_not_delivered_details', 'total_unpaid_delivered', 'total_unpaid_delivered_details', 'total_by_type', 'total_by_type_delivered', 'total_by_type_not_delivered', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox', 'products', 'selected_client', 'delivered_count', 'products_sold', 'pending_products'));
+        $unpaid_sale_ids = (clone $unpaid_delivered_query)->pluck('id');
+        $unpaid_products = collect();
+        
+        if ($unpaid_sale_ids->isNotEmpty()) {
+            $unpaid_products = \App\Models\SaleDetail::whereIn('sale_id', $unpaid_sale_ids)
+                ->join('products', 'sale_details.product_id', '=', 'products.id')
+                ->select(
+                    'products.name', 
+                    \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity) as total_quantity'),
+                    \Illuminate\Support\Facades\DB::raw('SUM(sale_details.quantity * sale_details.price) as total_amount')
+                )
+                ->groupBy('products.id', 'products.name')
+                ->get();
+        }
+
+        return view('sales.index', compact('sales', 'total_sales', 'total_sales_details', 'total_cash', 'payment_totals', 'payment_total_details', 'total_not_delivered', 'total_not_delivered_details', 'total_unpaid_delivered', 'total_unpaid_delivered_details', 'total_by_type', 'total_by_type_delivered', 'total_by_type_not_delivered', 'annulled_count', 'annulled_sales', 'payment_methods', 'cashbox', 'products', 'selected_client', 'delivered_count', 'products_sold', 'pending_products', 'unpaid_products'));
     }
 
     public function productPayments($product_id)

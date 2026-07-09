@@ -93,9 +93,12 @@
 						@endif
 					@endforeach
 					
-					<div class="ms-auto border-start ps-3">
+					<div class="ms-auto border-start ps-3 d-flex gap-2">
 						<button class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#modal-pending-products">
 							<i class="fas fa-truck-loading me-1"></i> Por entregar
+						</button>
+						<button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#modal-unpaid-products">
+							<i class="fas fa-hand-holding-usd me-1"></i> No pagado
 						</button>
 					</div>
 				</div>
@@ -470,13 +473,47 @@
 						<ul class="list-group list-group-flush">
 							@foreach($pending_products as $pp)
 								<li class="list-group-item d-flex justify-content-between align-items-center">
-									{{ $pp->name }}
+									<div>
+										{{ $pp->name }}
+										<span class="d-block small text-muted">S/{{ number_format($pp->total_amount, 2) }}</span>
+									</div>
 									<span class="badge bg-warning rounded-pill fs-4">{{ $pp->total_quantity }}</span>
 								</li>
 							@endforeach
 						</ul>
 					@else
 						<p class="text-muted text-center mb-0">No hay productos por entregar en el turno actual.</p>
+					@endif
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-primary w-100" data-bs-dismiss="modal">Entendido</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="modal modal-blur fade" id="modal-unpaid-products" tabindex="-1" role="dialog" aria-hidden="true">
+		<div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">Productos no pagados</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+				<div class="modal-body">
+					@if(isset($unpaid_products) && $unpaid_products->count() > 0)
+						<ul class="list-group list-group-flush">
+							@foreach($unpaid_products as $up)
+								<li class="list-group-item d-flex justify-content-between align-items-center">
+									<div>
+										{{ $up->name }}
+										<span class="d-block small text-muted">S/{{ number_format($up->total_amount, 2) }}</span>
+									</div>
+									<span class="badge bg-danger rounded-pill fs-4">{{ $up->total_quantity }}</span>
+								</li>
+							@endforeach
+						</ul>
+					@else
+						<p class="text-muted text-center mb-0">No hay productos sin pagar en el turno actual.</p>
 					@endif
 				</div>
 				<div class="modal-footer">
