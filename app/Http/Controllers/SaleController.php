@@ -1588,6 +1588,8 @@ class SaleController extends Controller
                 if ($request->paid) {
                     $payments = $request->payments;
                     $totalPaid = 0;
+                    $totalPending = 0;
+                    $firstRealPaymentMethod = null;
 
                     if (!$payments || count($payments) == 0) {
                         throw new \Exception("Debe agregar por lo menos un método de pago.");
@@ -1597,23 +1599,35 @@ class SaleController extends Controller
                         if (!isset($payment['method_id']) || !isset($payment['amount'])) {
                             throw new \Exception("Datos de pago incompletos.");
                         }
-                        $totalPaid += floatval($payment['amount']);
+                        if ($payment['method_id'] == 'pending') {
+                            $totalPending += floatval($payment['amount']);
+                        } else {
+                            $totalPaid += floatval($payment['amount']);
+                            if (!$firstRealPaymentMethod) {
+                                $firstRealPaymentMethod = $payment['method_id'];
+                            }
+                        }
                     }
 
-                    if (abs($totalPaid - floatval($sale->total)) > 0.01) {
-                        throw new \Exception("La suma de los pagos (S/" . number_format($totalPaid, 2) . ") debe ser igual al total de la venta (S/" . number_format($sale->total, 2) . ").");
+                    $totalInput = $totalPaid + $totalPending;
+                    if (abs($totalInput - floatval($sale->total)) > 0.01) {
+                        throw new \Exception("La suma de los pagos (S/" . number_format($totalInput, 2) . ") debe ser igual al total de la venta (S/" . number_format($sale->total, 2) . ").");
                     }
 
-                    // Update sale as paid
+                    // Update sale as paid or partially paid
                     $sale->update(array_merge($commonUpdate, [
                         'type' => 'Contado',
-                        'payment_method_id' => $payments[0]['method_id'], // Use first as primary reference
-                        'debt' => 0,
-                        'paid' => 1
+                        'payment_method_id' => $firstRealPaymentMethod,
+                        'debt' => $totalPending,
+                        'paid' => $totalPending > 0 ? 0 : 1
                     ]));
 
                     // Register all movements and payments
                     foreach ($payments as $payment) {
+                        if ($payment['method_id'] == 'pending') {
+                            continue;
+                        }
+
                         Payment::create([
                             'sale_id' => $sale->id,
                             'payment_method_id' => $payment['method_id'],
@@ -1628,6 +1642,18 @@ class SaleController extends Controller
                             'payment_method_id' => $payment['method_id'],
                             'type' => 'paid',
                             'amount' => $payment['amount'],
+                            'date' => now()
+                        ]);
+                    }
+
+                    if ($totalPending > 0) {
+                        CashboxMovement::create([
+                            'cashbox_id' => $cashbox->id,
+                            'sale_id' => $sale->id,
+                            'user_id' => auth()->id(),
+                            'payment_method_id' => null,
+                            'type' => 'debt',
+                            'amount' => $totalPending,
                             'date' => now()
                         ]);
                     }

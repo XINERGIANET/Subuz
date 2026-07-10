@@ -1328,6 +1328,7 @@
 					@foreach($payment_methods as $pm)
 						<option value="{{ $pm->id }}">{{ $pm->name }}</option>
 					@endforeach
+					<option value="pending" class="text-danger fw-bold">Pendiente</option>
 				`;
 
 		var tsProductsDispatch = null;
