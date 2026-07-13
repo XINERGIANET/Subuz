@@ -318,6 +318,23 @@
                     </div>
                 </div>
             `;
+            summaryHtml += `
+                <div class="col-12 mt-2">
+                    <div class="card p-2 border-0 shadow-sm text-center bg-cyan-lt border-bottom border-cyan border-3">
+                        <div class="small fw-bold text-cyan text-uppercase mb-1">Efectivo a Entregar (Cobranza - Gastos)</div>
+                        <div class="h2 mb-0 fw-bold text-cyan">S/ ${data.summary.cash_handover}</div>
+                    </div>
+                </div>
+            `;
+        } else {
+            summaryHtml += `
+                <div class="col-12 mt-2">
+                    <div class="card p-2 border-0 shadow-sm text-center bg-cyan-lt border-bottom border-cyan border-3">
+                        <div class="small fw-bold text-cyan text-uppercase mb-1">Efectivo a Entregar (Solo Cobranza)</div>
+                        <div class="h2 mb-0 fw-bold text-cyan">S/ ${data.summary.cash_handover}</div>
+                    </div>
+                </div>
+            `;
         }
 
         $('#modal-summary-container').html(summaryHtml);

@@ -262,7 +262,28 @@ class UserController extends Controller
             $fpdf->Cell(60, 10, utf8_decode('TOTAL GASTOS:'), 0, 0, 'L');
             $fpdf->Cell(30, 10, 'S/ '.number_format($total_expenses, 2), 0, 1, 'R');
             $fpdf->Ln(5);
+        } else {
+            $expenses_totals = [];
         }
+
+        $efectivo_cobranza = isset($methods_totals['Efectivo']) ? $methods_totals['Efectivo'] : (isset($methods_totals['Manual']) ? $methods_totals['Manual'] : 0);
+        $efectivo_gastos = isset($expenses_totals['Efectivo']) ? $expenses_totals['Efectivo'] : (isset($expenses_totals['Manual']) ? $expenses_totals['Manual'] : 0);
+        $efectivo_entregar = $efectivo_cobranza - $efectivo_gastos;
+
+        $fpdf->SetFont('Montserrat', 'B', 12);
+        $fpdf->SetTextColor(2, 93, 166);
+        $fpdf->Cell(190, 8, utf8_decode('RESUMEN DE EFECTIVO PARA ENTREGA'), 0, 1, 'L');
+        $fpdf->SetFont('Montserrat', '', 11);
+        $fpdf->SetTextColor(0, 0, 0);
+        $fpdf->Cell(60, 8, utf8_decode('Efectivo Cobranza:'), 0, 0, 'L');
+        $fpdf->Cell(30, 8, 'S/ '.number_format($efectivo_cobranza, 2), 0, 1, 'R');
+        $fpdf->Cell(60, 8, utf8_decode('Efectivo Gastos:'), 0, 0, 'L');
+        $fpdf->Cell(30, 8, '- S/ '.number_format($efectivo_gastos, 2), 0, 1, 'R');
+        $fpdf->SetFont('Montserrat', 'B', 12);
+        $fpdf->SetTextColor(40, 150, 60);
+        $fpdf->Cell(60, 10, utf8_decode('EFECTIVO A ENTREGAR:'), 0, 0, 'L');
+        $fpdf->Cell(30, 10, 'S/ '.number_format($efectivo_entregar, 2), 0, 1, 'R');
+        $fpdf->Ln(5);
 
         $current_movements = [];
         $prev_payments_data = [];
@@ -486,6 +507,10 @@ class UserController extends Controller
             ];
         }
 
+        $efectivo_cobranza = $methods_totals['Efectivo'] ?? ($methods_totals['Manual'] ?? 0);
+        $efectivo_gastos = $expenses_totals['Efectivo'] ?? ($expenses_totals['Manual'] ?? 0);
+        $efectivo_entregar = $efectivo_cobranza - $efectivo_gastos;
+
         return response()->json([
             'status' => true,
             'dispatcher' => $dispatcher->name,
@@ -499,7 +524,10 @@ class UserController extends Controller
                 'pending' => number_format($total_pending_cash, 2, '.', ''),
                 'total' => number_format($total_delivered, 2, '.', ''),
                 'expenses_methods' => $expenses_totals,
-                'expenses_total' => number_format($total_expenses_amount, 2, '.', '')
+                'expenses_total' => number_format($total_expenses_amount, 2, '.', ''),
+                'cash_collected' => number_format($efectivo_cobranza, 2, '.', ''),
+                'cash_expenses' => number_format($efectivo_gastos, 2, '.', ''),
+                'cash_handover' => number_format($efectivo_entregar, 2, '.', '')
             ],
             'movements' => $current_movements,
             'previous_payments' => $prev_payments_data,
