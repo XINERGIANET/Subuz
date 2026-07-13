@@ -13,7 +13,8 @@ class PaymentMethod extends Model
         'name',
         'account_number',
         'holder_name',
-        'show_in_reports'
+        'show_in_reports',
+        'show_in_liquidation_reports'
     ];
 
     public $timestamps = false;

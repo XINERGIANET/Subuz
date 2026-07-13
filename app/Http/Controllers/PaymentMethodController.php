@@ -28,6 +28,7 @@ class PaymentMethodController extends Controller
 
         $data = $request->all();
         $data['show_in_reports'] = $request->has('show_in_reports');
+        $data['show_in_liquidation_reports'] = $request->has('show_in_liquidation_reports');
 
         PaymentMethod::create($data);
 
@@ -54,6 +55,7 @@ class PaymentMethodController extends Controller
 
         $data = $request->all();
         $data['show_in_reports'] = $request->has('show_in_reports');
+        $data['show_in_liquidation_reports'] = $request->has('show_in_liquidation_reports');
 
         $paymentMethod->update($data);
 

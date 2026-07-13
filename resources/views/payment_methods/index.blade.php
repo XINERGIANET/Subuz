@@ -101,6 +101,12 @@
 				  <span class="form-check-label">Mostrar en reportes de cobranza</span>
 				</label>
 			  </div>
+			  <div class="mb-3">
+			  	<label class="form-check">
+				  <input class="form-check-input" type="checkbox" name="show_in_liquidation_reports">
+				  <span class="form-check-label">Mostrar en reportes de liquidación</span>
+				</label>
+			  </div>
   			</div>
   			<div class="modal-footer">
   			  <button type="button" class="btn me-auto" data-bs-dismiss="modal">Cerrar</button>
@@ -137,6 +143,12 @@
 			  	<label class="form-check">
 				  <input class="form-check-input" type="checkbox" name="show_in_reports" id="editShowInReports">
 				  <span class="form-check-label">Mostrar en reportes de cobranza</span>
+				</label>
+			  </div>
+			  <div class="mb-3">
+			  	<label class="form-check">
+				  <input class="form-check-input" type="checkbox" name="show_in_liquidation_reports" id="editShowInLiquidationReports">
+				  <span class="form-check-label">Mostrar en reportes de liquidación</span>
 				</label>
 			  </div>
   			</div>
@@ -184,6 +196,7 @@
 				$('#editAccountNumber').val(data.account_number);
 				$('#editHolderName').val(data.holder_name);
 				$('#editShowInReports').prop('checked', data.show_in_reports == 1);
+				$('#editShowInLiquidationReports').prop('checked', data.show_in_liquidation_reports == 1);
 				$('#editId').val(data.id);
 				$('#editModal').modal('show');
 			}

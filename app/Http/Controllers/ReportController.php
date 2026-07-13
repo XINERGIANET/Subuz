@@ -148,7 +148,29 @@ class ReportController extends Controller
             $fpdf->MultiCell(190, 5, utf8_decode('¡Hola '.$client->name.'! queremos entregarte el reporte de liquidación de las compras realizadas.'));
         }
 
-        $fpdf->Ln(10);
+        $fpdf->Ln(5);
+
+        // Fetch accounts marked for liquidation reports
+        $accountsForReport = \App\Models\PaymentMethod::where('show_in_liquidation_reports', 1)->get();
+        if ($accountsForReport->count() > 0) {
+            $fpdf->SetFont('Montserrat', 'B', 10);
+            $fpdf->SetTextColor(2, 93, 166);
+            $fpdf->Cell(190, 6, utf8_decode('Cuentas para transferencias:'), 0, 1, 'C');
+            $fpdf->SetFont('Montserrat', '', 9);
+            $fpdf->SetTextColor(80, 80, 80);
+            $accountsStr = '';
+            foreach ($accountsForReport as $acc) {
+                $accInfo = $acc->name;
+                if ($acc->account_number) $accInfo .= ': ' . $acc->account_number;
+                if ($acc->holder_name) $accInfo .= ' (' . $acc->holder_name . ')';
+                $accountsStr .= $accInfo . '   |   ';
+            }
+            $accountsStr = rtrim($accountsStr, '   |   ');
+            $fpdf->MultiCell(190, 5, utf8_decode($accountsStr), 0, 'C');
+            $fpdf->Ln(5);
+        } else {
+            $fpdf->Ln(5);
+        }
         
         $fpdf->SetFont('Montserrat', 'B', 14);
         $fpdf->SetTextColor(255,255,255);
