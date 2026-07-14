@@ -676,13 +676,14 @@ class SaleController extends Controller
                     });
                 if ($request->client_id) {
                     $q->where(function($subq) {
-                        $subq->where('paid', 0)
-                             ->orWhereHas('payments', function($pq) {
-                                 $pq->whereDate('date', today());
-                             });
+                        $subq->where(function($ssq) {
+                            $ssq->where('paid', 0)->where('debt', '>', 0);
+                        })->orWhereHas('payments', function($pq) {
+                            $pq->whereDate('date', today());
+                        });
                     });
                 } else {
-                    $q->where('paid', 0);
+                    $q->where('paid', 0)->where('debt', '>', 0);
                 }
                 return $q;
             })
@@ -693,13 +694,14 @@ class SaleController extends Controller
                     });
                 if ($request->client_id) {
                     $q->where(function($subq) {
-                        $subq->where('paid', 0)
-                             ->orWhereHas('payments', function($pq) {
-                                 $pq->whereDate('date', today());
-                             });
+                        $subq->where(function($ssq) {
+                            $ssq->where('paid', 0)->where('debt', '>', 0);
+                        })->orWhereHas('payments', function($pq) {
+                            $pq->whereDate('date', today());
+                        });
                     });
                 } else {
-                    $q->where('paid', 0);
+                    $q->where('paid', 0)->where('debt', '>', 0);
                 }
                 return $q;
             });
@@ -950,6 +952,7 @@ class SaleController extends Controller
             ->when($request->is_pending, function ($q) {
                 return $q->whereIn('type', ['Contado', 'Pago pendiente'])
                     ->where('paid', 0)
+                    ->where('debt', '>', 0)
                     ->whereHas('movements', function ($mq) {
                         $mq->where('type', 'debt');
                     });
@@ -957,6 +960,7 @@ class SaleController extends Controller
             ->when($request->is_credit, function ($q) {
                 return $q->where('type', 'Credito')
                     ->where('paid', 0)
+                    ->where('debt', '>', 0)
                     ->whereHas('movements', function ($mq) {
                         $mq->where('type', 'debt');
                     });
