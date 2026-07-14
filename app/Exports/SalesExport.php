@@ -75,10 +75,20 @@ class SalesExport implements FromCollection, WithHeadings, WithMapping, WithStyl
                 }
             })
             ->when($this->request->is_pending, function($q){
-                return $q->whereIn('type', ['Contado', 'Pago pendiente'])->where('paid', 0);
+                return $q->whereIn('type', ['Contado', 'Pago pendiente'])
+                    ->where('paid', 0)
+                    ->where('debt', '>', 0)
+                    ->whereHas('movements', function($mq){
+                        $mq->where('type', 'debt');
+                    });
             })
             ->when($this->request->is_credit, function($q){
-                return $q->where('type', 'Credito')->where('paid', 0);
+                return $q->where('type', 'Credito')
+                    ->where('paid', 0)
+                    ->where('debt', '>', 0)
+                    ->whereHas('movements', function($mq){
+                        $mq->where('type', 'debt');
+                    });
             });
 
         if(!$this->request->start_date && !$this->request->end_date && !$this->request->is_pending && !$this->request->is_credit && !$this->request->client_id && !$this->request->type && !$this->request->payment_method_id && !$this->request->delivery_status){
