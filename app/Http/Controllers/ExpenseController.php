@@ -20,13 +20,13 @@ class ExpenseController extends Controller
 {
     public function index(Request $request){
         $query = Expense::when($request->month, function($query, $month){
-            return $query->whereMonth('date', $month);
+            return $query->whereMonth(DB::raw('COALESCE(real_date, date)'), $month);
         })->when($request->year, function($query, $year){
-            return $query->whereYear('date', $year);
+            return $query->whereYear(DB::raw('COALESCE(real_date, date)'), $year);
         })->when($request->from_date, function($query, $from){
-            return $query->whereDate('date', '>=', $from);
+            return $query->whereDate(DB::raw('COALESCE(real_date, date)'), '>=', $from);
         })->when($request->to_date, function($query, $to){
-            return $query->whereDate('date', '<=', $to);
+            return $query->whereDate(DB::raw('COALESCE(real_date, date)'), '<=', $to);
         })->when($request->payment_method_id, function($query, $payment_method_id){
             return $query->where('payment_method_id', $payment_method_id);
         })->when($request->expense_category_id, function($query, $expense_category_id){
@@ -80,8 +80,8 @@ class ExpenseController extends Controller
 
         $buildQuery = function ($from, $to) use ($categoryId) {
             return Expense::with(['category', 'subcategory', 'payment_method'])
-                ->whereDate('date', '>=', $from)
-                ->whereDate('date', '<=', $to)
+                ->whereDate(DB::raw('COALESCE(real_date, date)'), '>=', $from)
+                ->whereDate(DB::raw('COALESCE(real_date, date)'), '<=', $to)
                 ->when($categoryId, function($query, $categoryId){
                     return $query->where('expense_category_id', $categoryId);
                 });
@@ -400,13 +400,13 @@ class ExpenseController extends Controller
     public function pdf(Request $request){
         $expenses = Expense::with('payment_method')
             ->when($request->month, function($query, $month){
-                return $query->whereMonth('date', $month);
+                return $query->whereMonth(DB::raw('COALESCE(real_date, date)'), $month);
             })->when($request->year, function($query, $year){
-                return $query->whereYear('date', $year);
+                return $query->whereYear(DB::raw('COALESCE(real_date, date)'), $year);
             })->when($request->from_date, function($query, $from){
-                return $query->whereDate('date', '>=', $from);
+                return $query->whereDate(DB::raw('COALESCE(real_date, date)'), '>=', $from);
             })->when($request->to_date, function($query, $to){
-                return $query->whereDate('date', '<=', $to);
+                return $query->whereDate(DB::raw('COALESCE(real_date, date)'), '<=', $to);
             })->when($request->payment_method_id, function($query, $payment_method_id){
                 return $query->where('payment_method_id', $payment_method_id);
             })->latest('date')->get();

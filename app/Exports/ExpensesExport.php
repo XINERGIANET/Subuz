@@ -27,13 +27,13 @@ class ExpensesExport implements FromCollection, WithHeadings, WithMapping, WithS
     {
         return Expense::with('payment_method')
             ->when($this->request->month, function($query, $month){
-                return $query->whereMonth('date', $month);
+                return $query->whereMonth(\Illuminate\Support\Facades\DB::raw('COALESCE(real_date, date)'), $month);
             })->when($this->request->year, function($query, $year){
-                return $query->whereYear('date', $year);
+                return $query->whereYear(\Illuminate\Support\Facades\DB::raw('COALESCE(real_date, date)'), $year);
             })->when($this->request->from_date, function($query, $from){
-                return $query->whereDate('date', '>=', $from);
+                return $query->whereDate(\Illuminate\Support\Facades\DB::raw('COALESCE(real_date, date)'), '>=', $from);
             })->when($this->request->to_date, function($query, $to){
-                return $query->whereDate('date', '<=', $to);
+                return $query->whereDate(\Illuminate\Support\Facades\DB::raw('COALESCE(real_date, date)'), '<=', $to);
             })->when($this->request->payment_method_id, function($query, $payment_method_id){
                 return $query->where('payment_method_id', $payment_method_id);
             })->latest('date')->get();
