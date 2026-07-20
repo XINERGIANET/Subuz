@@ -213,6 +213,7 @@
                                 <select class="form-select" name="district" id="createClientDistrict">
                                     <option value="">Seleccionar</option>
                                     <option value="Chiclayo">Chiclayo</option>
+                                    <option value="Jose Leonardo Ortiz">Jose Leonardo Ortiz</option>
                                     <option value="Lambayeque">Lambayeque</option>
                                     <option value="Pimentel">Pimentel</option>
                                     <option value="La Victoria">La Victoria</option>
