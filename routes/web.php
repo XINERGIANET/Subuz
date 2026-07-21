@@ -22,6 +22,7 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\SupplyController;
+use App\Http\Controllers\FixedAssetController;
 
 
 Route::get('login', [AuthController::class, 'login'])->name('auth.login');
@@ -215,8 +216,11 @@ Route::middleware('auth')->group(function () {
 	});
 });
 
-Route::get('fixed-assets', function () {
-    return view('fixed_assets.index');
-})->name('fixed-assets.index')->middleware('auth');
-
-
+Route::get('fixed-assets', [FixedAssetController::class, 'index'])->name('fixed-assets.index')->middleware('auth');
+Route::post('fixed-assets', [FixedAssetController::class, 'store'])->name('fixed-assets.store')->middleware('auth');
+Route::post('fixed-assets/{fixedAsset}/assign', [FixedAssetController::class, 'assign'])->name('fixed-assets.assign')->middleware('auth');
+Route::post('/fixed-assets/{fixedAsset}/return', [FixedAssetController::class, 'returnAsset'])->name('fixed-assets.return')->middleware('auth');
+Route::post('/fixed-assets/{fixedAsset}/status', [FixedAssetController::class, 'updateStatus'])->name('fixed-assets.updateStatus')->middleware('auth');
+Route::post('/fixed-assets/{installment}/income', [FixedAssetController::class, 'registerIncome'])->name('fixed-assets.registerIncome')->middleware('auth');
+Route::post('/fixed-assets/{id}/expense', [FixedAssetController::class, 'registerExpense'])->name('fixed-assets.registerExpense')->middleware('auth');
+Route::get('/fixed-assets/category/{id}', [FixedAssetController::class, 'category'])->name('fixed-assets.category')->middleware('auth');
