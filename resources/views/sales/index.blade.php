@@ -1131,7 +1131,7 @@
 										<tr>
 											<td>${item.product.name}</td>
 											<td>${item.price}</td>
-											<td>${item.quantity}</td>
+											<td>${+item.quantity}</td>
 											<td>${subtotal}</td>
 										</tr>
 									`;
@@ -1201,7 +1201,7 @@
 										<tr class="edit-item-row">
 											<td><input type="hidden" name="detail_id[]" value="${item.id}"> ${item.product.name}</td>
 											<td><input type="number" step="0.01" class="form-control form-control-sm edit-price" name="price[]" value="${item.price}" style="width: 100px"></td>
-											<td><input type="number" step="1" class="form-control form-control-sm edit-qty" name="quantity[]" value="${item.quantity}" style="width: 100px"></td>
+											<td><input type="number" step="0.01" class="form-control form-control-sm edit-qty" name="quantity[]" value="${+item.quantity}" style="width: 100px"></td>
 											<td class="edit-subtotal">S/${subtotal.toFixed(2)}</td>
 										</tr>
 									`;
@@ -1224,7 +1224,7 @@
 			var total = 0;
 			$('#tbl-edit-items .edit-item-row').each(function () {
 				var price = parseFloat($(this).find('.edit-price').val()) || 0;
-				var qty = parseInt($(this).find('.edit-qty').val()) || 0;
+				var qty = parseFloat($(this).find('.edit-qty').val()) || 0;
 				var subtotal = price * qty;
 				$(this).find('.edit-subtotal').text('S/' + subtotal.toFixed(2));
 				total += subtotal;
@@ -1420,7 +1420,7 @@
 												<input type="number" step="0.01" class="form-control form-control-sm edit-dispatch-price" data-id="${item.id}" value="${item.price}" style="width: 70px" ${is_loaned ? 'readonly' : ''}>
 											</td>
 											<td>
-												<input type="number" step="1" class="form-control form-control-sm edit-dispatch-qty" data-id="${item.id}" value="${item.quantity}" style="width: 60px">
+												<input type="number" step="0.01" class="form-control form-control-sm edit-dispatch-qty" data-id="${item.id}" value="${+item.quantity}" style="width: 60px">
 											</td>
 											<td>S/${subtotal}</td>
 											<td class="text-end">
