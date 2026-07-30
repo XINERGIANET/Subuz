@@ -535,7 +535,7 @@ class SaleController extends Controller
             'type' => 'required|string',
             'details.id.*' => 'required|integer',
             'details.price.*' => 'required|numeric',
-            'details.quantity.*' => 'required|integer'
+            'details.quantity.*' => 'required|numeric|min:0.01'
         ]);
 
         if ($validator->fails()) {
@@ -563,7 +563,7 @@ class SaleController extends Controller
                 'quantity' => $quantity
             ]);
 
-            $total += floatval($price) * intval($quantity);
+            $total += floatval($price) * floatval($quantity);
         }
 
         $debt = $sale->debt;
@@ -813,7 +813,7 @@ class SaleController extends Controller
             
             if ($isDebtReport && $request->client_id) {
                 if(strlen($clientName) > 33) $clientName = substr($clientName, 0, 30) . '...';
-                $productsStr = implode(', ', $sale->details->map(function($d) { return $d->quantity . ' ' . (optional($d->product)->name ?? 'Prod'); })->toArray());
+                $productsStr = implode(', ', $sale->details->map(function($d) { return (float)$d->quantity . ' ' . (optional($d->product)->name ?? 'Prod'); })->toArray());
                 if(strlen($productsStr) > 75) $productsStr = substr($productsStr, 0, 72) . '...';
                 
                 $fpdf->Cell(20, 8, utf8_decode($sale->guide), 1, 0, 'C');
@@ -826,7 +826,7 @@ class SaleController extends Controller
                 $totalSales += $sale->total;
             } else {
                 if(strlen($clientName) > 33) $clientName = substr($clientName, 0, 30) . '...';
-                $productsStr = implode(', ', $sale->details->map(function($d) { return $d->quantity . ' ' . (optional($d->product)->name ?? 'Prod'); })->toArray());
+                $productsStr = implode(', ', $sale->details->map(function($d) { return (float)$d->quantity . ' ' . (optional($d->product)->name ?? 'Prod'); })->toArray());
                 if(strlen($productsStr) > 52) $productsStr = substr($productsStr, 0, 49) . '...';
                 
                 $fpdf->Cell(20, 8, utf8_decode($sale->guide), 1, 0, 'C');
@@ -1744,7 +1744,7 @@ class SaleController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'product_id' => 'required|exists:products,id',
-            'quantity' => 'required|integer|min:1',
+            'quantity' => 'required|numeric|min:0.01',
         ]);
 
         if ($validator->fails()) {
@@ -1836,7 +1836,7 @@ class SaleController extends Controller
     public function updateDetail(Request $request, Sale $sale, SaleDetail $detail)
     {
         $validator = Validator::make($request->all(), [
-            'quantity' => 'required|integer|min:1',
+            'quantity' => 'required|numeric|min:0.01',
             'price' => 'required|numeric|min:0',
         ]);
 

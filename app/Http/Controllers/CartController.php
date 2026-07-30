@@ -61,7 +61,7 @@ class CartController extends Controller
 
         $validator = Validator::make($request->all(), [
             'price' => 'required|numeric',
-            'quantity' => 'required|integer'
+            'quantity' => 'required|numeric|min:0.01'
         ]);
 
         if($validator->fails()){
@@ -86,7 +86,7 @@ class CartController extends Controller
         }
 
         if($exists){
-            $cart['items'][$itemKey]['quantity'] = intval($request->quantity);
+            $cart['items'][$itemKey]['quantity'] = floatval($request->quantity);
             $cart['items'][$itemKey]['special'] = $request->special == 'true' ? true : false;
             
             if ($request->has('is_loaned')) {

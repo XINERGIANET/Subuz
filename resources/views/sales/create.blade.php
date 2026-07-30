@@ -399,7 +399,7 @@
 							<input type="text" class="form-control form-control-sm txt-price" value="${ money(item.price) }" data-id="${item.id}" style="width: 60px;">
 						</td>
 						<td>
-							<input type="text" class="form-control form-control-sm txt-quantity" value="${item.quantity}" data-id="${item.id}" style="width: 60px;">
+							<input type="text" class="form-control form-control-sm txt-quantity" value="${+item.quantity}" data-id="${item.id}" style="width: 60px;">
 						</td>
 						<td>${ money(item.amount) }</td>
 						<td>
