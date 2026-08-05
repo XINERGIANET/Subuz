@@ -228,6 +228,18 @@
 									</a>
 								</li>
 							@endif
+							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer') || auth()->user()->hasRole('asistente') || auth()->user()->hasRole('seller'))
+								<li class="nav-item {{ request()->is('inventories*') ? 'active' : '' }}">
+									<a class="nav-link" href="{{ route('inventories.index') }}">
+										<span class="nav-link-icon d-md-none d-lg-inline-block">
+											<i class="ti ti-boxes icon"></i>
+										</span>
+										<span class="nav-link-title">
+											Inventarios
+										</span>
+									</a>
+								</li>
+							@endif
 							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('viewer'))
 								<li class="nav-item {{ request()->is('fixed-assets*') ? 'active' : '' }}">
 									<a class="nav-link" href="{{ route('fixed-assets.index') }}">

@@ -23,6 +23,7 @@ use App\Http\Controllers\StockController;
 use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\SupplyController;
 use App\Http\Controllers\FixedAssetController;
+use App\Http\Controllers\InventoryController;
 
 
 Route::get('login', [AuthController::class, 'login'])->name('auth.login');
@@ -224,3 +225,12 @@ Route::post('/fixed-assets/{fixedAsset}/status', [FixedAssetController::class, '
 Route::post('/fixed-assets/{installment}/income', [FixedAssetController::class, 'registerIncome'])->name('fixed-assets.registerIncome')->middleware('auth');
 Route::post('/fixed-assets/{id}/expense', [FixedAssetController::class, 'registerExpense'])->name('fixed-assets.registerExpense')->middleware('auth');
 Route::get('/fixed-assets/category/{id}', [FixedAssetController::class, 'category'])->name('fixed-assets.category')->middleware('auth');
+
+Route::middleware('auth')->group(function () {
+	Route::get('inventories', [InventoryController::class, 'index'])->name('inventories.index');
+	Route::post('inventories/initial-balance', [InventoryController::class, 'storeInitialBalance'])->name('inventories.initial_balance');
+	Route::post('inventories/movement', [InventoryController::class, 'storeMovement'])->name('inventories.movement');
+	Route::get('inventories/history/{itemType}/{itemId?}', [InventoryController::class, 'history'])->name('inventories.history');
+	Route::post('inventories/supplies', [InventoryController::class, 'storeSupply'])->name('inventories.supplies.store');
+});
+
