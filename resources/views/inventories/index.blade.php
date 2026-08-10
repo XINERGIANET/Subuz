@@ -26,6 +26,32 @@
         </div>
     </div>
 
+    <!-- Date Filter Bar -->
+    <form method="GET" action="{{ route('inventories.index') }}" class="card card-body bg-light mb-3 shadow-sm py-2 border-0">
+        <div class="row g-2 align-items-center">
+            <div class="col-md-3 col-sm-6">
+                <label class="form-label mb-1 text-muted small fw-bold"><i class="ti ti-calendar me-1"></i>Fecha Desde</label>
+                <input type="date" class="form-control form-control-sm" name="start_date" id="filter_start_date" value="{{ request('start_date') }}">
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <label class="form-label mb-1 text-muted small fw-bold"><i class="ti ti-calendar me-1"></i>Fecha Hasta</label>
+                <input type="date" class="form-control form-control-sm" name="end_date" id="filter_end_date" value="{{ request('end_date') }}">
+            </div>
+            <div class="col-md-6 col-12 d-flex align-items-end gap-1 mt-md-4">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="ti ti-filter me-1"></i> Filtrar
+                </button>
+                @if(request('start_date') || request('end_date'))
+                    <a href="{{ route('inventories.index') }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="ti ti-x me-1"></i> Limpiar Filtro
+                    </a>
+                @endif
+                <button type="button" class="btn btn-sm btn-ghost-primary ms-auto" onclick="setQuickDate('today')">Hoy</button>
+                <button type="button" class="btn btn-sm btn-ghost-primary" onclick="setQuickDate('month')">Este Mes</button>
+            </div>
+        </div>
+    </form>
+
     <!-- Indicator Cards -->
     <div class="row row-cards mb-3">
         <div class="col-sm-6 col-lg-4">
@@ -92,6 +118,8 @@
             </div>
         </div>
     </div>
+
+    <!-- Tabs Container -->
 
     <!-- Tabs Container -->
     <div class="card shadow-sm border-0">
@@ -443,6 +471,26 @@
                 <h5 class="modal-title fw-bold" id="kardexModalTitle">Historial de Movimientos Kardex</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
+            <div class="p-3 bg-light border-bottom">
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-4 col-sm-6">
+                        <label class="form-label mb-1 text-muted small fw-bold"><i class="ti ti-calendar me-1"></i>Desde</label>
+                        <input type="date" class="form-control form-control-sm" id="modal_kardex_start_date">
+                    </div>
+                    <div class="col-md-4 col-sm-6">
+                        <label class="form-label mb-1 text-muted small fw-bold"><i class="ti ti-calendar me-1"></i>Hasta</label>
+                        <input type="date" class="form-control form-control-sm" id="modal_kardex_end_date">
+                    </div>
+                    <div class="col-md-4 col-12 d-flex align-items-end gap-1 mt-md-4">
+                        <button type="button" class="btn btn-sm btn-primary w-100" onclick="applyModalKardexFilter()">
+                            <i class="ti ti-filter me-1"></i> Filtrar Fecha
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearModalKardexFilter()">
+                            Limpiar
+                        </button>
+                    </div>
+                </div>
+            </div>
             <div class="modal-body p-0">
                 <div class="table-responsive">
                     <table class="table table-vcenter table-striped mb-0">
@@ -505,6 +553,26 @@
 
 @section('scripts')
 <script>
+    let currentKardexItem = { type: null, id: null, name: null };
+
+    function setQuickDate(preset) {
+        let startInput = document.getElementById('filter_start_date');
+        let endInput = document.getElementById('filter_end_date');
+        let now = new Date();
+        let yyyy = now.getFullYear();
+        let mm = String(now.getMonth() + 1).padStart(2, '0');
+        let dd = String(now.getDate()).padStart(2, '0');
+
+        if (preset === 'today') {
+            let todayStr = `${yyyy}-${mm}-${dd}`;
+            startInput.value = todayStr;
+            endInput.value = todayStr;
+        } else if (preset === 'month') {
+            startInput.value = `${yyyy}-${mm}-01`;
+            endInput.value = `${yyyy}-${mm}-${dd}`;
+        }
+    }
+
     function openInitialBalanceModal(type, id, name, currentVal) {
         document.getElementById('init_item_type').value = type;
         document.getElementById('init_item_id').value = id || '';
@@ -546,19 +614,46 @@
     }
 
     function showKardexHistory(type, id, name) {
+        currentKardexItem = { type: type, id: id, name: name };
         document.getElementById('kardexModalTitle').innerText = 'Historial Kardex - ' + name;
-        let body = document.getElementById('kardexHistoryBody');
-        body.innerHTML = '<tr><td colspan="5" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary"></div> Cargando...</td></tr>';
+        
+        // Copiar fechas del filtro principal si existen
+        let mainStart = document.getElementById('filter_start_date').value;
+        let mainEnd = document.getElementById('filter_end_date').value;
+        document.getElementById('modal_kardex_start_date').value = mainStart || '';
+        document.getElementById('modal_kardex_end_date').value = mainEnd || '';
 
         let modal = new bootstrap.Modal(document.getElementById('modalKardexHistory'));
         modal.show();
 
+        loadKardexData(type, id, name, mainStart, mainEnd);
+    }
+
+    function applyModalKardexFilter() {
+        let start = document.getElementById('modal_kardex_start_date').value;
+        let end = document.getElementById('modal_kardex_end_date').value;
+        loadKardexData(currentKardexItem.type, currentKardexItem.id, currentKardexItem.name, start, end);
+    }
+
+    function clearModalKardexFilter() {
+        document.getElementById('modal_kardex_start_date').value = '';
+        document.getElementById('modal_kardex_end_date').value = '';
+        loadKardexData(currentKardexItem.type, currentKardexItem.id, currentKardexItem.name, '', '');
+    }
+
+    function loadKardexData(type, id, name, startDate = '', endDate = '') {
+        let body = document.getElementById('kardexHistoryBody');
+        body.innerHTML = '<tr><td colspan="5" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary"></div> Cargando...</td></tr>';
+
         let url = "{{ url('inventories/history') }}/" + type + "/" + (id || 0) + "?item_name=" + encodeURIComponent(name);
+        if (startDate) url += '&start_date=' + encodeURIComponent(startDate);
+        if (endDate) url += '&end_date=' + encodeURIComponent(endDate);
+
         fetch(url)
             .then(res => res.json())
             .then(data => {
                 if (data.length === 0) {
-                    body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No hay movimientos registrados para este ítem.</td></tr>';
+                    body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No hay movimientos registrados para este ítem en el rango de fechas seleccionado.</td></tr>';
                     return;
                 }
                 let html = '';

@@ -20,30 +20,113 @@ class InventoryController extends Controller
 {
     public function index(Request $request)
     {
-        // 1. INSUMOS (Bidones, tapas, sellos, etiquetas, bolsas 3kg, 5kg, 2kg, etc.)
-        $supplies = Supply::all()->map(function ($supply) {
-            $hasInitialRecord = InventoryMovement::where('item_type', 'supply')
-                ->where('item_id', $supply->id)
-                ->where('movement_type', 'initial_balance')
-                ->exists();
+        $startDate = $request->start_date;
+        $endDate = $request->end_date;
 
-            $initial = $hasInitialRecord
-                ? floatval(InventoryMovement::where('item_type', 'supply')
-                    ->where('item_id', $supply->id)
-                    ->where('movement_type', 'initial_balance')
-                    ->sum('quantity'))
-                : floatval($supply->stock);
+        // 0. Consulta de Ventas filtradas por rango de fechas opcional
+        $salesQuery = DB::table('sale_details')
+            ->join('sales', 'sale_details.sale_id', '=', 'sales.id')
+            ->where('sales.status', '!=', 'Anulado');
 
-            $incomes = floatval(InventoryMovement::where('item_type', 'supply')
-                ->where('item_id', $supply->id)
+        if ($startDate) {
+            $salesQuery->whereDate('sales.date', '>=', $startDate);
+        }
+        if ($endDate) {
+            $salesQuery->whereDate('sales.date', '<=', $endDate);
+        }
+
+        $salesTotals = $salesQuery
+            ->select('sale_details.product_id', DB::raw('SUM(sale_details.quantity) as total_sold'))
+            ->groupBy('sale_details.product_id')
+            ->pluck('total_sold', 'product_id');
+
+        // Consumo de Insumos por ventas de productos
+        $suppliesSalesTotals = DB::table('sale_details')
+            ->join('sales', 'sale_details.sale_id', '=', 'sales.id')
+            ->join('product_supplies', 'sale_details.product_id', '=', 'product_supplies.product_id')
+            ->where('sales.status', '!=', 'Anulado')
+            ->when($startDate, fn($q) => $q->whereDate('sales.date', '>=', $startDate))
+            ->when($endDate, fn($q) => $q->whereDate('sales.date', '<=', $endDate))
+            ->select('product_supplies.supply_id', DB::raw('SUM(sale_details.quantity * product_supplies.quantity) as total_consumed'))
+            ->groupBy('product_supplies.supply_id')
+            ->pluck('total_consumed', 'product_supplies.supply_id');
+
+        // Funciones auxiliares para calcular movimientos según fecha
+        $getIncomes = function ($type, $id, $name) use ($startDate, $endDate) {
+            $q = InventoryMovement::where('item_type', $type)->where('movement_type', 'income');
+            if ($id) $q->where('item_id', $id);
+            else $q->where('item_name', $name);
+
+            if ($startDate) $q->whereDate('created_at', '>=', $startDate);
+            if ($endDate) $q->whereDate('created_at', '<=', $endDate);
+            return floatval($q->sum('quantity'));
+        };
+
+        $getOutcomesManual = function ($type, $id, $name) use ($startDate, $endDate) {
+            $q = InventoryMovement::where('item_type', $type)->where('movement_type', 'outcome');
+            if ($id) $q->where('item_id', $id);
+            else $q->where('item_name', $name);
+
+            if ($startDate) $q->whereDate('created_at', '>=', $startDate);
+            if ($endDate) $q->whereDate('created_at', '<=', $endDate);
+            return floatval($q->sum('quantity'));
+        };
+
+        $getInitial = function ($type, $id, $name, $currentStock) use ($startDate) {
+            $q = InventoryMovement::where('item_type', $type)->where('movement_type', 'initial_balance');
+            if ($id) $q->where('item_id', $id);
+            else $q->where('item_name', $name);
+
+            $hasInitialRecord = $q->exists();
+            $baseInitial = $hasInitialRecord ? floatval($q->sum('quantity')) : floatval($currentStock);
+
+            if (!$startDate) {
+                return $baseInitial;
+            }
+
+            // Si hay filtro de fecha de inicio, calcular el saldo inicial acumulado previo a esa fecha
+            $priorIncomes = floatval(InventoryMovement::where('item_type', $type)
                 ->where('movement_type', 'income')
+                ->when($id, fn($query) => $query->where('item_id', $id), fn($query) => $query->where('item_name', $name))
+                ->whereDate('created_at', '<', $startDate)
                 ->sum('quantity'));
 
-            $outcomes = floatval(InventoryMovement::where('item_type', 'supply')
-                ->where('item_id', $supply->id)
+            $priorOutcomesManual = floatval(InventoryMovement::where('item_type', $type)
                 ->where('movement_type', 'outcome')
+                ->when($id, fn($query) => $query->where('item_id', $id), fn($query) => $query->where('item_name', $name))
+                ->whereDate('created_at', '<', $startDate)
                 ->sum('quantity'));
 
+            $priorSales = 0;
+            if ($type === 'product' && $id) {
+                $priorSales = floatval(DB::table('sale_details')
+                    ->join('sales', 'sale_details.sale_id', '=', 'sales.id')
+                    ->where('sales.status', '!=', 'Anulado')
+                    ->where('sale_details.product_id', $id)
+                    ->whereDate('sales.date', '<', $startDate)
+                    ->sum('sale_details.quantity'));
+            } elseif ($type === 'supply' && $id) {
+                $priorSales = floatval(DB::table('sale_details')
+                    ->join('sales', 'sale_details.sale_id', '=', 'sales.id')
+                    ->join('product_supplies', 'sale_details.product_id', '=', 'product_supplies.product_id')
+                    ->where('sales.status', '!=', 'Anulado')
+                    ->where('product_supplies.supply_id', $id)
+                    ->whereDate('sales.date', '<', $startDate)
+                    ->sum(DB::raw('sale_details.quantity * product_supplies.quantity')));
+            }
+
+            return $baseInitial + $priorIncomes - ($priorOutcomesManual + $priorSales);
+        };
+
+        // 1. INSUMOS (Bidones, tapas, sellos, etiquetas, bolsas, etc.)
+        $supplies = Supply::all()->map(function ($supply) use ($suppliesSalesTotals, $getInitial, $getIncomes, $getOutcomesManual) {
+            $initial = $getInitial('supply', $supply->id, null, $supply->stock);
+            $incomes = $getIncomes('supply', $supply->id, null);
+
+            $salidas_ventas = floatval($suppliesSalesTotals[$supply->id] ?? 0);
+            $salidas_manuales = $getOutcomesManual('supply', $supply->id, null);
+
+            $outcomes = $salidas_ventas + $salidas_manuales;
             $saldo_final = $initial + $incomes - $outcomes;
 
             return (object) [
@@ -63,33 +146,27 @@ class InventoryController extends Controller
         $dbCategories = FixedAsset::distinct()->pluck('category')->filter()->toArray();
         $assetCategories = array_unique(array_merge($defaultCategories, $dbCategories));
 
-        $assetsData = collect($assetCategories)->map(function ($catName) {
-            $totalCount = FixedAsset::where('category', 'like', "%{$catName}%")->count();
-            $availableCount = FixedAsset::where('category', 'like', "%{$catName}%")->where('status', 'available')->count();
-            $assignedCount = FixedAsset::where('category', 'like', "%{$catName}%")->where('status', 'assigned')->count();
+        $allAssets = FixedAsset::all();
 
-            $hasInitialRecord = InventoryMovement::where('item_type', 'fixed_asset')
-                ->where('item_name', $catName)
-                ->where('movement_type', 'initial_balance')
-                ->exists();
+        $assetsData = collect($assetCategories)->map(function ($catName) use ($allAssets, $startDate, $endDate, $getInitial, $getIncomes, $getOutcomesManual) {
+            $matchingAssets = $allAssets->where('category', $catName);
+            $totalCount = $matchingAssets->count();
+            $availableCount = $matchingAssets->where('status', 'available')->count();
+            $assignedCount = $matchingAssets->where('status', 'assigned')->count();
 
-            $initial = $hasInitialRecord
-                ? floatval(InventoryMovement::where('item_type', 'fixed_asset')
-                    ->where('item_name', $catName)
-                    ->where('movement_type', 'initial_balance')
-                    ->sum('quantity'))
-                : floatval($totalCount);
+            $initial = $getInitial('fixed_asset', null, $catName, $totalCount);
+            $incomes = $getIncomes('fixed_asset', null, $catName);
 
-            $incomes = floatval(InventoryMovement::where('item_type', 'fixed_asset')
-                ->where('item_name', $catName)
-                ->where('movement_type', 'income')
-                ->sum('quantity'));
+            // Asignaciones a clientes en fixed_asset_assignments
+            $salidas_asignaciones = floatval(DB::table('fixed_asset_assignments')
+                ->join('fixed_assets', 'fixed_asset_assignments.fixed_asset_id', '=', 'fixed_assets.id')
+                ->where('fixed_assets.category', 'like', "%{$catName}%")
+                ->when($startDate, fn($q) => $q->whereDate('fixed_asset_assignments.assigned_date', '>=', $startDate))
+                ->when($endDate, fn($q) => $q->whereDate('fixed_asset_assignments.assigned_date', '<=', $endDate))
+                ->count());
 
-            $outcomes = floatval(InventoryMovement::where('item_type', 'fixed_asset')
-                ->where('item_name', $catName)
-                ->where('movement_type', 'outcome')
-                ->sum('quantity'));
-
+            $salidas_manuales = $getOutcomesManual('fixed_asset', null, $catName);
+            $outcomes = $salidas_asignaciones + $salidas_manuales;
             $saldo_final = $initial + $incomes - $outcomes;
 
             return (object) [
@@ -105,29 +182,14 @@ class InventoryController extends Controller
         });
 
         // 3. PRODUCTOS TERMINADOS (Bolsas de hielo, agua, etc.)
-        $products = Product::where('is_combo', false)->get()->map(function ($product) {
-            $hasInitialRecord = InventoryMovement::where('item_type', 'product')
-                ->where('item_id', $product->id)
-                ->where('movement_type', 'initial_balance')
-                ->exists();
+        $products = Product::where('is_combo', false)->get()->map(function ($product) use ($salesTotals, $getInitial, $getIncomes, $getOutcomesManual) {
+            $initial = $getInitial('product', $product->id, null, $product->stock ?? 0);
+            $incomes = $getIncomes('product', $product->id, null);
 
-            $initial = $hasInitialRecord
-                ? floatval(InventoryMovement::where('item_type', 'product')
-                    ->where('item_id', $product->id)
-                    ->where('movement_type', 'initial_balance')
-                    ->sum('quantity'))
-                : floatval($product->stock ?? 0);
+            $salidas_ventas = floatval($salesTotals[$product->id] ?? 0);
+            $salidas_manuales = $getOutcomesManual('product', $product->id, null);
 
-            $incomes = floatval(InventoryMovement::where('item_type', 'product')
-                ->where('item_id', $product->id)
-                ->where('movement_type', 'income')
-                ->sum('quantity'));
-
-            $outcomes = floatval(InventoryMovement::where('item_type', 'product')
-                ->where('item_id', $product->id)
-                ->where('movement_type', 'outcome')
-                ->sum('quantity'));
-
+            $outcomes = $salidas_ventas + $salidas_manuales;
             $saldo_final = $initial + $incomes - $outcomes;
 
             return (object) [
@@ -303,13 +365,23 @@ class InventoryController extends Controller
 
     public function history(Request $request, $itemType, $itemId = null)
     {
+        $startDate = $request->start_date;
+        $endDate = $request->end_date;
+
         $query = InventoryMovement::with('user')
             ->where('item_type', $itemType);
 
-        if ($itemId && is_numeric($itemId)) {
+        if ($itemId && is_numeric($itemId) && intval($itemId) > 0) {
             $query->where('item_id', $itemId);
         } elseif ($request->item_name) {
             $query->where('item_name', $request->item_name);
+        }
+
+        if ($startDate) {
+            $query->whereDate('created_at', '>=', $startDate);
+        }
+        if ($endDate) {
+            $query->whereDate('created_at', '<=', $endDate);
         }
 
         $movements = $query->orderBy('created_at', 'desc')->get()->map(function ($m) {
@@ -327,8 +399,148 @@ class InventoryController extends Controller
                 'notes' => $m->notes ?: '-',
                 'user' => $m->user ? $m->user->name : 'Sistema',
                 'date' => $m->created_at ? $m->created_at->format('d/m/Y H:i') : '-',
+                'raw_date' => $m->created_at ? $m->created_at->toDateTimeString() : '1970-01-01 00:00:00',
             ];
         });
+
+        // Historial adicional por tipo de ítem
+        if ($itemType === 'product' && !empty($itemId) && is_numeric($itemId) && intval($itemId) > 0) {
+            $salesQuery = DB::table('sale_details')
+                ->join('sales', 'sale_details.sale_id', '=', 'sales.id')
+                ->leftJoin('clients', 'sales.client_id', '=', 'clients.id')
+                ->leftJoin('users', 'sales.dispatcher_id', '=', 'users.id')
+                ->where('sales.status', '!=', 'Anulado')
+                ->where('sale_details.product_id', $itemId);
+
+            if ($startDate) {
+                $salesQuery->whereDate('sales.date', '>=', $startDate);
+            }
+            if ($endDate) {
+                $salesQuery->whereDate('sales.date', '<=', $endDate);
+            }
+
+            $salesMovements = $salesQuery
+                ->select(
+                    'sales.id as sale_id',
+                    'sales.date as date_time',
+                    'sale_details.quantity as qty',
+                    'sales.order as order',
+                    'sales.guide as guide',
+                    'clients.name as client_name',
+                    'users.name as user_name'
+                )
+                ->get()
+                ->map(function ($s) {
+                    $clientInfo = $s->client_name ? " (Cliente: {$s->client_name})" : '';
+                    $ref = $s->guide ? "Guía: {$s->guide}" : "Pedido: {$s->order}";
+                    return [
+                        'id' => 'sale_' . $s->sale_id,
+                        'type_label' => 'Salida (Venta)',
+                        'movement_type' => 'outcome',
+                        'quantity' => floatval($s->qty),
+                        'notes' => "Venta {$ref}{$clientInfo}",
+                        'user' => $s->user_name ?: 'Sistema',
+                        'date' => $s->date_time ? \Carbon\Carbon::parse($s->date_time)->format('d/m/Y H:i') : '-',
+                        'raw_date' => $s->date_time ?: '1970-01-01 00:00:00',
+                    ];
+                });
+
+            $allMovements = $movements->concat($salesMovements)->sortByDesc('raw_date')->values();
+            return response()->json($allMovements);
+        }
+
+        if ($itemType === 'supply' && !empty($itemId) && is_numeric($itemId) && intval($itemId) > 0) {
+            $supplySalesMovements = DB::table('sale_details')
+                ->join('sales', 'sale_details.sale_id', '=', 'sales.id')
+                ->join('product_supplies', 'sale_details.product_id', '=', 'product_supplies.product_id')
+                ->join('products', 'sale_details.product_id', '=', 'products.id')
+                ->leftJoin('clients', 'sales.client_id', '=', 'clients.id')
+                ->leftJoin('users', 'sales.dispatcher_id', '=', 'users.id')
+                ->where('sales.status', '!=', 'Anulado')
+                ->where('product_supplies.supply_id', $itemId)
+                ->when($startDate, fn($q) => $q->whereDate('sales.date', '>=', $startDate))
+                ->when($endDate, fn($q) => $q->whereDate('sales.date', '<=', $endDate))
+                ->select(
+                    'sales.id as sale_id',
+                    'sales.date as date_time',
+                    DB::raw('(sale_details.quantity * product_supplies.quantity) as qty'),
+                    'products.name as product_name',
+                    'sales.order as order',
+                    'sales.guide as guide',
+                    'clients.name as client_name',
+                    'users.name as user_name'
+                )
+                ->get()
+                ->map(function ($s) {
+                    $clientInfo = $s->client_name ? " (Cliente: {$s->client_name})" : '';
+                    $ref = $s->guide ? "Guía: {$s->guide}" : "Pedido: {$s->order}";
+                    return [
+                        'id' => 'supply_sale_' . $s->sale_id,
+                        'type_label' => 'Salida (Consumo Venta)',
+                        'movement_type' => 'outcome',
+                        'quantity' => floatval($s->qty),
+                        'notes' => "Consumo por venta de {$s->product_name} en {$ref}{$clientInfo}",
+                        'user' => $s->user_name ?: 'Sistema',
+                        'date' => $s->date_time ? \Carbon\Carbon::parse($s->date_time)->format('d/m/Y H:i') : '-',
+                        'raw_date' => $s->date_time ?: '1970-01-01 00:00:00',
+                    ];
+                });
+
+            $allMovements = $movements->concat($supplySalesMovements)->sortByDesc('raw_date')->values();
+            return response()->json($allMovements);
+        }
+
+        if ($itemType === 'fixed_asset' && $request->item_name) {
+            $catName = $request->item_name;
+            $assignments = DB::table('fixed_asset_assignments')
+                ->join('fixed_assets', 'fixed_asset_assignments.fixed_asset_id', '=', 'fixed_assets.id')
+                ->leftJoin('clients', 'fixed_asset_assignments.client_id', '=', 'clients.id')
+                ->where('fixed_assets.category', 'like', "%{$catName}%")
+                ->when($startDate, fn($q) => $q->whereDate('fixed_asset_assignments.assigned_date', '>=', $startDate))
+                ->when($endDate, fn($q) => $q->whereDate('fixed_asset_assignments.assigned_date', '<=', $endDate))
+                ->select(
+                    'fixed_asset_assignments.id as assignment_id',
+                    'fixed_asset_assignments.assigned_date',
+                    'fixed_asset_assignments.returned_date',
+                    'fixed_assets.name as asset_name',
+                    'fixed_assets.internal_code',
+                    'clients.name as client_name'
+                )
+                ->get();
+
+            $assetMovements = collect();
+            foreach ($assignments as $a) {
+                $clientInfo = $a->client_name ? " a cliente {$a->client_name}" : '';
+                $codeInfo = $a->internal_code ? " (Cód: {$a->internal_code})" : '';
+
+                $assetMovements->push([
+                    'id' => 'assign_' . $a->assignment_id,
+                    'type_label' => 'Salida (Asignación)',
+                    'movement_type' => 'outcome',
+                    'quantity' => 1.00,
+                    'notes' => "Asignación de {$a->asset_name}{$codeInfo}{$clientInfo}",
+                    'user' => 'Sistema',
+                    'date' => $a->assigned_date ? \Carbon\Carbon::parse($a->assigned_date)->format('d/m/Y H:i') : '-',
+                    'raw_date' => $a->assigned_date ?: '1970-01-01 00:00:00',
+                ]);
+
+                if ($a->returned_date) {
+                    $assetMovements->push([
+                        'id' => 'ret_' . $a->assignment_id,
+                        'type_label' => 'Ingreso (Devolución)',
+                        'movement_type' => 'income',
+                        'quantity' => 1.00,
+                        'notes' => "Devolución de {$a->asset_name}{$codeInfo}{$clientInfo}",
+                        'user' => 'Sistema',
+                        'date' => \Carbon\Carbon::parse($a->returned_date)->format('d/m/Y H:i'),
+                        'raw_date' => $a->returned_date,
+                    ]);
+                }
+            }
+
+            $allMovements = $movements->concat($assetMovements)->sortByDesc('raw_date')->values();
+            return response()->json($allMovements);
+        }
 
         return response()->json($movements);
     }
