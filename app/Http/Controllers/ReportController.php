@@ -28,25 +28,44 @@ class ReportController extends Controller
     }
 
     public function cashbox(Request $request){
-        $date = $request->date ? $request->date : now()->format('Y-m-d');
-        
-        $cashboxes = Cashbox::with(['movements', 'openedBy', 'closedBy', 'movements.user', 'movements.payment_method'])
-            ->whereDate('opened_at', $date)
-            ->orWhereDate('closed_at', $date)
-            ->get();
+        $start_date = $request->start_date ?: ($request->date ?: now()->startOfMonth()->format('Y-m-d'));
+        $end_date = $request->end_date ?: ($request->date ?: now()->format('Y-m-d'));
+
+        $query = Cashbox::with(['movements', 'openedBy', 'closedBy', 'movements.user', 'movements.payment_method']);
+
+        if ($request->filled('start_date') || $request->filled('end_date') || $request->filled('date')) {
+            if ($request->filled('date') && !$request->filled('start_date') && !$request->filled('end_date')) {
+                $query->where(function($q) use ($request) {
+                    $q->whereDate('opened_at', $request->date)
+                      ->orWhereDate('closed_at', $request->date);
+                });
+            } else {
+                if ($start_date) {
+                    $query->whereDate('opened_at', '>=', $start_date);
+                }
+                if ($end_date) {
+                    $query->whereDate('opened_at', '<=', $end_date);
+                }
+            }
+        } else {
+            // Por defecto: mostrar cajas del mes actual
+            $query->whereDate('opened_at', '>=', now()->startOfMonth()->format('Y-m-d'));
+        }
+
+        $cashboxes = $query->orderBy('opened_at', 'desc')->get();
 
         foreach($cashboxes as $cb){
             $start = $cb->opened_at;
             $end = $cb->is_open ? now() : $cb->closed_at;
             
             $cb->expenses_list = \App\Models\Expense::whereBetween('date', [$start, $end])
-                ->with('payment_method')
+                ->with(['payment_method', 'user'])
                 ->get();
         }
 
         $payment_methods = \App\Models\PaymentMethod::all();
 
-        return view('reports.cashbox', compact('cashboxes', 'date', 'payment_methods'));
+        return view('reports.cashbox', compact('cashboxes', 'start_date', 'end_date', 'payment_methods'));
     }
 
     public function getSalesForLiquidation(Request $request){

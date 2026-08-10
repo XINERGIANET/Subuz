@@ -39,4 +39,9 @@ class Expense extends Model
     {
         return $this->belongsTo(ExpenseSubcategory::class, 'expense_subcategory_id');
     }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 }
