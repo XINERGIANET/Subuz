@@ -53,7 +53,7 @@ class InventoryController extends Controller
 
         // Funciones auxiliares para calcular movimientos según fecha
         $getIncomes = function ($type, $id, $name) use ($startDate, $endDate) {
-            $q = InventoryMovement::where('item_type', $type)->where('movement_type', 'income');
+            $q = InventoryMovement::where('item_type', $type)->whereIn('movement_type', ['income', 'return']);
             if ($id) $q->where('item_id', $id);
             else $q->where('item_name', $name);
 
@@ -86,7 +86,7 @@ class InventoryController extends Controller
 
             // Si hay filtro de fecha de inicio, calcular el saldo inicial acumulado previo a esa fecha
             $priorIncomes = floatval(InventoryMovement::where('item_type', $type)
-                ->where('movement_type', 'income')
+                ->whereIn('movement_type', ['income', 'return'])
                 ->when($id, fn($query) => $query->where('item_id', $id), fn($query) => $query->where('item_name', $name))
                 ->whereDate('created_at', '<', $startDate)
                 ->sum('quantity'));
@@ -248,7 +248,7 @@ class InventoryController extends Controller
         if ($request->item_type === 'supply' && $request->item_id) {
             $supply = Supply::find($request->item_id);
             if ($supply) {
-                $incomes = InventoryMovement::where('item_type', 'supply')->where('item_id', $supply->id)->where('movement_type', 'income')->sum('quantity');
+                $incomes = InventoryMovement::where('item_type', 'supply')->where('item_id', $supply->id)->whereIn('movement_type', ['income', 'return'])->sum('quantity');
                 $outcomes = InventoryMovement::where('item_type', 'supply')->where('item_id', $supply->id)->where('movement_type', 'outcome')->sum('quantity');
                 $supply->update(['stock' => $request->quantity + $incomes - $outcomes]);
             }
@@ -258,7 +258,7 @@ class InventoryController extends Controller
         if ($request->item_type === 'product' && $request->item_id) {
             $product = Product::find($request->item_id);
             if ($product) {
-                $incomes = InventoryMovement::where('item_type', 'product')->where('item_id', $product->id)->where('movement_type', 'income')->sum('quantity');
+                $incomes = InventoryMovement::where('item_type', 'product')->where('item_id', $product->id)->whereIn('movement_type', ['income', 'return'])->sum('quantity');
                 $outcomes = InventoryMovement::where('item_type', 'product')->where('item_id', $product->id)->where('movement_type', 'outcome')->sum('quantity');
                 $product->update([
                     'initial_stock' => $request->quantity,
@@ -276,7 +276,7 @@ class InventoryController extends Controller
             'item_type' => 'required|string|in:supply,fixed_asset,product',
             'item_id' => 'nullable',
             'item_name' => 'nullable|string',
-            'movement_type' => 'required|string|in:income,outcome,adjustment',
+            'movement_type' => 'required|string|in:income,outcome,adjustment,return',
             'quantity' => 'required|numeric|gt:0',
             'amount' => 'nullable|numeric|min:0',
             'payment_method_id' => 'nullable|exists:payment_methods,id',
@@ -293,7 +293,7 @@ class InventoryController extends Controller
             'item_name' => $request->item_name,
             'movement_type' => $request->movement_type,
             'quantity' => $request->quantity,
-            'notes' => $request->notes ?? 'Movimiento de inventario manual',
+            'notes' => $request->notes ?? ($request->movement_type === 'return' ? 'Devolución de inventario' : 'Movimiento de inventario manual'),
             'user_id' => auth()->id(),
         ]);
 
@@ -305,7 +305,7 @@ class InventoryController extends Controller
             if ($supply) {
                 $itemName = $supply->name;
                 $initial = InventoryMovement::where('item_type', 'supply')->where('item_id', $supply->id)->where('movement_type', 'initial_balance')->sum('quantity');
-                $incomes = InventoryMovement::where('item_type', 'supply')->where('item_id', $supply->id)->where('movement_type', 'income')->sum('quantity');
+                $incomes = InventoryMovement::where('item_type', 'supply')->where('item_id', $supply->id)->whereIn('movement_type', ['income', 'return'])->sum('quantity');
                 $outcomes = InventoryMovement::where('item_type', 'supply')->where('item_id', $supply->id)->where('movement_type', 'outcome')->sum('quantity');
                 $supply->update(['stock' => $initial + $incomes - $outcomes]);
             }
@@ -317,7 +317,7 @@ class InventoryController extends Controller
             if ($product) {
                 $itemName = $product->name;
                 $initial = InventoryMovement::where('item_type', 'product')->where('item_id', $product->id)->where('movement_type', 'initial_balance')->sum('quantity');
-                $incomes = InventoryMovement::where('item_type', 'product')->where('item_id', $product->id)->where('movement_type', 'income')->sum('quantity');
+                $incomes = InventoryMovement::where('item_type', 'product')->where('item_id', $product->id)->whereIn('movement_type', ['income', 'return'])->sum('quantity');
                 $outcomes = InventoryMovement::where('item_type', 'product')->where('item_id', $product->id)->where('movement_type', 'outcome')->sum('quantity');
                 $product->update(['stock' => $initial + $incomes - $outcomes]);
             }
@@ -357,6 +357,20 @@ class InventoryController extends Controller
                         'date' => now()
                     ]);
                 }
+            } elseif ($request->movement_type === 'return') {
+                // Devolución de inventario (Devolución de cliente con reembolso de dinero) = EGRESO de dinero de caja
+                $cashbox = Cashbox::currentOpen();
+                if ($cashbox) {
+                    CashboxMovement::create([
+                        'cashbox_id' => $cashbox->id,
+                        'user_id' => auth()->id(),
+                        'payment_method_id' => $request->payment_method_id,
+                        'type' => 'expense',
+                        'amount' => $request->amount,
+                        'note' => "Devolución de inventario: {$itemName} - Cant: {$request->quantity}",
+                        'date' => now()
+                    ]);
+                }
             }
         }
 
@@ -389,6 +403,7 @@ class InventoryController extends Controller
             if ($m->movement_type === 'initial_balance') $typeLabel = 'Saldo Inicial';
             if ($m->movement_type === 'income') $typeLabel = 'Ingreso (+)';
             if ($m->movement_type === 'outcome') $typeLabel = 'Salida (-)';
+            if ($m->movement_type === 'return') $typeLabel = 'Devolución (+)';
             if ($m->movement_type === 'adjustment') $typeLabel = 'Ajuste';
 
             return [

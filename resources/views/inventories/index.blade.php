@@ -194,6 +194,10 @@
                                                 onclick="openMovementModal('supply', '{{ $s->id }}', '{{ $s->name }}', 'outcome')">
                                             <i class="ti ti-minus me-1"></i> Salida
                                         </button>
+                                        <button class="btn btn-sm btn-outline-warning" 
+                                                onclick="openMovementModal('supply', '{{ $s->id }}', '{{ $s->name }}', 'return')">
+                                            <i class="ti ti-rotate-2 me-1"></i> Devolución
+                                        </button>
                                         <button class="btn btn-sm btn-outline-info" 
                                                 onclick="showKardexHistory('supply', '{{ $s->id }}', '{{ $s->name }}')">
                                             <i class="ti ti-history me-1"></i> Kardex
@@ -267,6 +271,10 @@
                                                 onclick="openMovementModal('fixed_asset', null, '{{ $a->category }}', 'outcome')">
                                             <i class="ti ti-minus me-1"></i> Salida
                                         </button>
+                                        <button class="btn btn-sm btn-outline-warning" 
+                                                onclick="openMovementModal('fixed_asset', null, '{{ $a->category }}', 'return')">
+                                            <i class="ti ti-rotate-2 me-1"></i> Devolución
+                                        </button>
                                         <button class="btn btn-sm btn-outline-info" 
                                                 onclick="showKardexHistory('fixed_asset', null, '{{ $a->category }}')">
                                             <i class="ti ti-history me-1"></i> Kardex
@@ -334,6 +342,10 @@
                                         <button class="btn btn-sm btn-outline-danger" 
                                                 onclick="openMovementModal('product', '{{ $p->id }}', '{{ $p->name }}', 'outcome')">
                                             <i class="ti ti-minus me-1"></i> Salida
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning" 
+                                                onclick="openMovementModal('product', '{{ $p->id }}', '{{ $p->name }}', 'return')">
+                                            <i class="ti ti-rotate-2 me-1"></i> Devolución
                                         </button>
                                         <button class="btn btn-sm btn-outline-info" 
                                                 onclick="showKardexHistory('product', '{{ $p->id }}', '{{ $p->name }}')">
@@ -424,6 +436,7 @@
                     <select class="form-select" name="movement_type" id="mov_type" required>
                         <option value="income">Ingreso (+)</option>
                         <option value="outcome">Salida (-)</option>
+                        <option value="return">Devolución (+)</option>
                     </select>
                 </div>
                 <div class="mb-3">
@@ -662,6 +675,7 @@
                     if (m.movement_type === 'initial_balance') badgeClass = 'bg-info-lt';
                     if (m.movement_type === 'income') badgeClass = 'bg-success-lt';
                     if (m.movement_type === 'outcome') badgeClass = 'bg-danger-lt';
+                    if (m.movement_type === 'return') badgeClass = 'bg-warning-lt';
 
                     html += `
                         <tr>
