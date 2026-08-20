@@ -61,6 +61,9 @@
 					<label class="form-label small fw-medium text-muted text-uppercase mb-1">Cliente</label>
 					<select class="form-select ts-clients" name="client_id">
 						<option value="">Seleccionar cliente</option>
+						@if(isset($selected_client) && $selected_client)
+							<option value="{{ $selected_client->id }}" selected>{{ $selected_client->name }}</option>
+						@endif
 					</select>
 				</div>
 				<div class="col-md-2">
@@ -98,7 +101,10 @@
 					<th>Guía/Venta</th>
 					<th class="text-center">Monto</th>
 					<th class="text-center">Forma de pago</th>
-					<th class="text-end">Fecha</th>
+					<th class="text-center">Fecha</th>
+					@if(auth()->user()->hasRole('admin'))
+					<th class="text-end" width="80">Acción</th>
+					@endif
 				</tr>
 			</thead>
 			<tbody>
@@ -117,11 +123,18 @@
                             {{ optional($payment->payment_method)->name ?? 'N/A' }}
                         </span>
                     </td>
-					<td class="text-end">{{ $payment->date->format('d/m/Y') }}</td>
+					<td class="text-center">{{ $payment->date->format('d/m/Y') }}</td>
+					@if(auth()->user()->hasRole('admin'))
+					<td class="text-end">
+						<button class="btn btn-icon btn-outline-danger btn-delete-payment" data-id="{{ $payment->id }}" data-bs-toggle="tooltip" title="Revertir Pago">
+							<i class="ti ti-arrow-back-up icon fs-2"></i>
+						</button>
+					</td>
+					@endif
 				</tr>
                 @empty
 				<tr>
-					<td colspan="6" align="center" class="py-5 text-muted">
+					<td colspan="{{ auth()->user()->hasRole('admin') ? 7 : 6 }}" align="center" class="py-5 text-muted">
                         <i class="ti ti-alert-circle fs-1 mb-2 d-block"></i>
                         No se han encontrado resultados
                     </td>
@@ -155,7 +168,6 @@
 					url: '{{ route('clients.api') }}?q=' + encodeURIComponent(query),
 					method: 'GET',
 					success: function(data){
-						console.log(data);
 						callback(data.items);
 					},
 					error: function(err){
@@ -173,6 +185,88 @@
 				no_results: function(data, escape){
 					return '<div class="no-results">No se encontraron resultados</div>'
 				}
+			}
+		});
+	});
+
+	$(document).on('click', '.btn-delete-payment', function(e){
+		e.preventDefault();
+		var payment_id = $(this).data('id');
+
+		Swal.fire({
+			title: '¿Revertir este pago?',
+			text: 'El monto se volverá a sumar a la deuda pendiente de la venta y se actualizará el movimiento de caja.',
+			icon: 'warning',
+			showCancelButton: true,
+			confirmButtonColor: '#d63939',
+			cancelButtonColor: '#6c757d',
+			confirmButtonText: '<i class="ti ti-arrow-back-up me-1"></i> Sí, revertir pago',
+			cancelButtonText: 'Cancelar',
+			reverseButtons: true,
+			customClass: {
+				confirmButton: 'btn btn-danger px-4',
+				cancelButton: 'btn btn-secondary px-4'
+			},
+			buttonsStyling: false
+		}).then((result) => {
+			if (result.isConfirmed) {
+				Swal.fire({
+					title: 'Procesando...',
+					text: 'Revirtiendo el pago, por favor espere.',
+					allowOutsideClick: false,
+					didOpen: () => {
+						Swal.showLoading();
+					}
+				});
+
+				$.ajax({
+					url: '{{ url("payments") }}/' + payment_id,
+					method: 'DELETE',
+					data: {
+						_token: '{{ csrf_token() }}'
+					},
+					success: function(data){
+						if(data.status){
+							Swal.fire({
+								title: '¡Pago Revertido!',
+								text: 'El pago ha sido cancelado y la deuda fue restaurada correctamente.',
+								icon: 'success',
+								confirmButtonColor: '#206bc4',
+								confirmButtonText: 'Aceptar',
+								customClass: {
+									confirmButton: 'btn btn-primary px-4'
+								},
+								buttonsStyling: false
+							}).then(() => {
+								location.reload();
+							});
+						} else {
+							Swal.fire({
+								title: 'Error',
+								text: data.error || 'No se pudo revertir el pago.',
+								icon: 'error',
+								confirmButtonColor: '#d63939',
+								customClass: {
+									confirmButton: 'btn btn-danger px-4'
+								},
+								buttonsStyling: false
+							});
+						}
+					},
+					error: function(err){
+						console.log(err);
+						Swal.fire({
+							title: 'Error',
+							text: 'Ocurrió un error inesperado al intentar revertir el pago.',
+							icon: 'error',
+							confirmButtonColor: '#d63939',
+							customClass: {
+								confirmButton: 'btn btn-danger px-4'
+							},
+							buttonsStyling: false
+						});
+					}
+				});
 			}
 		});
 	});

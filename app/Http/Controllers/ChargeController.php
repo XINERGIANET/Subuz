@@ -91,7 +91,8 @@ class ChargeController extends Controller
         $total = $payments->sum('amount');
         
         $payments = $payments->paginate(10);
+        $selected_client = $request->client_id ? Client::find($request->client_id) : null;
         
-        return view('charges.history', compact('payments', 'total'));
+        return view('charges.history', compact('payments', 'total', 'selected_client'));
     }
 }
