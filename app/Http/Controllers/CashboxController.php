@@ -235,6 +235,111 @@ class CashboxController extends Controller
         return back()->with('message', 'Caja cerrada correctamente.');
     }
 
+    public function getMethodBreakdown(Request $request, $payment_method_id)
+    {
+        if(!auth()->user()->hasRole('admin')){
+            return response()->json(['status' => false, 'error' => 'No autorizado'], 403);
+        }
+
+        $cashbox = Cashbox::currentOpen();
+        if(!$cashbox){
+            return response()->json(['status' => false, 'error' => 'No hay una caja abierta actualmente.']);
+        }
+
+        $pm = \App\Models\PaymentMethod::findOrFail($payment_method_id);
+
+        $opening = 0;
+        if($pm->id == 1){
+            $opening = (float)$cashbox->opening_amount;
+        } else {
+            $opening = (float)(isset($cashbox->opening_balances[$pm->id]) ? $cashbox->opening_balances[$pm->id] : 0);
+        }
+
+        $movements = CashboxMovement::with(['sale.client', 'user'])
+            ->where('cashbox_id', $cashbox->id)
+            ->where('payment_method_id', $pm->id)
+            ->orderBy('date', 'desc')
+            ->get()
+            ->map(function($m){
+                return [
+                    'id' => $m->id,
+                    'type' => $m->type,
+                    'amount' => (float)$m->amount,
+                    'date' => $m->date ? $m->date->format('d/m/Y H:i') : '-',
+                    'reference' => $m->sale ? $m->sale->guide : ($m->type == 'transfer' ? 'Transferencia' : ($m->type == 'income' ? 'Ingreso' : 'Otro')),
+                    'description' => $m->note ?: (optional(optional($m->sale)->client)->name ?? 'Consumidor Final'),
+                    'user' => optional($m->user)->name ?? 'Sistema'
+                ];
+            });
+
+        $expenses = Expense::where('payment_method_id', $pm->id)
+            ->whereBetween('date', [$cashbox->opened_at, now()])
+            ->orderBy('date', 'desc')
+            ->get()
+            ->map(function($e){
+                return [
+                    'id' => $e->id,
+                    'type' => 'expense',
+                    'amount' => (float)$e->amount,
+                    'date' => $e->date ? $e->date->format('d/m/Y H:i') : '-',
+                    'reference' => 'Egreso / Gasto',
+                    'description' => $e->description,
+                    'user' => optional($e->user)->name ?? 'Sistema'
+                ];
+            });
+
+        $total_paid = $movements->where('type', 'paid')->sum('amount');
+        $total_income = $movements->where('type', 'income')->sum('amount');
+        $total_transfer = $movements->where('type', 'transfer')->sum('amount');
+        $total_expense = $expenses->sum('amount');
+        $current_balance = $opening + $total_paid + $total_income + $total_transfer - $total_expense;
+
+        return response()->json([
+            'status' => true,
+            'payment_method' => [
+                'id' => $pm->id,
+                'name' => $pm->name
+            ],
+            'opening_amount' => $opening,
+            'current_balance' => $current_balance,
+            'movements' => $movements,
+            'expenses' => $expenses
+        ]);
+    }
+
+    public function updateOpeningBalance(Request $request, $payment_method_id)
+    {
+        if(!auth()->user()->hasRole('admin')){
+            return response()->json(['status' => false, 'error' => 'No autorizado'], 403);
+        }
+
+        $request->validate([
+            'opening_amount' => 'required|numeric'
+        ]);
+
+        $cashbox = Cashbox::currentOpen();
+        if(!$cashbox){
+            return response()->json(['status' => false, 'error' => 'No hay una caja abierta actualmente.']);
+        }
+
+        if($payment_method_id == 1){
+            $cashbox->update([
+                'opening_amount' => $request->opening_amount
+            ]);
+        } else {
+            $balances = is_array($cashbox->opening_balances) ? $cashbox->opening_balances : [];
+            $balances[$payment_method_id] = (float)$request->opening_amount;
+            $cashbox->update([
+                'opening_balances' => $balances
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Saldo de apertura actualizado correctamente.'
+        ]);
+    }
+
     public function destroyMovement(CashboxMovement $movement)
     {
         if(!auth()->user()->hasRole('admin')){
@@ -242,6 +347,10 @@ class CashboxController extends Controller
         }
 
         $movement->delete();
+
+        if(request()->ajax() || request()->wantsJson()){
+            return response()->json(['status' => true, 'message' => 'Movimiento eliminado correctamente.']);
+        }
 
         return back()->with('message', 'Movimiento de caja eliminado correctamente.');
     }

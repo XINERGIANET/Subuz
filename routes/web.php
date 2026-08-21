@@ -213,6 +213,8 @@ Route::middleware('auth')->group(function () {
 		Route::post('cashbox/close', [CashboxController::class, 'close'])->name('cashbox.close');
 		Route::post('cashbox/income', [CashboxController::class, 'storeIncome'])->name('cashbox.income');
 		Route::post('cashbox/transfer', [CashboxController::class, 'storeTransfer'])->name('cashbox.transfer');
+		Route::get('cashbox/method-breakdown/{payment_method_id}', [CashboxController::class, 'getMethodBreakdown'])->name('cashbox.method_breakdown');
+		Route::post('cashbox/update-opening-balance/{payment_method_id}', [CashboxController::class, 'updateOpeningBalance'])->name('cashbox.update_opening_balance');
 		Route::delete('cashbox/movements/{movement}', [CashboxController::class, 'destroyMovement'])->name('cashbox.movements.destroy');
 	});
 });

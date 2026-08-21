@@ -12,7 +12,7 @@
 
 <div class="row row-cards mb-4">
     <div class="col-md-3">
-        <div class="card metric-card border-0 shadow-sm overflow-hidden">
+        <div class="card metric-card border-0 shadow-sm overflow-hidden btn-method-breakdown" style="cursor: pointer;" data-id="1" data-name="Efectivo en Caja" title="Click para auditar/desglosar saldo">
             <div class="card-status-start bg-success"></div>
             <div class="card-body p-3">
                 <div class="row align-items-center">
@@ -22,7 +22,10 @@
                         </div>
                     </div>
                     <div class="col text-truncate">
-                        <div class="text-uppercase text-muted small fw-bold">Efectivo en Caja</div>
+                        <div class="text-uppercase text-muted small fw-bold d-flex justify-content-between align-items-center">
+                            <span>Efectivo en Caja</span>
+                            <i class="ti ti-lock text-muted fs-4"></i>
+                        </div>
                         <div class="h2 mb-0 fw-bold text-success">S/{{ number_format($balances[1] ?? 0, 2) }}</div>
                     </div>
                 </div>
@@ -32,7 +35,7 @@
     @foreach($payment_methods as $pm)
         @if($pm->id != 1 && ($balances[$pm->id] > 0 || (isset($cashbox->opening_balances[$pm->id]) && $cashbox->opening_balances[$pm->id] > 0)))
         <div class="col-md-3">
-            <div class="card metric-card border-0 shadow-sm overflow-hidden">
+            <div class="card metric-card border-0 shadow-sm overflow-hidden btn-method-breakdown" style="cursor: pointer;" data-id="{{ $pm->id }}" data-name="{{ $pm->name }}" title="Click para auditar/desglosar saldo">
                 <div class="card-status-start bg-azure"></div>
                 <div class="card-body p-3">
                     <div class="row align-items-center">
@@ -42,7 +45,10 @@
                             </div>
                         </div>
                         <div class="col text-truncate">
-                            <div class="text-uppercase text-muted small fw-bold">{{ $pm->name }}</div>
+                            <div class="text-uppercase text-muted small fw-bold d-flex justify-content-between align-items-center">
+                                <span>{{ $pm->name }}</span>
+                                <i class="ti ti-lock text-muted fs-4"></i>
+                            </div>
                             <div class="h2 mb-0 fw-bold text-azure">S/{{ number_format($balances[$pm->id], 2) }}</div>
                         </div>
                     </div>
@@ -129,7 +135,9 @@
 					<th>Método</th>
 					<th class="text-center">Monto</th>
 					<th class="text-end">Usuario</th>
-					<th class="text-end" style="display: none;">Acciones</th>
+					@if(auth()->user()->hasRole('admin'))
+					<th class="text-end">Acciones</th>
+					@endif
 				</tr>
 			</thead>
 			<tbody>
@@ -164,8 +172,9 @@
                         S/{{ number_format($movement->amount, 2) }}
                     </td>
 					<td class="text-end small">{{ $movement->user ? explode(' ', $movement->user->name)[0] : 'N/A' }}</td>
-					<td class="text-end" style="display: none;">
-						@if($movement->id && auth()->user()->hasRole('admin'))
+					@if(auth()->user()->hasRole('admin'))
+					<td class="text-end">
+						@if($movement->id)
 						<form method="POST" action="{{ route('cashbox.movements.destroy', $movement->id) }}" onsubmit="return confirm('¿Eliminar este movimiento de caja?');">
 							@csrf
 							@method('DELETE')
@@ -175,6 +184,7 @@
 						</form>
 						@endif
 					</td>
+					@endif
 				</tr>
                 @empty
 				<tr>
@@ -386,10 +396,77 @@
     </div>
   </div>
 </div>
+<!-- Modal Desglose y Auditoría de Cuenta / Banco -->
+<div class="modal modal-blur fade" id="methodBreakdownModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+  	<div class="modal-content">
+  		<div class="modal-header bg-light-lt">
+  		  <div>
+  		      <span class="badge bg-primary text-white mb-1"><i class="ti ti-lock me-1"></i> Auditoría de Saldo</span>
+  		      <h5 class="modal-title fw-bold" id="breakdown-method-title">Desglose de Cuenta</h5>
+  		  </div>
+  		  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+  		</div>
+  		<div class="modal-body p-4">
+  		    <div class="row g-3 mb-4">
+  		        <div class="col-md-6">
+  		            <div class="card p-3 border shadow-sm">
+  		                <div class="d-flex justify-content-between align-items-center mb-1">
+  		                    <span class="text-uppercase text-muted extra-small fw-bold">Saldo Inicial (Apertura)</span>
+  		                    <button class="btn btn-outline-primary btn-sm py-0 px-2" id="btn-edit-opening" title="Ajustar saldo inicial">
+  		                        <i class="ti ti-pencil me-1"></i> Modificar
+  		                    </button>
+  		                </div>
+  		                <div class="h2 mb-0 fw-bold text-dark" id="breakdown-opening-display">S/ 0.00</div>
+  		                <div id="opening-edit-form" class="mt-2 d-none">
+  		                    <div class="input-group input-group-sm">
+  		                        <span class="input-group-text">S/</span>
+  		                        <input type="number" step="0.01" class="form-control" id="opening_amount_input">
+  		                        <button class="btn btn-primary" type="button" id="btn-save-opening">Guardar</button>
+  		                        <button class="btn btn-secondary" type="button" id="btn-cancel-opening">Cancelar</button>
+  		                    </div>
+  		                </div>
+  		            </div>
+  		        </div>
+  		        <div class="col-md-6">
+  		            <div class="card p-3 border shadow-sm bg-primary-lt">
+  		                <span class="text-uppercase text-primary extra-small fw-bold mb-1">Saldo Actual Calculado</span>
+  		                <div class="h2 mb-0 fw-bold text-primary" id="breakdown-current-display">S/ 0.00</div>
+  		            </div>
+  		        </div>
+  		    </div>
+
+  		    <h6 class="fw-bold text-uppercase text-muted mb-2"><i class="ti ti-list me-2"></i>Movimientos de esta sesión</h6>
+  		    <div class="table-responsive border rounded mb-0" style="max-height: 350px; overflow-y: auto;">
+  		        <table class="table table-vcenter table-hover mb-0">
+  		            <thead class="table-light sticky-top">
+  		                <tr>
+  		                    <th>Fecha/Hora</th>
+  		                    <th>Tipo</th>
+  		                    <th>Ref / Guía</th>
+  		                    <th>Cliente / Nota</th>
+  		                    <th class="text-center">Monto</th>
+  		                    <th class="text-end">Acción</th>
+  		                </tr>
+  		            </thead>
+  		            <tbody id="breakdown-movements-body">
+  		                <!-- Dynamic lines -->
+  		            </tbody>
+  		        </table>
+  		    </div>
+  		</div>
+  		<div class="modal-footer">
+  			<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+  		</div>
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('scripts')
 <script>
+	var activeMethodId = null;
+
 	$(document).ready(function(){
 		$('#add_payment_row').click(function(){
 			let newRow = $('.payment-row').first().clone();
@@ -430,6 +507,206 @@
                     }
                 });
             }
+        });
+
+        // Auditoría con Clave de Seguridad
+        $(document).on('click', '.btn-method-breakdown', function(){
+            var methodId = $(this).data('id');
+            var methodName = $(this).data('name');
+
+            Swal.fire({
+                title: 'Seguridad de Caja',
+                text: 'Ingresa la clave de autorización para ver y editar los movimientos de ' + methodName,
+                input: 'password',
+                inputPlaceholder: 'Ingresa la clave...',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: '<i class="ti ti-key me-1"></i> Acceder',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#206bc4',
+                customClass: {
+                    confirmButton: 'btn btn-primary px-4',
+                    cancelButton: 'btn btn-secondary px-4'
+                },
+                buttonsStyling: false,
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'Debes ingresar una clave';
+                    }
+                    if (value !== 'xinergia123') {
+                        return 'Clave incorrecta. Acceso denegado.';
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    activeMethodId = methodId;
+                    loadMethodBreakdown(methodId);
+                }
+            });
+        });
+
+        function loadMethodBreakdown(methodId) {
+            Swal.fire({
+                title: 'Cargando desglose...',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            $.ajax({
+                url: '{{ url("cashbox/method-breakdown") }}/' + methodId,
+                method: 'GET',
+                success: function(data){
+                    Swal.close();
+                    if(data.status){
+                        $('#breakdown-method-title').text('Desglose de ' + data.payment_method.name);
+                        $('#breakdown-opening-display').text('S/ ' + parseFloat(data.opening_amount).toFixed(2));
+                        $('#opening_amount_input').val(parseFloat(data.opening_amount).toFixed(2));
+                        $('#breakdown-current-display').text('S/ ' + parseFloat(data.current_balance).toFixed(2));
+                        $('#opening-edit-form').addClass('d-none');
+                        $('#breakdown-opening-display').removeClass('d-none');
+
+                        var html = '';
+                        var allItems = [];
+
+                        if(data.movements){
+                            data.movements.forEach(function(m){
+                                allItems.push(m);
+                            });
+                        }
+                        if(data.expenses){
+                            data.expenses.forEach(function(e){
+                                allItems.push(e);
+                            });
+                        }
+
+                        if(allItems.length === 0){
+                            html = '<tr><td colspan="6" class="text-center py-4 text-muted">No hay movimientos registrados para esta cuenta en la sesión actual.</td></tr>';
+                        } else {
+                            allItems.forEach(function(item){
+                                var isExpense = item.type === 'expense' || (item.type === 'transfer' && item.amount < 0);
+                                var typeLabel = item.type === 'paid' ? '<span class="badge bg-success-lt">Pago</span>' : 
+                                               (item.type === 'income' ? '<span class="badge bg-success-lt">Ingreso</span>' : 
+                                               (item.type === 'expense' ? '<span class="badge bg-red-lt">Gasto</span>' : 
+                                               (item.type === 'transfer' ? '<span class="badge bg-azure-lt">Transferencia</span>' : '<span class="badge bg-warning-lt">Deuda</span>')));
+
+                                var deleteBtn = '';
+                                if(item.type !== 'expense' && item.id){
+                                    deleteBtn = `<button class="btn btn-icon btn-outline-danger btn-sm btn-delete-box-item" data-id="${item.id}" title="Eliminar este movimiento">
+                                                    <i class="ti ti-trash"></i>
+                                                 </button>`;
+                                } else {
+                                    deleteBtn = '<span class="text-muted small">Desde Gastos</span>';
+                                }
+
+                                html += `
+                                    <tr>
+                                        <td class="small text-muted">${item.date}</td>
+                                        <td>${typeLabel}</td>
+                                        <td class="fw-bold">${item.reference}</td>
+                                        <td class="small">${item.description}</td>
+                                        <td class="text-center fw-bold ${isExpense ? 'text-danger' : 'text-primary'}">
+                                            S/ ${parseFloat(item.amount).toFixed(2)}
+                                        </td>
+                                        <td class="text-end">${deleteBtn}</td>
+                                    </tr>
+                                `;
+                            });
+                        }
+
+                        $('#breakdown-movements-body').html(html);
+                        $('#methodBreakdownModal').modal('show');
+                    } else {
+                        ToastError.fire({ text: data.error });
+                    }
+                },
+                error: function(err){
+                    Swal.close();
+                    ToastError.fire({ text: 'Error al consultar el desglose de la cuenta.' });
+                }
+            });
+        }
+
+        // Editar saldo inicial
+        $('#btn-edit-opening').click(function(){
+            $('#breakdown-opening-display').addClass('d-none');
+            $('#opening-edit-form').removeClass('d-none');
+        });
+
+        $('#btn-cancel-opening').click(function(){
+            $('#opening-edit-form').addClass('d-none');
+            $('#breakdown-opening-display').removeClass('d-none');
+        });
+
+        $('#btn-save-opening').click(function(){
+            var newAmount = parseFloat($('#opening_amount_input').val());
+            if(isNaN(newAmount)){
+                ToastError.fire({ text: 'Ingresa un monto válido.' });
+                return;
+            }
+
+            $.ajax({
+                url: '{{ url("cashbox/update-opening-balance") }}/' + activeMethodId,
+                method: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}',
+                    opening_amount: newAmount
+                },
+                success: function(data){
+                    if(data.status){
+                        ToastMessage.fire({ text: data.message }).then(() => {
+                            location.reload();
+                        });
+                    } else {
+                        ToastError.fire({ text: data.error });
+                    }
+                },
+                error: function(err){
+                    ToastError.fire({ text: 'Error al actualizar el saldo inicial.' });
+                }
+            });
+        });
+
+        // Eliminar movimiento individual desde el modal
+        $(document).on('click', '.btn-delete-box-item', function(){
+            var movementId = $(this).data('id');
+
+            Swal.fire({
+                title: '¿Eliminar este movimiento?',
+                text: 'El monto se descontará inmediatamente del saldo de esta cuenta.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d63939',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar',
+                customClass: {
+                    confirmButton: 'btn btn-danger px-4',
+                    cancelButton: 'btn btn-secondary px-4'
+                },
+                buttonsStyling: false
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: '{{ url("cashbox/movements") }}/' + movementId,
+                        method: 'DELETE',
+                        data: {
+                            _token: '{{ csrf_token() }}'
+                        },
+                        success: function(data){
+                            if(data.status){
+                                ToastMessage.fire({ text: 'Movimiento eliminado correctamente.' }).then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                ToastError.fire({ text: data.error || 'Error al eliminar.' });
+                            }
+                        },
+                        error: function(err){
+                            ToastError.fire({ text: 'Error en el servidor al eliminar el movimiento.' });
+                        }
+                    });
+                }
+            });
         });
 	});
 </script>
