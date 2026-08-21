@@ -249,9 +249,14 @@
                                 </span>
                             </td>
                             <td class="text-center">
-                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modal-detail-{{ $cb->id }}">
-                                    <i class="ti ti-eye me-1"></i> Ver Detalle
-                                </button>
+                                <div class="d-flex gap-1 justify-content-center">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modal-detail-{{ $cb->id }}">
+                                        <i class="ti ti-eye me-1"></i> Detalle
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger btn-print-cashbox-pdf" data-id="{{ $cb->id }}" data-note="{{ $cb->note ?? '' }}" title="Imprimir Reporte PDF Resumen">
+                                        <i class="ti ti-file-type-pdf me-1"></i> PDF
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     @empty
@@ -457,12 +462,48 @@
                             </div>
                         @endif
                     </div>
-                    <div class="modal-footer bg-light">
-                        <button type="button" class="btn me-auto btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <div class="modal-footer bg-light d-flex justify-content-between">
+                        <button type="button" class="btn btn-danger btn-print-cashbox-pdf" data-id="{{ $cb->id }}" data-note="{{ $cb->note ?? '' }}">
+                            <i class="ti ti-file-type-pdf me-1"></i> Imprimir Reporte Resumen (PDF)
+                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
                     </div>
                 </div>
             </div>
         </div>
     @endforeach
 </div>
+@endsection
+
+@section('scripts')
+<script>
+    $(document).on('click', '.btn-print-cashbox-pdf', function(e){
+        e.preventDefault();
+        var cashboxId = $(this).data('id');
+        var defaultNote = $(this).data('note') || '';
+
+        Swal.fire({
+            title: 'Generar Reporte de Caja (PDF)',
+            text: 'Puedes agregar o editar una observación final antes de imprimir:',
+            input: 'textarea',
+            inputValue: defaultNote,
+            inputPlaceholder: 'Ej: Todo conforme, entrega de dinero a administración...',
+            showCancelButton: true,
+            confirmButtonText: '<i class="ti ti-printer me-1"></i> Generar PDF',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#206bc4',
+            customClass: {
+                confirmButton: 'btn btn-primary px-4',
+                cancelButton: 'btn btn-secondary px-4'
+            },
+            buttonsStyling: false
+        }).then((result) => {
+            if (result.isConfirmed) {
+                var observation = result.value || '';
+                var url = '{{ url("reports/cashbox") }}/' + cashboxId + '/pdf?observation=' + encodeURIComponent(observation);
+                window.open(url, '_blank');
+            }
+        });
+    });
+</script>
 @endsection

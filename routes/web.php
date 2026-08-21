@@ -200,6 +200,7 @@ Route::middleware('auth')->group(function () {
 		Route::get('reports/liquidation/sales', [ReportController::class, 'getSalesForLiquidation'])->name('reports.liquidation.sales');
 		Route::get('reports/liquidations-history', [ReportController::class, 'liquidationsHistory'])->name('reports.liquidations_history');
 		Route::get('reports/cashbox', [ReportController::class, 'cashbox'])->name('reports.cashbox');
+		Route::get('reports/cashbox/{cashbox_id}/pdf', [ReportController::class, 'cashboxPdf'])->name('reports.cashbox_pdf');
 		
 		Route::get('jerry-can-report', [SaleController::class, 'jerryCanReportView'])->name('reports.jerryCan');
 		Route::post('jerry-can-report/return', [SaleController::class, 'returnJerryCans'])->name('reports.returnJerryCans');
