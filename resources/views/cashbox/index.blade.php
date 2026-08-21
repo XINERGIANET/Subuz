@@ -78,7 +78,10 @@
                     <button class="btn btn-outline-primary btn-sm w-100 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#transferModal">
                         <i class="ti ti-arrows-transfer-down me-1 fs-3"></i> Transferir
                     </button>
-                    <button class="btn btn-outline-danger btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#closeModal">
+                    <button class="btn btn-outline-danger btn-sm w-100 fw-bold btn-print-cashbox-pdf" data-id="{{ $cashbox->id }}" data-note="{{ $cashbox->note ?? '' }}" title="Imprimir Reporte Resumen">
+                        <i class="ti ti-file-type-pdf me-1 fs-3"></i> Reporte PDF
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#closeModal">
                         <i class="ti ti-door-exit me-1 fs-3"></i> Cerrar Caja
                     </button>
                     @else
@@ -400,10 +403,10 @@
 <div class="modal modal-blur fade" id="methodBreakdownModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
   	<div class="modal-content">
-  		<div class="modal-header bg-light-lt">
+  		<div class="modal-header bg-light py-3">
   		  <div>
   		      <span class="badge bg-primary text-white mb-1"><i class="ti ti-lock me-1"></i> Auditoría de Saldo</span>
-  		      <h5 class="modal-title fw-bold" id="breakdown-method-title">Desglose de Cuenta</h5>
+  		      <h4 class="modal-title fw-bold text-dark mb-0" id="breakdown-method-title">Desglose de Cuenta</h4>
   		  </div>
   		  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
   		</div>
@@ -705,6 +708,36 @@
                             ToastError.fire({ text: 'Error en el servidor al eliminar el movimiento.' });
                         }
                     });
+                }
+            });
+        });
+
+        // Imprimir Reporte Resumen PDF de Caja
+        $(document).on('click', '.btn-print-cashbox-pdf', function(e){
+            e.preventDefault();
+            var cashboxId = $(this).data('id');
+            var defaultNote = $(this).data('note') || '';
+
+            Swal.fire({
+                title: 'Generar Reporte de Caja (PDF)',
+                text: 'Puedes agregar o editar una observación final antes de imprimir:',
+                input: 'textarea',
+                inputValue: defaultNote,
+                inputPlaceholder: 'Ej: Todo conforme, entrega de dinero a administración...',
+                showCancelButton: true,
+                confirmButtonText: '<i class="ti ti-printer me-1"></i> Generar PDF',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#206bc4',
+                customClass: {
+                    confirmButton: 'btn btn-primary px-4',
+                    cancelButton: 'btn btn-secondary px-4'
+                },
+                buttonsStyling: false
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    var observation = result.value || '';
+                    var url = '{{ url("reports/cashbox") }}/' + cashboxId + '/pdf?observation=' + encodeURIComponent(observation);
+                    window.open(url, '_blank');
                 }
             });
         });

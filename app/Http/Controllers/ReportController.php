@@ -366,4 +366,233 @@ class ReportController extends Controller
         return view('reports.products', compact('data', 'period', 'start_date', 'end_date', 'month', 'year'));
     }
 
+    public function cashboxPdf(Request $request, $cashbox_id)
+    {
+        $cb = Cashbox::with(['movements.user', 'movements.payment_method', 'movements.sale.client', 'openedBy', 'closedBy'])->findOrFail($cashbox_id);
+        
+        $start = $cb->opened_at;
+        $end = $cb->is_open ? now() : $cb->closed_at;
+        
+        $expenses = \App\Models\Expense::whereBetween('date', [$start, $end])
+            ->with(['payment_method', 'user'])
+            ->get();
+
+        $payment_methods = \App\Models\PaymentMethod::all();
+        $opening_balances = is_string($cb->opening_balances) ? json_decode($cb->opening_balances, true) : ($cb->opening_balances ?? []);
+        $closing_balances = is_string($cb->closing_balances) ? json_decode($cb->closing_balances, true) : ($cb->closing_balances ?? []);
+
+        // Agrupación de ingresos por usuario
+        $income_by_user = [];
+        foreach ($cb->movements as $m) {
+            if ($m->type == 'paid' || $m->type == 'income') {
+                $userName = optional($m->user)->name ?? (optional($cb->openedBy)->name ?? 'Sistema');
+                if (!isset($income_by_user[$userName])) {
+                    $income_by_user[$userName] = 0;
+                }
+                $income_by_user[$userName] += (float)$m->amount;
+            }
+        }
+
+        // Agrupación de gastos por usuario
+        $expense_by_user = [];
+        foreach ($expenses as $e) {
+            $userName = optional($e->user)->name ?? (optional($cb->openedBy)->name ?? 'Sistema');
+            if (!isset($expense_by_user[$userName])) {
+                $expense_by_user[$userName] = 0;
+            }
+            $expense_by_user[$userName] += (float)$e->amount;
+        }
+
+        $total_incomes = array_sum($income_by_user);
+        $total_expenses = array_sum($expense_by_user);
+
+        // PDF Generation via FPDF
+        $fpdf = new Fpdf('P', 'mm', 'A4');
+        $fpdf->AddPage();
+        $fpdf->SetAutoPageBreak(true, 15);
+
+        $fpdf->AddFont('Montserrat', '');
+        $fpdf->AddFont('Montserrat', 'B');
+
+        // Logo
+        if (file_exists(public_path('assets/images/logo.jpg'))) {
+            $fpdf->Image(public_path('assets/images/logo.jpg'), 10, 10, 28);
+        }
+
+        // Header Title
+        $fpdf->SetFont('Montserrat', 'B', 14);
+        $fpdf->SetTextColor(2, 93, 166);
+        $fpdf->Cell(190, 8, utf8_decode('REPORTE RESUMEN DE CAJA'), 0, 1, 'C');
+        
+        $fpdf->SetFont('Montserrat', 'B', 10);
+        $fpdf->SetTextColor(100, 100, 100);
+        $statusStr = $cb->is_open ? 'SESION ABIERTA (EN CURSO)' : 'SESION CERRADA #' . $cb->id;
+        $fpdf->Cell(190, 5, utf8_decode($statusStr), 0, 1, 'C');
+        $fpdf->Ln(4);
+
+        // Info Block (Apertura y Cierre)
+        $fpdf->SetFillColor(245, 247, 250);
+        $fpdf->Rect(10, $fpdf->GetY(), 190, 18, 'F');
+        $fpdf->SetFont('Montserrat', 'B', 8);
+        $fpdf->SetTextColor(50, 50, 50);
+
+        $fpdf->SetX(12);
+        $fpdf->Cell(90, 5, utf8_decode('APERTURA: ') . ($cb->opened_at ? $cb->opened_at->format('d/m/Y H:i') : '-') . ' (' . utf8_decode(optional($cb->openedBy)->name ?? 'Sistema') . ')', 0, 0);
+        $fpdf->Cell(95, 5, utf8_decode('CIERRE: ') . ($cb->closed_at ? $cb->closed_at->format('d/m/Y H:i') : ($cb->is_open ? 'En curso' : '-')) . ' (' . utf8_decode(optional($cb->closedBy)->name ?? 'Sistema') . ')', 0, 1);
+
+        $fpdf->SetX(12);
+        $fpdf->Cell(90, 5, utf8_decode('TOTAL INGRESOS TURNO: S/ ') . number_format($total_incomes, 2), 0, 0);
+        $fpdf->Cell(95, 5, utf8_decode('TOTAL GASTOS TURNO: S/ ') . number_format($total_expenses, 2), 0, 1);
+        $fpdf->Ln(6);
+
+        // 1. SALDOS INICIALES Y FINALES (EFECTIVO Y BANCOS)
+        $fpdf->SetFillColor(2, 93, 166);
+        $fpdf->SetTextColor(255, 255, 255);
+        $fpdf->SetFont('Montserrat', 'B', 9);
+        $fpdf->Cell(190, 7, utf8_decode('1. SALDO INICIAL Y FINAL EN EFECTIVO Y BANCOS'), 0, 1, 'L', true);
+
+        $fpdf->SetFillColor(230, 235, 245);
+        $fpdf->SetTextColor(30, 30, 30);
+        $fpdf->SetFont('Montserrat', 'B', 8);
+        $fpdf->Cell(70, 6, utf8_decode('CUENTA / MÉTODO DE PAGO'), 1, 0, 'L', true);
+        $fpdf->Cell(40, 6, utf8_decode('SALDO INICIAL'), 1, 0, 'C', true);
+        $fpdf->Cell(40, 6, utf8_decode('SALDO FINAL / CIERRE'), 1, 0, 'C', true);
+        $fpdf->Cell(40, 6, utf8_decode('VARIACIÓN'), 1, 1, 'C', true);
+
+        $fpdf->SetFont('Montserrat', '', 8);
+        $sum_initial = 0;
+        $sum_final = 0;
+
+        foreach ($payment_methods as $pm) {
+            $init = ($pm->id == 1) ? (float)$cb->opening_amount : (float)($opening_balances[$pm->id] ?? 0);
+            $fin = ($pm->id == 1) ? (float)$cb->closing_amount : (float)($closing_balances[$pm->id] ?? 0);
+            
+            // Si está abierta, calcular saldo final actual
+            if ($cb->is_open) {
+                $p_movs = $cb->movements->where('payment_method_id', $pm->id);
+                $p_exp = $expenses->where('payment_method_id', $pm->id)->sum('amount');
+                $fin = $init + $p_movs->where('type', 'paid')->sum('amount') + $p_movs->where('type', 'income')->sum('amount') + $p_movs->where('type', 'transfer')->sum('amount') - $p_exp;
+            }
+
+            $diff = $fin - $init;
+            $sum_initial += $init;
+            $sum_final += $fin;
+
+            if ($init > 0 || $fin > 0 || $pm->id == 1) {
+                $fpdf->Cell(70, 5, '  ' . utf8_decode($pm->name), 1, 0, 'L');
+                $fpdf->Cell(40, 5, 'S/ ' . number_format($init, 2), 1, 0, 'R');
+                $fpdf->Cell(40, 5, 'S/ ' . number_format($fin, 2), 1, 0, 'R');
+                $fpdf->Cell(40, 5, ($diff >= 0 ? '+' : '') . 'S/ ' . number_format($diff, 2), 1, 1, 'R');
+            }
+        }
+
+        $fpdf->SetFont('Montserrat', 'B', 8);
+        $fpdf->SetFillColor(240, 240, 240);
+        $fpdf->Cell(70, 6, '  TOTALES', 1, 0, 'L', true);
+        $fpdf->Cell(40, 6, 'S/ ' . number_format($sum_initial, 2), 1, 0, 'R', true);
+        $fpdf->Cell(40, 6, 'S/ ' . number_format($sum_final, 2), 1, 0, 'R', true);
+        $fpdf->Cell(40, 6, (($sum_final - $sum_initial) >= 0 ? '+' : '') . 'S/ ' . number_format($sum_final - $sum_initial, 2), 1, 1, 'R', true);
+        $fpdf->Ln(5);
+
+        // 2. INGRESOS Y GASTOS POR USUARIO
+        $fpdf->SetFillColor(2, 93, 166);
+        $fpdf->SetTextColor(255, 255, 255);
+        $fpdf->SetFont('Montserrat', 'B', 9);
+        $fpdf->Cell(92, 7, utf8_decode('2. TOTAL INGRESOS POR USUARIO'), 0, 0, 'L', true);
+        $fpdf->Cell(6, 7, '', 0, 0);
+        $fpdf->Cell(92, 7, utf8_decode('3. TOTAL GASTOS POR USUARIO'), 0, 1, 'L', true);
+
+        // Two side-by-side columns
+        $y_start = $fpdf->GetY();
+
+        // Left: Incomes by user
+        $fpdf->SetFillColor(230, 235, 245);
+        $fpdf->SetTextColor(30, 30, 30);
+        $fpdf->SetFont('Montserrat', 'B', 8);
+        $fpdf->Cell(57, 6, utf8_decode('USUARIO'), 1, 0, 'L', true);
+        $fpdf->Cell(35, 6, utf8_decode('MONTO TOTAL'), 1, 1, 'C', true);
+
+        $fpdf->SetFont('Montserrat', '', 8);
+        if (count($income_by_user) > 0) {
+            foreach ($income_by_user as $uName => $uAmount) {
+                $fpdf->Cell(57, 5, '  ' . utf8_decode(substr($uName, 0, 26)), 1, 0, 'L');
+                $fpdf->Cell(35, 5, 'S/ ' . number_format($uAmount, 2), 1, 1, 'R');
+            }
+        } else {
+            $fpdf->Cell(92, 5, utf8_decode('  Sin ingresos en el turno'), 1, 1, 'L');
+        }
+        $fpdf->SetFont('Montserrat', 'B', 8);
+        $fpdf->Cell(57, 6, '  TOTAL INGRESOS', 1, 0, 'L', true);
+        $fpdf->Cell(35, 6, 'S/ ' . number_format($total_incomes, 2), 1, 1, 'R', true);
+        $y_left_end = $fpdf->GetY();
+
+        // Right: Expenses by user
+        $fpdf->SetXY(108, $y_start);
+        $fpdf->SetFillColor(250, 230, 230);
+        $fpdf->SetFont('Montserrat', 'B', 8);
+        $fpdf->Cell(57, 6, utf8_decode('USUARIO'), 1, 0, 'L', true);
+        $fpdf->Cell(35, 6, utf8_decode('MONTO TOTAL'), 1, 1, 'C', true);
+
+        $fpdf->SetFont('Montserrat', '', 8);
+        if (count($expense_by_user) > 0) {
+            foreach ($expense_by_user as $uName => $uAmount) {
+                $fpdf->SetX(108);
+                $fpdf->Cell(57, 5, '  ' . utf8_decode(substr($uName, 0, 26)), 1, 0, 'L');
+                $fpdf->Cell(35, 5, 'S/ ' . number_format($uAmount, 2), 1, 1, 'R');
+            }
+        } else {
+            $fpdf->SetX(108);
+            $fpdf->Cell(92, 5, utf8_decode('  Sin gastos en el turno'), 1, 1, 'L');
+        }
+        $fpdf->SetX(108);
+        $fpdf->SetFont('Montserrat', 'B', 8);
+        $fpdf->Cell(57, 6, '  TOTAL GASTOS', 1, 0, 'L', true);
+        $fpdf->Cell(35, 6, 'S/ ' . number_format($total_expenses, 2), 1, 1, 'R', true);
+        $y_right_end = $fpdf->GetY();
+
+        $fpdf->SetY(max($y_left_end, $y_right_end) + 5);
+
+        // 4. OBSERVACIONES (Permite observaciones del usuario o de cierre)
+        $observation = $request->observation ?: ($cb->note ?: '');
+
+        $fpdf->SetFillColor(2, 93, 166);
+        $fpdf->SetTextColor(255, 255, 255);
+        $fpdf->SetFont('Montserrat', 'B', 9);
+        $fpdf->Cell(190, 7, utf8_decode('4. OBSERVACIONES Y NOTAS DE CUADRE'), 0, 1, 'L', true);
+
+        $fpdf->SetFont('Montserrat', '', 8);
+        $fpdf->SetTextColor(40, 40, 40);
+        $fpdf->SetFillColor(250, 250, 250);
+
+        if (!empty($observation)) {
+            $fpdf->MultiCell(190, 5, utf8_decode($observation), 1, 'L', true);
+        } else {
+            $fpdf->Cell(190, 14, utf8_decode('  Sin observaciones registradas.'), 1, 1, 'L', true);
+        }
+        $fpdf->Ln(8);
+
+        // Firmas
+        $fpdf->SetFont('Montserrat', '', 8);
+        $fpdf->SetTextColor(80, 80, 80);
+        $fpdf->Cell(60, 5, '___________________________', 0, 0, 'C');
+        $fpdf->Cell(70, 5, '', 0, 0, 'C');
+        $fpdf->Cell(60, 5, '___________________________', 0, 1, 'C');
+
+        $fpdf->Cell(60, 4, utf8_decode('Entregado por: ' . (optional($cb->openedBy)->name ?? 'Cajero')), 0, 0, 'C');
+        $fpdf->Cell(70, 4, '', 0, 0, 'C');
+        $fpdf->Cell(60, 4, utf8_decode('Revisado / Administración'), 0, 1, 'C');
+
+        $fpdf->Ln(4);
+        $fpdf->SetFont('Montserrat', '', 7);
+        $fpdf->Cell(190, 4, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i:s') . ' | Subuz Sistema de Gestión'), 0, 1, 'R');
+
+        $filename = "Resumen_Caja_" . $cb->id . "_" . ($cb->opened_at ? $cb->opened_at->format('dmY') : now()->format('dmY')) . ".pdf";
+
+        if (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        $fpdf->Output('I', $filename);
+    }
 }
+
