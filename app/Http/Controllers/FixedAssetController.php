@@ -37,15 +37,36 @@ class FixedAssetController extends Controller
         $assetSubcategories = $assetCategory ? $assetCategory->subcategories : collect();
         
         $baseAssets = $query->latest()->get();
-        
-        $groupedAssets = $assetSubcategories->map(function($sub) use ($baseAssets) {
-            $assets = $baseAssets->where('category', $sub->name)->values();
+        $allMovements = \App\Models\InventoryMovement::where('item_type', 'fixed_asset')->get();
+
+        $groupedAssets = $assetSubcategories->map(function($sub) use ($baseAssets, $allMovements) {
+            $catLower = strtolower(trim($sub->name));
+            $assets = $baseAssets->filter(function($a) use ($catLower) {
+                return strtolower(trim($a->category)) === $catLower;
+            })->values();
+
+            $movIncomes = $allMovements->filter(function($m) use ($catLower) {
+                return strtolower(trim($m->item_name)) === $catLower && in_array($m->movement_type, ['income', 'return', 'initial_balance']);
+            })->sum('quantity');
+
+            $movOutcomes = $allMovements->filter(function($m) use ($catLower) {
+                return strtolower(trim($m->item_name)) === $catLower && $m->movement_type === 'outcome';
+            })->sum('quantity');
+
+            $individualCount = $assets->count();
+            $individualAvailable = $assets->where('status', 'available')->count();
+            $individualAssigned = $assets->where('status', 'assigned')->count();
+
+            // Total disponible considerando tanto equipos individuales como stock de movimientos de inventario
+            $totalCount = $individualCount + floatval($movIncomes) - floatval($movOutcomes);
+            $availableCount = $individualAvailable + floatval($movIncomes) - floatval($movOutcomes);
+
             return (object)[
                 'subcategory' => $sub,
                 'assets' => $assets, 
-                'count' => $assets->count(),
-                'available_count' => $assets->where('status', 'available')->count(),
-                'assigned_count' => $assets->where('status', 'assigned')->count(),
+                'count' => max(0, $totalCount),
+                'available_count' => max(0, $availableCount),
+                'assigned_count' => $individualAssigned,
             ];
         });
         

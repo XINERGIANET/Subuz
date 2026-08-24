@@ -17,10 +17,16 @@ class InventoryMovement extends Model
         'quantity',
         'notes',
         'user_id',
+        'client_id',
     ];
 
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function client()
+    {
+        return $this->belongsTo(Client::class);
     }
 }

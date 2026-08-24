@@ -1,5 +1,36 @@
 @extends('template.app')
 
+@section('styles')
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<style>
+    .select2-container--default .select2-selection--single {
+        height: 38px;
+        border: 1px solid #dadcde;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        line-height: 36px;
+        padding-left: 10px;
+        color: #1e293b;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 36px;
+        right: 8px;
+    }
+    .select2-dropdown {
+        border-color: #dadcde;
+        z-index: 9999;
+    }
+    .select2-search--dropdown .select2-search__field {
+        border: 1px solid #dadcde;
+        border-radius: 4px;
+        padding: 6px 10px;
+    }
+</style>
+@endsection
+
 @section('content')
 <div class="container-xl">
     <!-- Header -->
@@ -398,7 +429,7 @@
     </div>
 </div>
 
-<!-- Modal: Registrar Movimiento (Ingreso / Salida) -->
+<!-- Modal: Registrar Movimiento (Ingreso / Salida / Devolución) -->
 <div class="modal fade" id="modalMovement" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <form class="modal-content" id="formMovement">
@@ -433,12 +464,30 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label required">Tipo de Movimiento</label>
-                    <select class="form-select" name="movement_type" id="mov_type" required>
+                    <select class="form-select" name="movement_type" id="mov_type" onchange="onMovementTypeChange(this.value)" required>
                         <option value="income">Ingreso (+)</option>
                         <option value="outcome">Salida (-)</option>
                         <option value="return">Devolución (+)</option>
                     </select>
                 </div>
+
+                <!-- Campo de Selección de Cliente -->
+                <div class="mb-3" id="group_mov_client">
+                    <label class="form-label d-flex justify-content-between align-items-center">
+                        <span><i class="ti ti-user me-1 text-primary"></i> Cliente <span id="client_optional_badge" class="text-muted fw-normal small">(Opcional / Recomendado en Devoluciones)</span></span>
+                        <span id="client_required_indicator" class="badge bg-warning-lt d-none">Devolución de Cliente</span>
+                    </label>
+                    <select class="form-select ts-select" name="client_id" id="mov_client_id" style="width: 100%;">
+                        <option value="">-- Seleccionar Cliente (Ninguno / Stock General) --</option>
+                        @foreach($clients as $c)
+                            <option value="{{ $c->id }}">{{ $c->name }} {{ $c->business_name ? '('.$c->business_name.')' : '' }} {{ $c->document ? '['.$c->document.']' : '' }}</option>
+                        @endforeach
+                    </select>
+                    <small class="form-hint text-muted" id="client_hint">
+                        Escribe para buscar el cliente por nombre, razón social o documento.
+                    </small>
+                </div>
+
                 <div class="mb-3">
                     <label class="form-label required">Cantidad</label>
                     <input type="number" step="0.01" min="0.01" class="form-control" name="quantity" id="mov_quantity" required>
@@ -465,7 +514,7 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Notas / Observación</label>
-                    <input type="text" class="form-control" name="notes" placeholder="Ej: Compra de lote, ajuste de stock, consumo en producción">
+                    <input type="text" class="form-control" name="notes" id="mov_notes" placeholder="Ej: Devolución de 5 bidones vacíos, compra de lote, etc.">
                 </div>
             </div>
             <div class="modal-footer">
@@ -478,7 +527,7 @@
 
 <!-- Modal: Historial Kardex -->
 <div class="modal fade" id="modalKardexHistory" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content">
             <div class="modal-header bg-light">
                 <h5 class="modal-title fw-bold" id="kardexModalTitle">Historial de Movimientos Kardex</h5>
@@ -512,13 +561,14 @@
                                 <th>Fecha</th>
                                 <th>Tipo</th>
                                 <th>Cantidad</th>
+                                <th>Cliente / Relación</th>
                                 <th>Notas / Referencia</th>
                                 <th>Usuario</th>
                             </tr>
                         </thead>
                         <tbody id="kardexHistoryBody">
                             <tr>
-                                <td colspan="5" class="text-center py-4">Cargando movimientos...</td>
+                                <td colspan="6" class="text-center py-4">Cargando movimientos...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -565,8 +615,25 @@
 @endsection
 
 @section('scripts')
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
     let currentKardexItem = { type: null, id: null, name: null };
+
+    $(document).ready(function() {
+        if ($.fn.modal) {
+            $.fn.modal.Constructor.prototype._enforceFocus = function() {};
+        }
+
+        $('#modalMovement').on('shown.bs.modal', function () {
+            $('#mov_client_id').select2({
+                dropdownParent: $('#modalMovement'),
+                placeholder: "-- Buscar y seleccionar cliente --",
+                allowClear: true,
+                width: '100%'
+            });
+        });
+    });
 
     function setQuickDate(preset) {
         let startInput = document.getElementById('filter_start_date');
@@ -597,7 +664,23 @@
         modal.show();
     }
 
-    function openMovementModal(type = null, id = null, name = null, movType = 'income') {
+    function onMovementTypeChange(movType) {
+        let reqInd = document.getElementById('client_required_indicator');
+        let badgeOpt = document.getElementById('client_optional_badge');
+        let notesInput = document.getElementById('mov_notes');
+
+        if (movType === 'return') {
+            if (reqInd) reqInd.classList.remove('d-none');
+            if (badgeOpt) badgeOpt.innerText = '(Recomendado)';
+            if (notesInput && !notesInput.value) notesInput.placeholder = 'Ej: Devolución de 5 bidones vacíos del cliente';
+        } else {
+            if (reqInd) reqInd.classList.add('d-none');
+            if (badgeOpt) badgeOpt.innerText = '(Opcional)';
+            if (notesInput && !notesInput.value) notesInput.placeholder = 'Ej: Compra de lote, ajuste de stock, consumo en producción';
+        }
+    }
+
+    function openMovementModal(type = null, id = null, name = null, movType = 'income', clientId = null) {
         if (type && name) {
             let val = type + '|' + (id || '') + '|' + name;
             let sel = document.getElementById('mov_select_item');
@@ -611,10 +694,20 @@
         }
 
         document.getElementById('mov_type').value = movType;
+        onMovementTypeChange(movType);
+
         document.getElementById('mov_quantity').value = '';
         if (document.getElementById('mov_amount')) document.getElementById('mov_amount').value = '';
         if (document.getElementById('mov_payment_method_id')) document.getElementById('mov_payment_method_id').value = '';
+        if (document.getElementById('mov_notes')) document.getElementById('mov_notes').value = '';
         
+        // Reset or set select2 client
+        if ($('#mov_client_id').data('select2')) {
+            $('#mov_client_id').val(clientId || '').trigger('change');
+        } else {
+            document.getElementById('mov_client_id').value = clientId || '';
+        }
+
         let modal = new bootstrap.Modal(document.getElementById('modalMovement'));
         modal.show();
     }
@@ -656,7 +749,7 @@
 
     function loadKardexData(type, id, name, startDate = '', endDate = '') {
         let body = document.getElementById('kardexHistoryBody');
-        body.innerHTML = '<tr><td colspan="5" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary"></div> Cargando...</td></tr>';
+        body.innerHTML = '<tr><td colspan="6" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary"></div> Cargando...</td></tr>';
 
         let url = "{{ url('inventories/history') }}/" + type + "/" + (id || 0) + "?item_name=" + encodeURIComponent(name);
         if (startDate) url += '&start_date=' + encodeURIComponent(startDate);
@@ -666,7 +759,7 @@
             .then(res => res.json())
             .then(data => {
                 if (data.length === 0) {
-                    body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No hay movimientos registrados para este ítem en el rango de fechas seleccionado.</td></tr>';
+                    body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No hay movimientos registrados para este ítem en el rango de fechas seleccionado.</td></tr>';
                     return;
                 }
                 let html = '';
@@ -677,11 +770,16 @@
                     if (m.movement_type === 'outcome') badgeClass = 'bg-danger-lt';
                     if (m.movement_type === 'return') badgeClass = 'bg-warning-lt';
 
+                    let clientBadge = m.client_name 
+                        ? `<span class="badge bg-blue-lt fw-bold"><i class="ti ti-user me-1"></i>${m.client_name}</span>`
+                        : '<span class="text-muted small">-</span>';
+
                     html += `
                         <tr>
                             <td>${m.date}</td>
                             <td><span class="badge ${badgeClass}">${m.type_label}</span></td>
                             <td class="fw-bold">${m.quantity}</td>
+                            <td>${clientBadge}</td>
                             <td>${m.notes}</td>
                             <td><small class="text-muted">${m.user}</small></td>
                         </tr>
@@ -690,7 +788,7 @@
                 body.innerHTML = html;
             })
             .catch(err => {
-                body.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Error al cargar historial.</td></tr>';
+                body.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Error al cargar historial.</td></tr>';
             });
     }
 

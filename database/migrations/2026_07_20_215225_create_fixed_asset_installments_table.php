@@ -13,7 +13,8 @@ class CreateFixedAssetInstallmentsTable extends Migration
      */
     public function up()
     {
-        Schema::create('fixed_asset_installments', function (Blueprint $table) {
+        if (!Schema::hasTable('fixed_asset_installments')) {
+            Schema::create('fixed_asset_installments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('fixed_asset_assignment_id')->constrained()->onDelete('cascade');
             $table->integer('installment_number');
@@ -24,6 +25,7 @@ class CreateFixedAssetInstallmentsTable extends Migration
             $table->foreignId('cashbox_movement_id')->nullable()->constrained('cashbox_movements')->onDelete('set null');
             $table->timestamps();
         });
+        }
     }
 
     /**

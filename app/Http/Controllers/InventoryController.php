@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Supply;
 use App\Models\FixedAsset;
 use App\Models\Product;
+use App\Models\Client;
 use App\Models\InventoryMovement;
 use App\Models\ExpenseCategory;
 use App\Models\ExpenseSubcategory;
@@ -142,14 +143,21 @@ class InventoryController extends Controller
         });
 
         // 2. ACTIVOS FIJOS (Dispensadores, congeladoras, exhibidores, etc.)
-        $defaultCategories = ['Dispensadores', 'Congeladoras', 'Exhibidores'];
+        $assetCategoryObj = ExpenseCategory::where('name', 'like', '%Activo fijo%')->first();
+        $subCatNames = $assetCategoryObj ? $assetCategoryObj->subcategories->pluck('name')->toArray() : [];
+        $defaultCategories = ['congeladoras', 'exhibidores', 'dispensadores', 'maquina gourmet', 'maquina 1500 kg', 'planta de agua', 'selladora', 'repuestos', 'moto', 'mostradores', 'camion'];
         $dbCategories = FixedAsset::distinct()->pluck('category')->filter()->toArray();
-        $assetCategories = array_unique(array_merge($defaultCategories, $dbCategories));
-
+        
+        // Unificar categorías preservando nombre formateado
+        $allCatNames = array_unique(array_merge($subCatNames, $defaultCategories, $dbCategories));
         $allAssets = FixedAsset::all();
 
-        $assetsData = collect($assetCategories)->map(function ($catName) use ($allAssets, $startDate, $endDate, $getInitial, $getIncomes, $getOutcomesManual) {
-            $matchingAssets = $allAssets->where('category', $catName);
+        $assetsData = collect($allCatNames)->map(function ($catName) use ($allAssets, $startDate, $endDate, $getInitial, $getIncomes, $getOutcomesManual) {
+            $catLower = strtolower(trim($catName));
+            $matchingAssets = $allAssets->filter(function ($a) use ($catLower) {
+                return strtolower(trim($a->category)) === $catLower;
+            });
+
             $totalCount = $matchingAssets->count();
             $availableCount = $matchingAssets->where('status', 'available')->count();
             $assignedCount = $matchingAssets->where('status', 'assigned')->count();
@@ -160,7 +168,7 @@ class InventoryController extends Controller
             // Asignaciones a clientes en fixed_asset_assignments
             $salidas_asignaciones = floatval(DB::table('fixed_asset_assignments')
                 ->join('fixed_assets', 'fixed_asset_assignments.fixed_asset_id', '=', 'fixed_assets.id')
-                ->where('fixed_assets.category', 'like', "%{$catName}%")
+                ->whereRaw('LOWER(TRIM(fixed_assets.category)) = ?', [$catLower])
                 ->when($startDate, fn($q) => $q->whereDate('fixed_asset_assignments.assigned_date', '>=', $startDate))
                 ->when($endDate, fn($q) => $q->whereDate('fixed_asset_assignments.assigned_date', '<=', $endDate))
                 ->count());
@@ -170,7 +178,7 @@ class InventoryController extends Controller
             $saldo_final = $initial + $incomes - $outcomes;
 
             return (object) [
-                'category' => $catName,
+                'category' => ucfirst($catName),
                 'total_count' => $totalCount,
                 'available_count' => $availableCount,
                 'assigned_count' => $assignedCount,
@@ -204,9 +212,10 @@ class InventoryController extends Controller
             ];
         });
 
+        $clients = Client::orderBy('name', 'asc')->get();
         $paymentMethods = PaymentMethod::all();
 
-        return view('inventories.index', compact('supplies', 'assetsData', 'products', 'paymentMethods'));
+        return view('inventories.index', compact('supplies', 'assetsData', 'products', 'clients', 'paymentMethods'));
     }
 
     public function storeInitialBalance(Request $request)
@@ -276,6 +285,7 @@ class InventoryController extends Controller
             'item_type' => 'required|string|in:supply,fixed_asset,product',
             'item_id' => 'nullable',
             'item_name' => 'nullable|string',
+            'client_id' => 'nullable|exists:clients,id',
             'movement_type' => 'required|string|in:income,outcome,adjustment,return',
             'quantity' => 'required|numeric|gt:0',
             'amount' => 'nullable|numeric|min:0',
@@ -287,13 +297,22 @@ class InventoryController extends Controller
             return response()->json(['status' => false, 'error' => $validator->errors()->first()]);
         }
 
+        $client = null;
+        if ($request->client_id) {
+            $client = Client::find($request->client_id);
+        }
+
+        $defaultNote = $request->movement_type === 'return' ? 'Devolución de inventario' : 'Movimiento de inventario manual';
+        $finalNote = $request->notes ?: $defaultNote;
+
         InventoryMovement::create([
             'item_type' => $request->item_type,
             'item_id' => $request->item_id,
             'item_name' => $request->item_name,
+            'client_id' => $request->client_id,
             'movement_type' => $request->movement_type,
             'quantity' => $request->quantity,
-            'notes' => $request->notes ?? ($request->movement_type === 'return' ? 'Devolución de inventario' : 'Movimiento de inventario manual'),
+            'notes' => $finalNote,
             'user_id' => auth()->id(),
         ]);
 
@@ -325,6 +344,8 @@ class InventoryController extends Controller
 
         // Financial & Cashbox Integration if Amount & Payment Method provided
         if ($request->amount > 0 && $request->payment_method_id) {
+            $clientNote = $client ? " (Cliente: {$client->name})" : "";
+
             if ($request->movement_type === 'income') {
                 // Ingreso de inventario comprado = EGRESO / GASTO de dinero
                 $category = ExpenseCategory::firstOrCreate(['name' => 'Compra de Inventario']);
@@ -334,7 +355,7 @@ class InventoryController extends Controller
                 ]);
 
                 Expense::create([
-                    'description' => "Compra de inventario: {$itemName} - Cant: {$request->quantity}",
+                    'description' => "Compra de inventario: {$itemName} - Cant: {$request->quantity}{$clientNote}",
                     'amount' => $request->amount,
                     'date' => now()->format('Y-m-d H:i:s'),
                     'real_date' => now()->format('Y-m-d'),
@@ -353,7 +374,7 @@ class InventoryController extends Controller
                         'payment_method_id' => $request->payment_method_id,
                         'type' => 'income',
                         'amount' => $request->amount,
-                        'note' => "Salida/Venta de inventario: {$itemName} - Cant: {$request->quantity}",
+                        'note' => "Salida/Venta de inventario: {$itemName} - Cant: {$request->quantity}{$clientNote}",
                         'date' => now()
                     ]);
                 }
@@ -367,7 +388,7 @@ class InventoryController extends Controller
                         'payment_method_id' => $request->payment_method_id,
                         'type' => 'expense',
                         'amount' => $request->amount,
-                        'note' => "Devolución de inventario: {$itemName} - Cant: {$request->quantity}",
+                        'note' => "Devolución de inventario: {$itemName} - Cant: {$request->quantity}{$clientNote}",
                         'date' => now()
                     ]);
                 }
@@ -382,7 +403,7 @@ class InventoryController extends Controller
         $startDate = $request->start_date;
         $endDate = $request->end_date;
 
-        $query = InventoryMovement::with('user')
+        $query = InventoryMovement::with(['user', 'client'])
             ->where('item_type', $itemType);
 
         if ($itemId && is_numeric($itemId) && intval($itemId) > 0) {
@@ -406,12 +427,15 @@ class InventoryController extends Controller
             if ($m->movement_type === 'return') $typeLabel = 'Devolución (+)';
             if ($m->movement_type === 'adjustment') $typeLabel = 'Ajuste';
 
+            $clientName = $m->client ? $m->client->name : null;
+
             return [
                 'id' => $m->id,
                 'type_label' => $typeLabel,
                 'movement_type' => $m->movement_type,
                 'quantity' => floatval($m->quantity),
                 'notes' => $m->notes ?: '-',
+                'client_name' => $clientName,
                 'user' => $m->user ? $m->user->name : 'Sistema',
                 'date' => $m->created_at ? $m->created_at->format('d/m/Y H:i') : '-',
                 'raw_date' => $m->created_at ? $m->created_at->toDateTimeString() : '1970-01-01 00:00:00',
