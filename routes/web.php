@@ -235,5 +235,6 @@ Route::middleware('auth')->group(function () {
 	Route::post('inventories/movement', [InventoryController::class, 'storeMovement'])->name('inventories.movement');
 	Route::get('inventories/history/{itemType}/{itemId?}', [InventoryController::class, 'history'])->name('inventories.history');
 	Route::post('inventories/supplies', [InventoryController::class, 'storeSupply'])->name('inventories.supplies.store');
+	Route::post('inventories/toggle-dispatcher-permission', [InventoryController::class, 'toggleDispatcherPermission'])->name('inventories.toggle_dispatcher_permission');
 });
 

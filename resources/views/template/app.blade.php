@@ -83,6 +83,16 @@
 									</span>
 								</a>
 							</li>
+							<li class="nav-item {{ request()->is('inventories*') ? 'active' : '' }}">
+								<a class="nav-link" href="{{ route('inventories.index') }}">
+									<span class="nav-link-icon d-md-none d-lg-inline-block">
+										<i class="ti ti-boxes icon"></i>
+									</span>
+									<span class="nav-link-title">
+										Inventarios / Bidones
+									</span>
+								</a>
+							</li>
 							<li class="nav-item {{ request()->routeIs('expenses.index') ? 'active' : '' }}">
 								<a class="nav-link" href="{{ route('expenses.index') }}">
 									<span class="nav-link-icon d-md-none d-lg-inline-block">

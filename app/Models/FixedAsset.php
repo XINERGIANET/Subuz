@@ -12,6 +12,7 @@ class FixedAsset extends Model
     protected $fillable = [
         'name',
         'category',
+        'allowed_for_dispatchers',
         'internal_code',
         'serial_number',
         'status',
@@ -21,6 +22,10 @@ class FixedAsset extends Model
         'voucher_number',
         'current_client_id',
         'notes',
+    ];
+
+    protected $casts = [
+        'allowed_for_dispatchers' => 'boolean',
     ];
 
     public function client()

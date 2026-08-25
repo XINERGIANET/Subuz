@@ -18,6 +18,7 @@ class InventoryMovement extends Model
         'notes',
         'user_id',
         'client_id',
+        'dispatcher_id',
     ];
 
     public function user()
@@ -28,5 +29,10 @@ class InventoryMovement extends Model
     public function client()
     {
         return $this->belongsTo(Client::class);
+    }
+
+    public function dispatcher()
+    {
+        return $this->belongsTo(User::class, 'dispatcher_id');
     }
 }

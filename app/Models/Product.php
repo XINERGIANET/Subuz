@@ -15,6 +15,7 @@ class Product extends Model
         'stock',
         'reduces_stock',
         'is_loanable',
+        'allowed_for_dispatchers',
         'is_combo',
         'combo_products',
         'initial_stock',
@@ -23,7 +24,8 @@ class Product extends Model
 
     protected $casts = [
         'combo_products' => 'array',
-        'is_combo' => 'boolean'
+        'is_combo' => 'boolean',
+        'allowed_for_dispatchers' => 'boolean'
     ];
     
     public function getCalculatedPriceAttribute()

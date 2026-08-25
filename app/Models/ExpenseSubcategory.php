@@ -9,7 +9,11 @@ class ExpenseSubcategory extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['expense_category_id', 'name'];
+    protected $fillable = ['expense_category_id', 'name', 'allowed_for_dispatchers'];
+
+    protected $casts = [
+        'allowed_for_dispatchers' => 'boolean',
+    ];
 
     public function category()
     {

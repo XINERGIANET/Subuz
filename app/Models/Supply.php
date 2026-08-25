@@ -13,6 +13,11 @@ class Supply extends Model
         'name',
         'stock',
         'unit',
+        'allowed_for_dispatchers',
+    ];
+
+    protected $casts = [
+        'allowed_for_dispatchers' => 'boolean',
     ];
 
     public function products()
