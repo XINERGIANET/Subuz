@@ -822,9 +822,29 @@
                     $('#kpi_1').text('S/' + res.pending); // Pendiente
 
                     if (res.methods && res.methods.length > 0) {
-                        $('#kpi_2').text('S/' + (res.methods.find(m => m.name.toLowerCase().includes('efectivo') || m.name.toLowerCase().includes('caja'))?.total || '0.00'));
-                        $('#kpi_3').text('S/' + (res.methods.find(m => m.name.toLowerCase().includes('transferencia'))?.total || '0.00'));
-                        $('#kpi_4').text('S/' + (res.methods.find(m => m.name.toLowerCase().includes('yape') || m.name.toLowerCase().includes('plin'))?.total || '0.00'));
+                        let totalEfectivo = 0;
+                        let totalTransferencias = 0;
+                        let totalDigital = 0;
+
+                        res.methods.forEach(m => {
+                            const name = (m.name || '').toLowerCase();
+                            const val = parseFloat((m.total || '0').replace(/,/g, '')) || 0;
+
+                            if (name.includes('efectivo') || name === 'caja') {
+                                totalEfectivo += val;
+                            } else if (name.includes('yape') || name.includes('plin')) {
+                                totalDigital += val;
+                            } else if (name.includes('transferencia') || name.includes('interbank') || name.includes('bcp') || name.includes('caja piura') || name.includes('warda') || name.includes('banco') || name.includes('bbva') || name.includes('scotia') || name.includes('transito')) {
+                                totalTransferencias += val;
+                            } else {
+                                // Cualquier otro método bancario o de depósito
+                                totalTransferencias += val;
+                            }
+                        });
+
+                        $('#kpi_2').text('S/' + totalEfectivo.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                        $('#kpi_3').text('S/' + totalTransferencias.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                        $('#kpi_4').text('S/' + totalDigital.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
                     }
 
                     // Fetch daily stats for the other 2 KPIs

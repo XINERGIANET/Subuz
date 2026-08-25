@@ -108,11 +108,15 @@ class WebController extends Controller
                 ->when($start_date, function($q, $sd){ return $q->whereDate('date', '>=', $sd); })
                 ->when($end_date, function($q, $ed){ return $q->whereDate('date', '<=', $ed); })
                 ->sum('amount');
+            $transfers = CashboxMovement::where('type', 'transfer')->where('payment_method_id', $method->id)
+                ->when($start_date, function($q, $sd){ return $q->whereDate('date', '>=', $sd); })
+                ->when($end_date, function($q, $ed){ return $q->whereDate('date', '<=', $ed); })
+                ->sum('amount');
             $expense = Expense::where('payment_method_id', $method->id)
                 ->when($start_date, function($q, $sd){ return $q->whereDate('date', '>=', $sd); })
                 ->when($end_date, function($q, $ed){ return $q->whereDate('date', '<=', $ed); })
                 ->sum('amount');
-            $balance = ($payments + $manual) - $expense;
+            $balance = ($payments + $manual + $transfers) - $expense;
 
             $methods_totals[] = [
                 'name' => $method->name,
