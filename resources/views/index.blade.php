@@ -209,6 +209,7 @@
             width: 35%;
         }
 
+        /* Interactive Card Styling */
         .kpi-card {
             background: var(--card-bg, #fff);
             border: 1px solid rgba(211, 47, 47, 0.3);
@@ -221,6 +222,40 @@
             padding: 0.5rem;
             text-align: center;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(211, 47, 47, 0.15);
+            border-color: #d32f2f;
+        }
+
+        .summary-item.clickable-metric,
+        .card.clickable-metric {
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .summary-item.clickable-metric:hover {
+            filter: brightness(1.1);
+            transform: scale(1.02);
+            z-index: 2;
+        }
+
+        .card.clickable-metric:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .card-clickable-badge {
+            position: absolute;
+            top: 4px;
+            right: 6px;
+            font-size: 0.65rem;
+            opacity: 0.6;
         }
 
         [data-bs-theme='dark'] .kpi-card {
@@ -354,13 +389,15 @@
 
                     <!-- Comp Cards -->
                     <div class="d-flex flex-column gap-2" style="flex: 0 0 25%;">
-                        <div class="card card-full border-danger" style="border-width: 1px; border-radius: 10px;">
+                        <div class="card card-full border-danger clickable-metric btn-open-detail" data-type="balance" title="Click para ver detalle de Balance" style="border-width: 1px; border-radius: 10px; position: relative;">
+                            <span class="card-clickable-badge text-muted"><i class="ti ti-eye"></i></span>
                             <div class="card-body text-center p-2 d-flex flex-column justify-content-center">
                                 <div class="metric-value text-success mb-0" id="balance_total">S/0.00</div>
                                 <div class="metric-title metric-title-red mt-1">Balance Actual</div>
                             </div>
                         </div>
-                        <div class="card card-full border-danger" style="border-width: 1px; border-radius: 10px;">
+                        <div class="card card-full border-danger clickable-metric btn-open-detail" data-type="gastos" title="Click para ver detalle de Gastos" style="border-width: 1px; border-radius: 10px; position: relative;">
+                            <span class="card-clickable-badge text-muted"><i class="ti ti-eye"></i></span>
                             <div class="card-body text-center p-2 d-flex flex-column justify-content-center">
                                 <div class="metric-value text-danger mb-0" id="gastos_totales">S/0.00</div>
                                 <div class="metric-title metric-title-red mt-1">Gastos Totales</div>
@@ -369,7 +406,8 @@
                     </div>
 
                     <!-- Sparkline Chart -->
-                    <div class="card card-full" style="flex: 1; min-width: 0; border-radius: 10px;">
+                    <div class="card card-full clickable-metric btn-open-detail" data-type="ingresos_caja" title="Click para ver detalle de Ingresos a Caja" style="flex: 1; min-width: 0; border-radius: 10px; position: relative;">
+                        <span class="card-clickable-badge text-muted"><i class="ti ti-eye"></i></span>
                         <div class="card-body p-2 d-flex flex-column" style="min-height: 0;">
                             <div class="text-center">
                                 <div class="metric-value text-dark" id="ingreso_caja">S/0.00</div>
@@ -384,24 +422,24 @@
 
                 <!-- MIDDLE ROW (Summary Bar - 10%) -->
                 <div class="summary-bar" style="flex: 0 0 50px;">
-                    <div class="summary-item" style="background-color: #d4a373;">
-                        <span class="metric-title text-white">Ventas</span>
+                    <div class="summary-item clickable-metric btn-open-detail" data-type="ventas" title="Click para ver detalle de Ventas" style="background-color: #d4a373;">
+                        <span class="metric-title text-white">Ventas <i class="ti ti-eye fs-5 ms-1"></i></span>
                         <span class="metric-value" id="summary_ventas" style="font-size: 1.1rem;">S/0.00</span>
                     </div>
-                    <div class="summary-item" style="background-color: #28a745;">
-                        <span class="metric-title text-white">Ingresos Caja</span>
+                    <div class="summary-item clickable-metric btn-open-detail" data-type="ingresos_caja" title="Click para ver detalle de Ingresos a Caja" style="background-color: #28a745;">
+                        <span class="metric-title text-white">Ingresos Caja <i class="ti ti-eye fs-5 ms-1"></i></span>
                         <span class="metric-value" id="summary_caja" style="font-size: 1.1rem;">S/0.00</span>
                     </div>
-                    <div class="summary-item" style="background-color: #2e8b57;">
-                        <span class="metric-title text-white">Balance Total</span>
+                    <div class="summary-item clickable-metric btn-open-detail" data-type="balance" title="Click para ver detalle del Balance" style="background-color: #2e8b57;">
+                        <span class="metric-title text-white">Balance Total <i class="ti ti-eye fs-5 ms-1"></i></span>
                         <span class="metric-value" id="summary_balance" style="font-size: 1.1rem;">S/0.00</span>
                     </div>
                     <div class="summary-item" style="background-color: #3cb371;">
                         <span class="metric-title text-white">Rentabilidad</span>
                         <span class="metric-value" id="summary_rentabilidad" style="font-size: 1.1rem;">S/0.00</span>
                     </div>
-                    <div class="summary-item" style="background-color: #d32f2f;">
-                        <span class="metric-title text-white">Gastos</span>
+                    <div class="summary-item clickable-metric btn-open-detail" data-type="gastos" title="Click para ver detalle de Gastos" style="background-color: #d32f2f;">
+                        <span class="metric-title text-white">Gastos <i class="ti ti-eye fs-5 ms-1"></i></span>
                         <span class="metric-value" id="summary_gastos" style="font-size: 1.1rem;">S/0.00</span>
                     </div>
                     <div class="summary-item" style="background-color: #adb5bd;">
@@ -415,27 +453,32 @@
                     <!-- KPI Grid -->
                     <div class="kpi-grid" style="width: auto; flex: 0 0 35%;">
                         <!-- We map Subuz metrics to these 6 cards -->
-                        <div class="kpi-card">
+                        <div class="kpi-card btn-open-detail" data-type="pendiente" title="Click para ver detalle de Pendientes / Crédito">
+                            <span class="card-clickable-badge text-muted"><i class="ti ti-zoom-in"></i></span>
                             <div class="metric-value text-dark" id="kpi_1">S/0.00</div>
                             <div class="metric-title metric-title-red mt-1">Pendiente / Cr&eacute;dito</div>
                         </div>
-                        <div class="kpi-card">
+                        <div class="kpi-card btn-open-detail" data-type="efectivo" title="Click para ver detalle de Efectivo (Ingresos / Egresos / Cajas)">
+                            <span class="card-clickable-badge text-muted"><i class="ti ti-zoom-in"></i></span>
                             <div class="metric-value text-dark" id="kpi_2">S/0.00</div>
                             <div class="metric-title metric-title-red mt-1">Efectivo</div>
                         </div>
-                        <div class="kpi-card">
+                        <div class="kpi-card btn-open-detail" data-type="transferencias" title="Click para ver detalle de Transferencias Bancarias">
+                            <span class="card-clickable-badge text-muted"><i class="ti ti-zoom-in"></i></span>
                             <div class="metric-value text-dark" id="kpi_3">S/0.00</div>
                             <div class="metric-title metric-title-red mt-1">Transferencias</div>
                         </div>
-                        <div class="kpi-card">
+                        <div class="kpi-card btn-open-detail" data-type="yape_plin" title="Click para ver detalle de Yape / Plin">
+                            <span class="card-clickable-badge text-muted"><i class="ti ti-zoom-in"></i></span>
                             <div class="metric-value text-dark" id="kpi_4">S/0.00</div>
                             <div class="metric-title metric-title-red mt-1">Yape / Plin</div>
                         </div>
-                        <div class="kpi-card">
+                        <div class="kpi-card btn-open-detail" data-type="ventas" title="Click para ver detalle de Ventas">
+                            <span class="card-clickable-badge text-muted"><i class="ti ti-zoom-in"></i></span>
                             <div class="metric-value text-dark" id="kpi_5">0</div>
                             <div class="metric-title metric-title-red mt-1" id="kpi_5_label">Ventas Hoy</div>
                         </div>
-                        <div class="kpi-card">
+                        <div class="kpi-card" title="Despachos realizados en el periodo">
                             <div class="metric-value text-dark" id="kpi_6">0</div>
                             <div class="metric-title metric-title-red mt-1" id="kpi_6_label">Despachados Hoy</div>
                         </div>
@@ -453,6 +496,84 @@
                     </div>
                 </div>
 
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detalle de Métricas / Movimientos -->
+    <div class="modal modal-blur fade" id="dashboardDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header bg-danger text-white py-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="ti ti-report-money fs-1"></i>
+                        <div>
+                            <h5 class="modal-title fw-bold text-white mb-0" id="detailModalTitle">Detalle de Movimientos</h5>
+                            <span class="small text-white-50" id="detailModalSubtitle">Periodo seleccionado</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body p-3">
+                    <!-- Summary Badges in Modal -->
+                    <div class="row g-2 mb-3" id="detailSummaryRow">
+                        <div class="col-md-4">
+                            <div class="card p-2 border-0 bg-success-lt text-center">
+                                <div class="text-uppercase small fw-bold text-success">Total Ingresos / Cobros</div>
+                                <div class="h2 mb-0 fw-bold text-success" id="modalTotalIncome">S/ 0.00</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card p-2 border-0 bg-danger-lt text-center">
+                                <div class="text-uppercase small fw-bold text-danger">Total Egresos / Gastos</div>
+                                <div class="h2 mb-0 fw-bold text-danger" id="modalTotalExpense">S/ 0.00</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card p-2 border-0 bg-primary-lt text-center">
+                                <div class="text-uppercase small fw-bold text-primary">Saldo Neto / Total</div>
+                                <div class="h2 mb-0 fw-bold text-primary" id="modalNetTotal">S/ 0.00</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Filter Search Input within modal table -->
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="small text-muted fw-bold text-uppercase">
+                            <i class="ti ti-list-details me-1"></i> Lista de Registros (<span id="modalItemsCount">0</span>)
+                        </div>
+                        <div style="width: 250px;">
+                            <input type="text" id="modalSearchFilter" class="form-control form-control-sm" placeholder="Buscar en la tabla...">
+                        </div>
+                    </div>
+
+                    <!-- Movements Table -->
+                    <div class="table-responsive border rounded" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-vcenter table-hover table-striped mb-0" id="detailTable">
+                            <thead class="table-dark sticky-top">
+                                <tr>
+                                    <th style="width: 140px;">Fecha / Hora</th>
+                                    <th>Tipo</th>
+                                    <th>Concepto / Referencia</th>
+                                    <th>Caja / Origen</th>
+                                    <th>Responsable</th>
+                                    <th>Método</th>
+                                    <th class="text-end" style="width: 120px;">Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detailTableBody">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-secondary px-4 fw-bold" data-bs-dismiss="modal">
+                        <i class="ti ti-x me-1"></i> Cerrar
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -830,14 +951,11 @@
                             const name = (m.name || '').toLowerCase();
                             const val = parseFloat((m.total || '0').replace(/,/g, '')) || 0;
 
-                            if (name.includes('efectivo') || name === 'caja') {
-                                totalEfectivo += val;
-                            } else if (name.includes('yape') || name.includes('plin')) {
+                            if (name.includes('yape') || name.includes('plin')) {
                                 totalDigital += val;
-                            } else if (name.includes('transferencia') || name.includes('interbank') || name.includes('bcp') || name.includes('caja piura') || name.includes('warda') || name.includes('banco') || name.includes('bbva') || name.includes('scotia') || name.includes('transito')) {
-                                totalTransferencias += val;
+                            } else if (name.includes('efectivo') || name === 'caja') {
+                                totalEfectivo += val;
                             } else {
-                                // Cualquier otro método bancario o de depósito
                                 totalTransferencias += val;
                             }
                         });
@@ -868,5 +986,147 @@
                 }
             });
         }
+
+        // --- DASHBOARD DETAIL MODAL LOGIC ---
+        let currentModalItems = [];
+
+        $(document).on('click', '.btn-open-detail', function () {
+            const metricType = $(this).data('type');
+            if (!metricType) return;
+
+            const range = getSelectedRange();
+            loadMetricDetail(metricType, range);
+        });
+
+        function loadMetricDetail(type, range) {
+            Swal.fire({
+                title: 'Cargando desglose...',
+                text: 'Consultando ingresos, egresos y cajas...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            $.ajax({
+                url: '{{ route("dashboard.detail.api") }}',
+                method: 'GET',
+                data: {
+                    type: type,
+                    start_date: range.startDate,
+                    end_date: range.endDate
+                },
+                success: function (res) {
+                    Swal.close();
+                    if (!res.status) {
+                        Swal.fire('Error', 'No se pudo obtener el detalle.', 'error');
+                        return;
+                    }
+
+                    $('#detailModalTitle').text(res.title || 'Detalle de Movimientos');
+                    $('#detailModalSubtitle').text('Periodo: ' + range.label);
+
+                    $('#modalTotalIncome').text('S/ ' + res.summary.total_income);
+                    $('#modalTotalExpense').text('S/ ' + res.summary.total_expense);
+                    $('#modalNetTotal').text('S/ ' + res.summary.net_total);
+
+                    currentModalItems = res.items || [];
+                    $('#modalItemsCount').text(currentModalItems.length);
+                    $('#modalSearchFilter').val('');
+
+                    renderModalTable(currentModalItems);
+
+                    const modalInstance = new bootstrap.Modal(document.getElementById('dashboardDetailModal'));
+                    modalInstance.show();
+                },
+                error: function () {
+                    Swal.close();
+                    Swal.fire('Error', 'Ocurrió un error al cargar la información.', 'error');
+                }
+            });
+        }
+
+        function renderModalTable(items) {
+            const $tbody = $('#detailTableBody');
+            $tbody.empty();
+
+            if (!items || items.length === 0) {
+                $tbody.html('<tr><td colspan="7" class="text-center py-4 text-muted"><i class="ti ti-info-circle fs-2 mb-1 d-block"></i>No se encontraron movimientos registrados en este periodo.</td></tr>');
+                return;
+            }
+
+            let html = '';
+            items.forEach(function (item) {
+                let badgeClass = 'bg-secondary-lt';
+                let amountClass = 'text-dark';
+                let sign = '';
+
+                if (item.type === 'income' || item.type === 'sale') {
+                    badgeClass = 'bg-success-lt';
+                    amountClass = 'text-success fw-bold';
+                    sign = '+ ';
+                } else if (item.type === 'expense') {
+                    badgeClass = 'bg-danger-lt';
+                    amountClass = 'text-danger fw-bold';
+                    sign = '- ';
+                } else if (item.type === 'pending') {
+                    badgeClass = 'bg-warning-lt';
+                    amountClass = 'text-warning fw-bold';
+                }
+
+                html += `
+                    <tr>
+                        <td class="small">
+                            <div class="fw-bold">${item.date}</div>
+                            <div class="text-muted" style="font-size: 0.75rem;"><i class="ti ti-clock me-1"></i>${item.time}</div>
+                        </td>
+                        <td>
+                            <span class="badge ${badgeClass} text-uppercase px-2 py-1">${item.type_label}</span>
+                        </td>
+                        <td>
+                            <div class="fw-bold text-dark">${item.concept}</div>
+                        </td>
+                        <td>
+                            <span class="badge bg-blue-lt"><i class="ti ti-archive me-1"></i>${item.cashbox || 'Caja'}</span>
+                        </td>
+                        <td class="small text-muted">
+                            <i class="ti ti-user me-1"></i>${item.user || '-'}
+                        </td>
+                        <td>
+                            <span class="small fw-semibold text-secondary">${item.method || '-'}</span>
+                        </td>
+                        <td class="text-end ${amountClass}" style="font-size: 1.05rem;">
+                            ${sign}S/ ${parseFloat(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                    </tr>
+                `;
+            });
+
+            $tbody.html(html);
+        }
+
+        // Modal Search Filter
+        $('#modalSearchFilter').on('keyup', function () {
+            const query = $(this).val().toLowerCase();
+            if (!query) {
+                renderModalTable(currentModalItems);
+                $('#modalItemsCount').text(currentModalItems.length);
+                return;
+            }
+
+            const filtered = currentModalItems.filter(item => {
+                return (item.date && item.date.toLowerCase().includes(query)) ||
+                    (item.time && item.time.toLowerCase().includes(query)) ||
+                    (item.type_label && item.type_label.toLowerCase().includes(query)) ||
+                    (item.concept && item.concept.toLowerCase().includes(query)) ||
+                    (item.cashbox && item.cashbox.toLowerCase().includes(query)) ||
+                    (item.user && item.user.toLowerCase().includes(query)) ||
+                    (item.method && item.method.toLowerCase().includes(query)) ||
+                    (item.amount && item.amount.toString().includes(query));
+            });
+
+            $('#modalItemsCount').text(filtered.length);
+            renderModalTable(filtered);
+        });
     </script>
 @endsection

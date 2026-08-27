@@ -82,6 +82,7 @@ Route::middleware('auth')->group(function () {
 
 	Route::middleware('role:admin|asistente')->group(function () {
 		Route::get('dashboard/api', [WebController::class, 'dashboard'])->name('dashboard.api');
+		Route::get('dashboard/detail/api', [WebController::class, 'dashboardDetail'])->name('dashboard.detail.api');
 		Route::get('dashboard/daily/api', [WebController::class, 'dashboardDaily'])->name('dashboard.daily.api');
 		Route::get('dashboard/product/api', [WebController::class, 'dashboardProduct'])->name('dashboard.product.api');
 		Route::get('dashboard/distribution/api', [WebController::class, 'dashboardDistribution'])->name('dashboard.distribution.api');
