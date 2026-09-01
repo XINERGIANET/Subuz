@@ -566,20 +566,26 @@ class SaleController extends Controller
             $total += floatval($price) * floatval($quantity);
         }
 
-        $debt = $sale->debt;
-        if ($request->type == 'Credito') {
-            $total_paid = $sale->payments()->sum('amount');
+        $total_paid = $sale->payments()->sum('amount');
+        if ($sale->paid == 0 || $request->type == 'Credito' || $sale->movements()->where('type', 'debt')->exists()) {
             $debt = $total - $total_paid;
         } else {
             $debt = 0;
         }
 
+        $newDebt = $debt > 0 ? $debt : 0;
+
         $sale->update([
             'date' => $request->date,
             'type' => $request->type,
             'total' => $total,
-            'debt' => $debt > 0 ? $debt : 0
+            'debt' => $newDebt
         ]);
+
+        $movement = $sale->movements()->where('type', 'debt')->first();
+        if ($movement) {
+            $movement->update(['amount' => $newDebt]);
+        }
 
         return response()->json(['status' => true]);
     }
