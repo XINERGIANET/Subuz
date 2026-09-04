@@ -17,9 +17,12 @@ use App\Models\Cashbox;
 use App\Models\CashboxMovement;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Codedge\Fpdf\Fpdf\Fpdf;
 
 class InventoryController extends Controller
 {
+    public static $clientAssetTypes = ['Exhibidores', 'Congeladores', 'Mostradores', 'Cooler', 'Bidones'];
+
     public function index(Request $request)
     {
         $startDate = $request->start_date;
@@ -239,7 +242,32 @@ class InventoryController extends Controller
         $dispatchers = User::where('role', 'despachador')->orderBy('name', 'asc')->get();
         $paymentMethods = PaymentMethod::all();
 
-        return view('inventories.index', compact('supplies', 'assetsData', 'products', 'clients', 'dispatchers', 'paymentMethods', 'isDispatcher'));
+        // 4. CONTROL DE ACTIVOS Y BIDONES POR CLIENTE (Y PLANTA)
+        $clientAssets = $this->getClientAssetsMatrix($startDate, $endDate, $request->client_id, $request->asset_type);
+        $clientAssetsRows = $clientAssets['rows'];
+        $plantaClient = $clientAssets['planta_client'];
+        $plantaTotals = $clientAssets['planta_totals'];
+        $clientsTotals = $clientAssets['clients_totals'];
+        $clientAssetTotals = $clientAssets['totals'];
+        $clientGrandTotal = $clientAssets['grand_total'];
+        $clientAssetTypes = self::$clientAssetTypes;
+
+        return view('inventories.index', compact(
+            'supplies',
+            'assetsData',
+            'products',
+            'clients',
+            'dispatchers',
+            'paymentMethods',
+            'isDispatcher',
+            'clientAssetsRows',
+            'plantaClient',
+            'plantaTotals',
+            'clientsTotals',
+            'clientAssetTotals',
+            'clientGrandTotal',
+            'clientAssetTypes'
+        ));
     }
 
     public function toggleDispatcherPermission(Request $request)
@@ -744,5 +772,928 @@ class InventoryController extends Controller
         }
 
         return response()->json(['status' => true, 'message' => 'Insumo registrado exitosamente.']);
+    }
+
+    /* =========================================================================
+     * MÓDULO: CONTROL DE ACTIVOS Y BIDONES POR CLIENTE (Y PLANTA)
+     * ========================================================================= */
+
+    public function normalizeAssetType($name)
+    {
+        $lower = strtolower(trim((string)$name));
+        if (str_contains($lower, 'exhibid')) return 'Exhibidores';
+        if (str_contains($lower, 'congelad')) return 'Congeladores';
+        if (str_contains($lower, 'mostrad')) return 'Mostradores';
+        if (str_contains($lower, 'cooler')) return 'Cooler';
+        if (str_contains($lower, 'bidon')) return 'Bidones';
+        return ucfirst($name ?: 'Otro');
+    }
+
+    public function getClientAssetsMatrix($startDate = null, $endDate = null, $clientIdFilter = null, $assetFilter = null)
+    {
+        // 1. Obtener o asegurar el cliente PLANTA
+        $plantaClient = Client::whereRaw("LOWER(TRIM(name)) = 'planta (sede principal)'")
+            ->orWhereRaw("LOWER(TRIM(name)) = 'planta'")
+            ->orWhereRaw("LOWER(TRIM(name)) = 'planta sub-uz'")
+            ->first();
+
+        if (!$plantaClient) {
+            $plantaClient = Client::whereRaw('LOWER(TRIM(name)) LIKE ?', ['%planta%'])->orderBy('id', 'desc')->first();
+        }
+
+        if (!$plantaClient) {
+            $plantaClient = Client::firstOrCreate([
+                'name' => 'PLANTA (Sede Principal)',
+            ], [
+                'document' => '00000000',
+                'type' => 'DNI',
+                'phone' => '920488526',
+                'address' => 'Planta Principal Subuz',
+            ]);
+        }
+
+        // 2. Traer todos los movimientos de activos en custodia y planta
+        $allMovements = InventoryMovement::with(['user', 'dispatcher', 'client'])
+            ->where(function ($q) {
+                $q->where('item_type', 'client_asset')
+                  ->orWhereNotNull('client_id');
+            })
+            ->get();
+
+        // Determinar todos los clientes con movimientos
+        $clientIdsWithMovements = $allMovements->pluck('client_id')->filter()->unique()->toArray();
+        if (!in_array($plantaClient->id, $clientIdsWithMovements)) {
+            $clientIdsWithMovements[] = $plantaClient->id;
+        }
+
+        if ($clientIdFilter) {
+            $clientIds = array_values(array_filter([$clientIdFilter]));
+        } else {
+            $clientIds = $clientIdsWithMovements;
+        }
+
+        // Cargar clientes colocando siempre a PLANTA en primer lugar
+        $clients = Client::whereIn('id', $clientIds)
+            ->get()
+            ->sortBy(function ($c) use ($plantaClient) {
+                if ($c->id == $plantaClient->id) return '0000000000';
+                return strtolower($c->name);
+            });
+
+        $rows = collect();
+
+        foreach ($clients as $client) {
+            $isPlanta = ($client->id == $plantaClient->id);
+            $assetsBreakdown = [];
+            $clientTotal = 0;
+
+            foreach (self::$clientAssetTypes as $asset) {
+
+                if ($isPlanta) {
+                    // CÁLCULO PARA PLANTA (ALMACÉN CENTRAL):
+                    // El stock de Planta refleja el inventario físico disponible en almacén:
+                    // (+) Saldo inicial directo de Planta
+                    // (+) Ingresos directos a Planta (compras/adquisiciones)
+                    // (-) Salidas directas de Planta (bajas/mermas)
+                    // (+) Devoluciones recibidas de clientes
+                    // (-) Entregas enviadas a clientes
+
+                    $plantaDirectMovs = $allMovements->filter(function ($m) use ($plantaClient, $asset) {
+                        return $m->client_id == $plantaClient->id && $this->normalizeAssetType($m->item_name) === $asset;
+                    });
+
+                    $otherClientsMovs = $allMovements->filter(function ($m) use ($plantaClient, $asset) {
+                        return $m->client_id != $plantaClient->id && $this->normalizeAssetType($m->item_name) === $asset;
+                    });
+
+                    // Saldo inicial base directo en almacén Planta
+                    $baseInitial = floatval($plantaDirectMovs->where('movement_type', 'initial_balance')->sum('quantity'));
+
+                    // Movimientos previos a la fecha de inicio
+                    $priorDirectIncomes = 0;
+                    $priorDirectOutcomes = 0;
+                    $priorClientReturns = 0;
+                    $priorClientDeliveries = 0;
+
+                    if ($startDate) {
+                        $priorDirectIncomes = floatval($plantaDirectMovs->filter(function ($m) use ($startDate) {
+                            $mDate = $m->date ? $m->date->format('Y-m-d') : ($m->created_at ? $m->created_at->format('Y-m-d') : null);
+                            return $mDate && $mDate < $startDate && in_array($m->movement_type, ['income', 'return']);
+                        })->sum('quantity'));
+
+                        $priorDirectOutcomes = floatval($plantaDirectMovs->filter(function ($m) use ($startDate) {
+                            $mDate = $m->date ? $m->date->format('Y-m-d') : ($m->created_at ? $m->created_at->format('Y-m-d') : null);
+                            return $mDate && $mDate < $startDate && in_array($m->movement_type, ['outcome', 'withdrawal']);
+                        })->sum('quantity'));
+
+                        $priorClientReturns = floatval($otherClientsMovs->filter(function ($m) use ($startDate) {
+                            $mDate = $m->date ? $m->date->format('Y-m-d') : ($m->created_at ? $m->created_at->format('Y-m-d') : null);
+                            return $mDate && $mDate < $startDate && in_array($m->movement_type, ['return', 'outcome', 'withdrawal']);
+                        })->sum('quantity'));
+
+                        $priorClientDeliveries = floatval($otherClientsMovs->filter(function ($m) use ($startDate) {
+                            $mDate = $m->date ? $m->date->format('Y-m-d') : ($m->created_at ? $m->created_at->format('Y-m-d') : null);
+                            return $mDate && $mDate < $startDate && in_array($m->movement_type, ['delivery', 'income']);
+                        })->sum('quantity'));
+                    }
+
+                    $saldoInicial = $baseInitial + ($priorDirectIncomes + $priorClientReturns) - ($priorDirectOutcomes + $priorClientDeliveries);
+
+                    // Movimientos en el rango de fechas
+                    $periodDirectMovs = $plantaDirectMovs->filter(function ($m) use ($startDate, $endDate) {
+                        if ($m->movement_type === 'initial_balance') return false;
+                        $mDate = $m->date ? $m->date->format('Y-m-d') : ($m->created_at ? $m->created_at->format('Y-m-d') : null);
+                        if ($startDate && $mDate && $mDate < $startDate) return false;
+                        if ($endDate && $mDate && $mDate > $endDate) return false;
+                        return true;
+                    });
+
+                    $periodOtherMovs = $otherClientsMovs->filter(function ($m) use ($startDate, $endDate) {
+                        if ($m->movement_type === 'initial_balance') return false;
+                        $mDate = $m->date ? $m->date->format('Y-m-d') : ($m->created_at ? $m->created_at->format('Y-m-d') : null);
+                        if ($startDate && $mDate && $mDate < $startDate) return false;
+                        if ($endDate && $mDate && $mDate > $endDate) return false;
+                        return true;
+                    });
+
+                    // Ingresos al almacén de Planta en el periodo: Compras directas + Devoluciones recibidas de clientes
+                    $directIncomesPeriod = floatval($periodDirectMovs->filter(fn($m) => in_array($m->movement_type, ['income', 'return']))->sum('quantity'));
+                    $clientReturnsPeriod = floatval($periodOtherMovs->filter(fn($m) => in_array($m->movement_type, ['return', 'outcome', 'withdrawal']))->sum('quantity'));
+                    $ingresos = $directIncomesPeriod + $clientReturnsPeriod;
+
+                    // Salidas del almacén de Planta en el periodo: Bajas directas + Entregas despachadas a clientes
+                    $directOutcomesPeriod = floatval($periodDirectMovs->filter(fn($m) => in_array($m->movement_type, ['outcome', 'withdrawal']))->sum('quantity'));
+                    $clientDeliveriesPeriod = floatval($periodOtherMovs->filter(fn($m) => in_array($m->movement_type, ['delivery', 'income']))->sum('quantity'));
+                    $salidas = $directOutcomesPeriod + $clientDeliveriesPeriod;
+
+                    $saldoFinal = $saldoInicial + $ingresos - $salidas;
+
+                } else {
+                    // CÁLCULO PARA CLIENTE INDIVIDUAL (ACTIVOS PRESTADOS / EN CUSTODIA):
+                    // (+) Saldo inicial base del cliente
+                    // (+) Entregas recibidas de Planta
+                    // (-) Devoluciones enviadas a Planta
+
+                    $clientMovs = $allMovements->filter(function ($m) use ($client, $asset) {
+                        return $m->client_id == $client->id && $this->normalizeAssetType($m->item_name) === $asset;
+                    });
+
+                    $baseInitial = floatval($clientMovs->where('movement_type', 'initial_balance')->sum('quantity'));
+
+                    $priorIncomes = 0;
+                    $priorOutcomes = 0;
+                    if ($startDate) {
+                        $priorIncomes = floatval($clientMovs->filter(function ($m) use ($startDate) {
+                            $mDate = $m->date ? $m->date->format('Y-m-d') : ($m->created_at ? $m->created_at->format('Y-m-d') : null);
+                            return $mDate && $mDate < $startDate && in_array($m->movement_type, ['income', 'delivery']);
+                        })->sum('quantity'));
+
+                        $priorOutcomes = floatval($clientMovs->filter(function ($m) use ($startDate) {
+                            $mDate = $m->date ? $m->date->format('Y-m-d') : ($m->created_at ? $m->created_at->format('Y-m-d') : null);
+                            return $mDate && $mDate < $startDate && in_array($m->movement_type, ['outcome', 'return', 'withdrawal']);
+                        })->sum('quantity'));
+                    }
+
+                    $saldoInicial = $baseInitial + $priorIncomes - $priorOutcomes;
+
+                    $periodMovs = $clientMovs->filter(function ($m) use ($startDate, $endDate) {
+                        if ($m->movement_type === 'initial_balance') return false;
+                        $mDate = $m->date ? $m->date->format('Y-m-d') : ($m->created_at ? $m->created_at->format('Y-m-d') : null);
+                        if ($startDate && $mDate && $mDate < $startDate) return false;
+                        if ($endDate && $mDate && $mDate > $endDate) return false;
+                        return true;
+                    });
+
+                    // Entregas recibidas (+)
+                    $ingresos = floatval($periodMovs->filter(fn($m) => in_array($m->movement_type, ['income', 'delivery']))->sum('quantity'));
+                    // Devoluciones enviadas (-)
+                    $salidas = floatval($periodMovs->filter(fn($m) => in_array($m->movement_type, ['outcome', 'return', 'withdrawal']))->sum('quantity'));
+
+                    $saldoFinal = $saldoInicial + $ingresos - $salidas;
+                }
+
+                $assetsBreakdown[$asset] = [
+                    'saldo_inicial' => $saldoInicial,
+                    'ingresos' => $ingresos,
+                    'salidas' => $salidas,
+                    'saldo_final' => $saldoFinal,
+                ];
+
+                $clientTotal += $saldoFinal;
+            }
+
+            // Si se filtró por un activo específico, solo excluir clientes sin actividad si NO se ha filtrado explícitamente por ese cliente
+            if ($assetFilter && !$isPlanta && !$clientIdFilter) {
+                $hasAssetActivity = ($assetsBreakdown[$assetFilter]['saldo_final'] != 0)
+                    || ($assetsBreakdown[$assetFilter]['ingresos'] != 0)
+                    || ($assetsBreakdown[$assetFilter]['salidas'] != 0)
+                    || ($assetsBreakdown[$assetFilter]['saldo_inicial'] != 0);
+                if (!$hasAssetActivity) {
+                    continue;
+                }
+            }
+
+            $displayTotal = $assetFilter ? ($assetsBreakdown[$assetFilter]['saldo_final'] ?? 0) : $clientTotal;
+
+            $rows->push((object) [
+                'client_id' => $client->id,
+                'client_name' => $client->name,
+                'client_document' => $client->document,
+                'client_phone' => $client->phone,
+                'client_address' => $client->address,
+                'is_planta' => $isPlanta,
+                'assets' => $assetsBreakdown,
+                'total_assets' => $displayTotal,
+            ]);
+        }
+
+        // Totales separados: Planta vs Clientes vs Gran Total Empresa
+        $plantaRow = $rows->first(fn($r) => $r->is_planta);
+        $clientsOnlyRows = $rows->filter(fn($r) => !$r->is_planta);
+
+        $plantaTotals = [];
+        $clientsTotals = [];
+        $grandTotals = [];
+        $grandTotalSum = 0;
+
+        foreach (self::$clientAssetTypes as $asset) {
+            $pStock = $plantaRow ? ($plantaRow->assets[$asset]['saldo_final'] ?? 0) : 0;
+            $cStock = $clientsOnlyRows->sum(fn($r) => $r->assets[$asset]['saldo_final'] ?? 0);
+            $totalStock = $pStock + $cStock;
+
+            $plantaTotals[$asset] = $pStock;
+            $clientsTotals[$asset] = $cStock;
+            $grandTotals[$asset] = $totalStock;
+            if (!$assetFilter || $assetFilter === $asset) {
+                $grandTotalSum += $totalStock;
+            }
+        }
+
+        return [
+            'planta_client' => $plantaClient,
+            'rows' => $rows,
+            'planta_row' => $plantaRow,
+            'planta_totals' => $plantaTotals,
+            'clients_totals' => $clientsTotals,
+            'totals' => $grandTotals,
+            'grand_total' => $grandTotalSum,
+            'asset_types' => self::$clientAssetTypes,
+        ];
+    }
+
+    public function storeClientAssetMovement(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'client_id' => 'required|exists:clients,id',
+            'asset_type' => 'required|string|in:' . implode(',', self::$clientAssetTypes),
+            'movement_type' => 'required|string|in:delivery,return,income,outcome',
+            'quantity' => 'required|numeric|gt:0',
+            'date' => 'required|date',
+            'dispatcher_id' => 'nullable|exists:users,id',
+            'notes' => 'nullable|string|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'error' => $validator->errors()->first()]);
+        }
+
+        $plantaClient = Client::whereRaw("LOWER(TRIM(name)) = 'planta (sede principal)'")
+            ->orWhereRaw("LOWER(TRIM(name)) = 'planta'")
+            ->orWhereRaw("LOWER(TRIM(name)) = 'planta sub-uz'")
+            ->first();
+
+        $isPlanta = ($plantaClient && $request->client_id == $plantaClient->id);
+
+        $movType = $request->movement_type;
+        if ($isPlanta) {
+            // Para Planta: income (compra/ingreso directo) y outcome (baja/merma directa)
+            if ($movType === 'delivery') $movType = 'outcome';
+            if ($movType === 'return') $movType = 'income';
+            $defaultNote = ($movType === 'income') ? 'Ingreso directo al almacén de Planta' : 'Salida / Baja directa de Planta';
+        } else {
+            // Para Clientes: delivery (entrega a cliente) y return (devolución del cliente a planta)
+            if ($movType === 'income') $movType = 'delivery';
+            if ($movType === 'outcome') $movType = 'return';
+            $defaultNote = ($movType === 'delivery') ? 'Salida de Planta y entrega al cliente' : 'Devolución del cliente e ingreso a Planta';
+        }
+
+        $finalNote = $request->notes ?: $defaultNote;
+
+        $finalDispatcherId = $request->dispatcher_id;
+        if (auth()->user()->hasRole('despachador')) {
+            $finalDispatcherId = auth()->id();
+        }
+
+        $movement = InventoryMovement::create([
+            'item_type' => 'client_asset',
+            'item_id' => null,
+            'item_name' => $request->asset_type,
+            'client_id' => $request->client_id,
+            'dispatcher_id' => $finalDispatcherId,
+            'movement_type' => $movType,
+            'quantity' => $request->quantity,
+            'date' => $request->date,
+            'notes' => $finalNote,
+            'user_id' => auth()->id(),
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Movimiento de activo registrado con éxito.',
+            'movement' => $movement
+        ]);
+    }
+
+    public function storeClientAssetInitialBalance(Request $request)
+    {
+        if (auth()->user()->hasRole('despachador')) {
+            return response()->json(['status' => false, 'error' => 'No autorizado para configurar saldos iniciales.'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'client_id' => 'required|exists:clients,id',
+            'asset_type' => 'required|string|in:' . implode(',', self::$clientAssetTypes),
+            'quantity' => 'required|numeric|min:0',
+            'date' => 'nullable|date',
+            'notes' => 'nullable|string|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'error' => $validator->errors()->first()]);
+        }
+
+        // Eliminar saldo inicial previo para este cliente y activo
+        InventoryMovement::where('item_type', 'client_asset')
+            ->where('client_id', $request->client_id)
+            ->where('item_name', $request->asset_type)
+            ->where('movement_type', 'initial_balance')
+            ->delete();
+
+        InventoryMovement::create([
+            'item_type' => 'client_asset',
+            'item_id' => null,
+            'item_name' => $request->asset_type,
+            'client_id' => $request->client_id,
+            'movement_type' => 'initial_balance',
+            'quantity' => $request->quantity,
+            'date' => $request->date ?: now()->toDateString(),
+            'notes' => $request->notes ?: 'Saldo inicial configurado por usuario',
+            'user_id' => auth()->id(),
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Saldo inicial de ' . $request->asset_type . ' guardado exitosamente.'
+        ]);
+    }
+
+    public function clientAssetHistory(Request $request, $clientId)
+    {
+        $client = Client::findOrFail($clientId);
+        $startDate = $request->start_date;
+        $endDate = $request->end_date;
+        $assetFilter = $request->asset_type;
+
+        $plantaClient = Client::whereRaw("LOWER(TRIM(name)) = 'planta (sede principal)'")
+            ->orWhereRaw("LOWER(TRIM(name)) = 'planta'")
+            ->orWhereRaw("LOWER(TRIM(name)) = 'planta sub-uz'")
+            ->first();
+
+        $isPlanta = ($plantaClient && $client->id == $plantaClient->id);
+
+        if ($isPlanta) {
+            // Historial de PLANTA (Almacén Central):
+            // Muestra movimientos directos y todas las entregas/devoluciones con clientes
+            $query = InventoryMovement::with(['user', 'dispatcher', 'client'])
+                ->where(function ($q) {
+                    $q->where('item_type', 'client_asset')
+                      ->orWhereNotNull('client_id');
+                });
+
+            if ($startDate) {
+                $query->where(function ($q) use ($startDate) {
+                    $q->whereDate('date', '>=', $startDate)
+                      ->orWhere(function ($sq) use ($startDate) {
+                          $sq->whereNull('date')->whereDate('created_at', '>=', $startDate);
+                      });
+                });
+            }
+
+            if ($endDate) {
+                $query->where(function ($q) use ($endDate) {
+                    $q->whereDate('date', '<=', $endDate)
+                      ->orWhere(function ($sq) use ($endDate) {
+                          $sq->whereNull('date')->whereDate('created_at', '<=', $endDate);
+                      });
+                });
+            }
+
+            $allMovs = $query->get()->filter(function ($m) use ($assetFilter) {
+                $norm = $this->normalizeAssetType($m->item_name);
+                if ($assetFilter) return $norm === $assetFilter;
+                return in_array($norm, self::$clientAssetTypes);
+            });
+
+            $movements = $allMovs->map(function ($m) use ($plantaClient) {
+                $isDirectPlanta = ($m->client_id == $plantaClient->id);
+                $cName = $m->client ? $m->client->name : 'Cliente';
+                $mDate = $m->date ? $m->date->format('d/m/Y') : ($m->created_at ? $m->created_at->format('d/m/Y') : '-');
+
+                if ($isDirectPlanta) {
+                    if ($m->movement_type === 'initial_balance') {
+                        $typeLabel = 'Saldo Inicial Almacén';
+                        $movSign = 'initial_balance';
+                    } elseif (in_array($m->movement_type, ['income', 'return'])) {
+                        $typeLabel = 'Ingreso directo a Almacén (+)';
+                        $movSign = 'income';
+                    } else {
+                        $typeLabel = 'Salida / Baja directa de Almacén (-)';
+                        $movSign = 'outcome';
+                    }
+                    $note = $m->notes ?: '-';
+                } else {
+                    if (in_array($m->movement_type, ['delivery', 'income'])) {
+                        $typeLabel = "Salida por Entrega a: {$cName} (-)";
+                        $movSign = 'outcome';
+                        $note = "Entrega al cliente {$cName}" . ($m->notes ? " | {$m->notes}" : '');
+                    } elseif (in_array($m->movement_type, ['return', 'outcome', 'withdrawal'])) {
+                        $typeLabel = "Ingreso por Devolución de: {$cName} (+)";
+                        $movSign = 'income';
+                        $note = "Devolución del cliente {$cName}" . ($m->notes ? " | {$m->notes}" : '');
+                    } else {
+                        return null; // Saldos iniciales de clientes no afectan almacén físico de Planta
+                    }
+                }
+
+                $rawDate = $m->date ? $m->date->format('Y-m-d') : ($m->created_at ? $m->created_at->format('Y-m-d') : '1970-01-01');
+
+                return [
+                    'id' => $m->id,
+                    'asset_name' => $this->normalizeAssetType($m->item_name),
+                    'movement_type' => $movSign,
+                    'type_label' => $typeLabel,
+                    'quantity' => floatval($m->quantity),
+                    'date' => $mDate,
+                    'notes' => $note,
+                    'dispatcher_name' => $m->dispatcher ? $m->dispatcher->name : '-',
+                    'user_name' => $m->user ? $m->user->name : 'Sistema',
+                    'can_delete' => (auth()->check() && auth()->user()->hasRole('admin') && $isDirectPlanta),
+                    'raw_order' => $rawDate . '_' . str_pad($m->id, 10, '0', STR_PAD_LEFT),
+                ];
+            })->filter()->sortByDesc('raw_order')->values();
+
+        } else {
+            // Historial de CLIENTE INDIVIDUAL
+            $query = InventoryMovement::with(['user', 'dispatcher', 'client'])
+                ->where('client_id', $clientId);
+
+            if ($startDate) {
+                $query->where(function ($q) use ($startDate) {
+                    $q->whereDate('date', '>=', $startDate)
+                      ->orWhere(function ($sq) use ($startDate) {
+                          $sq->whereNull('date')->whereDate('created_at', '>=', $startDate);
+                      });
+                });
+            }
+
+            if ($endDate) {
+                $query->where(function ($q) use ($endDate) {
+                    $q->whereDate('date', '<=', $endDate)
+                      ->orWhere(function ($sq) use ($endDate) {
+                          $sq->whereNull('date')->whereDate('created_at', '<=', $endDate);
+                      });
+                });
+            }
+
+            $movements = $query->get()->filter(function ($m) use ($assetFilter) {
+                $norm = $this->normalizeAssetType($m->item_name);
+                if ($assetFilter) return $norm === $assetFilter;
+                return in_array($norm, self::$clientAssetTypes);
+            })->sortByDesc(function ($m) {
+                $d = $m->date ? $m->date->format('Y-m-d') : ($m->created_at ? $m->created_at->format('Y-m-d') : '1970-01-01');
+                return $d . '_' . str_pad($m->id, 10, '0', STR_PAD_LEFT);
+            })->values()->map(function ($m) {
+                $typeLabel = 'Movimiento';
+                if ($m->movement_type === 'initial_balance') $typeLabel = 'Saldo Inicial';
+                if (in_array($m->movement_type, ['income', 'delivery'])) $typeLabel = 'Entrega de Planta (+)';
+                if (in_array($m->movement_type, ['outcome', 'return', 'withdrawal'])) $typeLabel = 'Devolución a Planta (-)';
+
+                $mDate = $m->date ? $m->date->format('d/m/Y') : ($m->created_at ? $m->created_at->format('d/m/Y') : '-');
+
+                return [
+                    'id' => $m->id,
+                    'asset_name' => $this->normalizeAssetType($m->item_name),
+                    'movement_type' => in_array($m->movement_type, ['income', 'delivery']) ? 'income' : (in_array($m->movement_type, ['outcome', 'return', 'withdrawal']) ? 'outcome' : $m->movement_type),
+                    'type_label' => $typeLabel,
+                    'quantity' => floatval($m->quantity),
+                    'date' => $mDate,
+                    'notes' => $m->notes ?: '-',
+                    'dispatcher_name' => $m->dispatcher ? $m->dispatcher->name : '-',
+                    'user_name' => $m->user ? $m->user->name : 'Sistema',
+                    'can_delete' => (auth()->check() && auth()->user()->hasRole('admin')),
+                ];
+            });
+        }
+
+        return response()->json([
+            'status' => true,
+            'client_name' => $client->name,
+            'client_document' => $client->document,
+            'is_planta' => $isPlanta,
+            'movements' => $movements,
+        ]);
+    }
+
+    public function destroyClientAssetMovement(Request $request, $movementId)
+    {
+        if (!auth()->user()->hasRole('admin')) {
+            return response()->json(['status' => false, 'error' => 'No autorizado para eliminar movimientos.'], 403);
+        }
+
+        $movement = InventoryMovement::find($movementId);
+        if (!$movement) {
+            return response()->json(['status' => false, 'error' => 'Movimiento no encontrado.'], 404);
+        }
+
+        $movement->delete();
+
+        return response()->json(['status' => true, 'message' => 'Movimiento eliminado correctamente.']);
+    }
+
+    public function clientAssetsSummaryPdf(Request $request)
+    {
+        $startDate = $request->start_date;
+        $endDate = $request->end_date;
+        $clientId = $request->client_id;
+        $assetFilter = $request->asset_type;
+
+        $matrix = $this->getClientAssetsMatrix($startDate, $endDate, $clientId, $assetFilter);
+        $rows = $matrix['rows'];
+        $plantaTotals = $matrix['planta_totals'];
+        $clientsTotals = $matrix['clients_totals'];
+        $totals = $matrix['totals'];
+        $grandTotal = $matrix['grand_total'];
+
+        $fpdf = new Fpdf('L', 'mm', 'A4');
+        $fpdf->AddPage();
+        $fpdf->AddFont('Montserrat', '');
+        $fpdf->AddFont('Montserrat', 'B');
+
+        // Logo institucional
+        if (file_exists(public_path('assets/images/logo.jpg'))) {
+            $fpdf->Image(public_path('assets/images/logo.jpg'), 10, 10, 32);
+        }
+
+        $fpdf->SetFont('Montserrat', 'B', 15);
+        $fpdf->SetTextColor(2, 93, 166);
+        $fpdf->Cell(277, 7, utf8_decode('SUBUZ S.A.C.'), 0, 1, 'C');
+
+        $fpdf->SetFont('Montserrat', 'B', 12);
+        $fpdf->SetTextColor(40, 40, 40);
+        $fpdf->Cell(277, 6, utf8_decode('REPORTE RESUMEN DE ACTIVOS Y BIDONES (PLANTA Y CLIENTES)'), 0, 1, 'C');
+
+        // Periodo
+        $period = "Estado general al " . now()->format('d/m/Y');
+        if ($startDate && $endDate) {
+            $period = "Periodo: " . date('d/m/Y', strtotime($startDate)) . " al " . date('d/m/Y', strtotime($endDate));
+        } elseif ($startDate) {
+            $period = "Desde: " . date('d/m/Y', strtotime($startDate));
+        } elseif ($endDate) {
+            $period = "Hasta: " . date('d/m/Y', strtotime($endDate));
+        }
+
+        $fpdf->SetFont('Montserrat', '', 9);
+        $fpdf->SetTextColor(100, 100, 100);
+        $fpdf->Cell(277, 5, utf8_decode($period), 0, 1, 'C');
+        $fpdf->Ln(4);
+
+        // Cabecera de la tabla
+        $fpdf->SetFillColor(2, 93, 166);
+        $fpdf->SetTextColor(255, 255, 255);
+        $fpdf->SetDrawColor(2, 93, 166);
+        $fpdf->SetFont('Montserrat', 'B', 8.5);
+
+        $fpdf->Cell(12, 8, utf8_decode('N°'), 1, 0, 'C', true);
+        $fpdf->Cell(85, 8, utf8_decode('UBICACIÓN / CLIENTE'), 1, 0, 'L', true);
+        $fpdf->Cell(30, 8, utf8_decode('EXHIBIDORES'), 1, 0, 'C', true);
+        $fpdf->Cell(30, 8, utf8_decode('CONGELADORES'), 1, 0, 'C', true);
+        $fpdf->Cell(30, 8, utf8_decode('MOSTRADORES'), 1, 0, 'C', true);
+        $fpdf->Cell(28, 8, utf8_decode('COOLER'), 1, 0, 'C', true);
+        $fpdf->Cell(30, 8, utf8_decode('BIDONES'), 1, 0, 'C', true);
+        $fpdf->Cell(32, 8, utf8_decode('TOTAL ACTIVOS'), 1, 1, 'C', true);
+
+        // Filas
+        $fpdf->SetDrawColor(220, 224, 230);
+        $index = 1;
+
+        foreach ($rows as $r) {
+            $isPlanta = $r->is_planta;
+
+            if ($isPlanta) {
+                $fpdf->SetFillColor(230, 242, 255);
+                $fpdf->SetFont('Montserrat', 'B', 8.5);
+                $fpdf->SetTextColor(2, 93, 166);
+            } else {
+                $fpdf->SetFillColor(255, 255, 255);
+                $fpdf->SetFont('Montserrat', '', 8);
+                $fpdf->SetTextColor(30, 30, 30);
+            }
+
+            $clientLabel = $isPlanta ? '[ALMACÉN PLANTA] ' . $r->client_name : $r->client_name;
+            if (strlen($clientLabel) > 42) {
+                $clientLabel = substr($clientLabel, 0, 39) . '...';
+            }
+
+            $fpdf->Cell(12, 7, $isPlanta ? 'P' : $index++, 1, 0, 'C', $isPlanta);
+            $fpdf->Cell(85, 7, utf8_decode($clientLabel), 1, 0, 'L', $isPlanta);
+
+            $fpdf->SetTextColor(30, 30, 30);
+            $fpdf->Cell(30, 7, number_format($r->assets['Exhibidores']['saldo_final'] ?? 0, 0), 1, 0, 'C', $isPlanta);
+            $fpdf->Cell(30, 7, number_format($r->assets['Congeladores']['saldo_final'] ?? 0, 0), 1, 0, 'C', $isPlanta);
+            $fpdf->Cell(30, 7, number_format($r->assets['Mostradores']['saldo_final'] ?? 0, 0), 1, 0, 'C', $isPlanta);
+            $fpdf->Cell(28, 7, number_format($r->assets['Cooler']['saldo_final'] ?? 0, 0), 1, 0, 'C', $isPlanta);
+            $fpdf->Cell(30, 7, number_format($r->assets['Bidones']['saldo_final'] ?? 0, 0), 1, 0, 'C', $isPlanta);
+
+            $fpdf->SetFont('Montserrat', 'B', 8.5);
+            $fpdf->SetTextColor(2, 93, 166);
+            $fpdf->Cell(32, 7, number_format($r->total_assets, 0), 1, 1, 'C', $isPlanta);
+        }
+
+        // Subtotales y Gran Total
+        $fpdf->SetDrawColor(200, 215, 230);
+
+        // 1. Subtotal Planta
+        $fpdf->SetFillColor(240, 247, 255);
+        $fpdf->SetFont('Montserrat', 'B', 8);
+        $fpdf->SetTextColor(2, 93, 166);
+        $fpdf->Cell(97, 7, utf8_decode('DISPONIBLE EN ALMACÉN (PLANTA)'), 1, 0, 'R', true);
+        $fpdf->Cell(30, 7, number_format($plantaTotals['Exhibidores'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(30, 7, number_format($plantaTotals['Congeladores'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(30, 7, number_format($plantaTotals['Mostradores'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(28, 7, number_format($plantaTotals['Cooler'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(30, 7, number_format($plantaTotals['Bidones'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(32, 7, number_format(array_sum($plantaTotals), 0), 1, 1, 'C', true);
+
+        // 2. Subtotal Clientes
+        $fpdf->SetFillColor(245, 247, 250);
+        $fpdf->SetFont('Montserrat', 'B', 8);
+        $fpdf->SetTextColor(60, 60, 60);
+        $fpdf->Cell(97, 7, utf8_decode('TOTAL PRESTADOS EN CLIENTES'), 1, 0, 'R', true);
+        $fpdf->Cell(30, 7, number_format($clientsTotals['Exhibidores'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(30, 7, number_format($clientsTotals['Congeladores'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(30, 7, number_format($clientsTotals['Mostradores'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(28, 7, number_format($clientsTotals['Cooler'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(30, 7, number_format($clientsTotals['Bidones'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(32, 7, number_format(array_sum($clientsTotals), 0), 1, 1, 'C', true);
+
+        // 3. Gran Total Empresa
+        $fpdf->SetFillColor(2, 93, 166);
+        $fpdf->SetDrawColor(2, 93, 166);
+        $fpdf->SetFont('Montserrat', 'B', 8.5);
+        $fpdf->SetTextColor(255, 255, 255);
+        $fpdf->Cell(97, 8, utf8_decode('TOTAL GENERAL EN LA EMPRESA (PLANTA + CLIENTES)'), 1, 0, 'R', true);
+        $fpdf->Cell(30, 8, number_format($totals['Exhibidores'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(30, 8, number_format($totals['Congeladores'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(30, 8, number_format($totals['Mostradores'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(28, 8, number_format($totals['Cooler'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(30, 8, number_format($totals['Bidones'] ?? 0, 0), 1, 0, 'C', true);
+        $fpdf->Cell(32, 8, number_format($grandTotal, 0), 1, 1, 'C', true);
+
+        // Pie de página
+        $fpdf->Ln(6);
+        $fpdf->SetFont('Montserrat', '', 8);
+        $fpdf->SetTextColor(100, 100, 100);
+        $fpdf->Cell(277, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i') . ' | Subuz ERP'), 0, 1, 'R');
+
+        $filename = "Resumen_Activos_Clientes_" . now()->format('dmY_Hi') . ".pdf";
+        if (ob_get_level() > 0) ob_end_clean();
+        return response($fpdf->Output('S', $filename), 200)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="' . $filename . '"');
+    }
+
+    public function clientAssetsDetailedPdf(Request $request)
+    {
+        $startDate = $request->start_date;
+        $endDate = $request->end_date;
+        $clientId = $request->client_id;
+        $assetFilter = $request->asset_type;
+
+        $matrix = $this->getClientAssetsMatrix($startDate, $endDate, $clientId, $assetFilter);
+        $rows = $matrix['rows'];
+
+        $fpdf = new Fpdf('P', 'mm', 'A4');
+        $fpdf->AddPage();
+        $fpdf->AddFont('Montserrat', '');
+        $fpdf->AddFont('Montserrat', 'B');
+
+        // Logo
+        if (file_exists(public_path('assets/images/logo.jpg'))) {
+            $fpdf->Image(public_path('assets/images/logo.jpg'), 10, 10, 28);
+        }
+
+        $fpdf->SetFont('Montserrat', 'B', 14);
+        $fpdf->SetTextColor(2, 93, 166);
+        $fpdf->Cell(190, 7, utf8_decode('SUBUZ S.A.C.'), 0, 1, 'C');
+
+        $fpdf->SetFont('Montserrat', 'B', 11);
+        $fpdf->SetTextColor(40, 40, 40);
+        $fpdf->Cell(190, 6, utf8_decode('REPORTE DETALLADO DE ACTIVOS Y BIDONES POR CLIENTE'), 0, 1, 'C');
+
+        $period = "Historial al " . now()->format('d/m/Y');
+        if ($startDate && $endDate) {
+            $period = "Periodo: " . date('d/m/Y', strtotime($startDate)) . " al " . date('d/m/Y', strtotime($endDate));
+        } elseif ($startDate) {
+            $period = "Desde: " . date('d/m/Y', strtotime($startDate));
+        } elseif ($endDate) {
+            $period = "Hasta: " . date('d/m/Y', strtotime($endDate));
+        }
+
+        $fpdf->SetFont('Montserrat', '', 8.5);
+        $fpdf->SetTextColor(100, 100, 100);
+        $fpdf->Cell(190, 5, utf8_decode($period), 0, 1, 'C');
+        $fpdf->Ln(5);
+
+        if ($rows->isEmpty()) {
+            $fpdf->SetFont('Montserrat', 'B', 10);
+            $fpdf->SetTextColor(100, 100, 100);
+            $fpdf->Cell(190, 15, utf8_decode('No se encontraron registros para los filtros seleccionados.'), 1, 1, 'C');
+            $fpdf->Ln(4);
+        } else {
+            foreach ($rows as $clientRow) {
+                if ($fpdf->GetY() > 240) {
+                    $fpdf->AddPage();
+                }
+
+                $isPlanta = $clientRow->is_planta;
+
+                // Tarjeta de Cabecera
+                $fpdf->SetFillColor(2, 93, 166);
+                $fpdf->SetTextColor(255, 255, 255);
+                $fpdf->SetFont('Montserrat', 'B', 9.5);
+                $clientBadge = $isPlanta ? '[ALMACÉN CENTRAL - PLANTA]' : 'CLIENTE';
+                $fpdf->Cell(190, 7, utf8_decode(" {$clientBadge}: {$clientRow->client_name}"), 0, 1, 'L', true);
+
+                // Metadatos
+                $fpdf->SetFillColor(245, 247, 250);
+                $fpdf->SetTextColor(60, 60, 60);
+                $fpdf->SetFont('Montserrat', '', 8);
+                if ($isPlanta) {
+                    $fpdf->Cell(190, 5, utf8_decode(" Ubicación: Almacén Principal Subuz  |  Control de Stock Físico Disponible"), 0, 1, 'L', true);
+                } else {
+                    $docInfo = $clientRow->client_document ? "Doc: {$clientRow->client_document}" : "Doc: S/N";
+                    $telInfo = $clientRow->client_phone ? "Tel: {$clientRow->client_phone}" : "Tel: -";
+                    $dirInfo = $clientRow->client_address ? "Dir: {$clientRow->client_address}" : "Dir: -";
+                    $fpdf->Cell(190, 5, utf8_decode(" {$docInfo}  |  {$telInfo}  |  {$dirInfo}"), 0, 1, 'L', true);
+                }
+                $fpdf->Ln(1);
+
+                // Obtener movimientos según sea Planta o Cliente
+                if ($isPlanta) {
+                    $cQuery = InventoryMovement::with(['dispatcher', 'user', 'client'])
+                        ->where(function ($q) {
+                            $q->where('item_type', 'client_asset')
+                              ->orWhereNotNull('client_id');
+                        });
+                } else {
+                    $cQuery = InventoryMovement::with(['dispatcher', 'user', 'client'])
+                        ->where('client_id', $clientRow->client_id);
+                }
+
+                if ($startDate) {
+                    $cQuery->where(function ($q) use ($startDate) {
+                        $q->whereDate('date', '>=', $startDate)
+                          ->orWhere(function ($sq) use ($startDate) {
+                              $sq->whereNull('date')->whereDate('created_at', '>=', $startDate);
+                          });
+                    });
+                }
+                if ($endDate) {
+                    $cQuery->where(function ($q) use ($endDate) {
+                        $q->whereDate('date', '<=', $endDate)
+                          ->orWhere(function ($sq) use ($endDate) {
+                              $sq->whereNull('date')->whereDate('created_at', '<=', $endDate);
+                          });
+                    });
+                }
+
+                $rawMovs = $cQuery->get()->filter(function ($m) use ($assetFilter) {
+                    $norm = $this->normalizeAssetType($m->item_name);
+                    if ($assetFilter) return $norm === $assetFilter;
+                    return in_array($norm, self::$clientAssetTypes);
+                });
+
+                if ($isPlanta) {
+                    $movs = $rawMovs->map(function ($m) use ($clientRow) {
+                        $isDirect = ($m->client_id == $clientRow->client_id);
+                        $cName = $m->client ? $m->client->name : 'Cliente';
+                        if ($isDirect) {
+                            if ($m->movement_type === 'initial_balance') $tLabel = 'Saldo Inicial Almacén';
+                            elseif (in_array($m->movement_type, ['income', 'return'])) $tLabel = 'Ingreso a Planta (+)';
+                            else $tLabel = 'Salida de Planta (-)';
+                            $note = $m->notes ?: '-';
+                        } else {
+                            if (in_array($m->movement_type, ['delivery', 'income'])) {
+                                $tLabel = 'Salida a Cliente (-)';
+                                $note = "Entrega a {$cName}" . ($m->notes ? " | {$m->notes}" : '');
+                            } elseif (in_array($m->movement_type, ['return', 'outcome', 'withdrawal'])) {
+                                $tLabel = 'Devolución de Cliente (+)';
+                                $note = "Devolución de {$cName}" . ($m->notes ? " | {$m->notes}" : '');
+                            } else {
+                                return null;
+                            }
+                        }
+                        $m->custom_label = $tLabel;
+                        $m->custom_note = $note;
+                        return $m;
+                    })->filter()->sortBy(function ($m) {
+                        $d = $m->date ? $m->date->format('Y-m-d') : ($m->created_at ? $m->created_at->format('Y-m-d') : '1970-01-01');
+                        return $d . '_' . str_pad($m->id, 10, '0', STR_PAD_LEFT);
+                    });
+                } else {
+                    $movs = $rawMovs->map(function ($m) {
+                        $tLabel = 'Saldo Inicial';
+                        if (in_array($m->movement_type, ['income', 'delivery'])) $tLabel = 'Entrega (+)';
+                        if (in_array($m->movement_type, ['outcome', 'return', 'withdrawal'])) $tLabel = 'Devolución (-)';
+                        $m->custom_label = $tLabel;
+                        $m->custom_note = $m->notes ?: '-';
+                        return $m;
+                    })->sortBy(function ($m) {
+                        $d = $m->date ? $m->date->format('Y-m-d') : ($m->created_at ? $m->created_at->format('Y-m-d') : '1970-01-01');
+                        return $d . '_' . str_pad($m->id, 10, '0', STR_PAD_LEFT);
+                    });
+                }
+
+                // Cabecera de movimientos
+                $fpdf->SetFillColor(220, 230, 242);
+                $fpdf->SetTextColor(2, 93, 166);
+                $fpdf->SetFont('Montserrat', 'B', 7.5);
+                $fpdf->Cell(22, 6, utf8_decode('FECHA'), 1, 0, 'C', true);
+                $fpdf->Cell(32, 6, utf8_decode('ACTIVO'), 1, 0, 'C', true);
+                $fpdf->Cell(34, 6, utf8_decode('MOVIMIENTO'), 1, 0, 'C', true);
+                $fpdf->Cell(14, 6, utf8_decode('CANT.'), 1, 0, 'C', true);
+                $fpdf->Cell(32, 6, utf8_decode('DESPACHADOR'), 1, 0, 'C', true);
+                $fpdf->Cell(56, 6, utf8_decode('OBSERVACIÓN / REF.'), 1, 1, 'L', true);
+
+                $fpdf->SetFont('Montserrat', '', 7.5);
+                $fpdf->SetTextColor(30, 30, 30);
+
+                if ($movs->isEmpty()) {
+                    $fpdf->Cell(190, 6, utf8_decode('Sin movimientos registrados en este periodo'), 1, 1, 'C');
+                } else {
+                    foreach ($movs as $m) {
+                        if ($fpdf->GetY() > 265) {
+                            $fpdf->AddPage();
+                        }
+
+                        $mDate = $m->date ? $m->date->format('d/m/Y') : ($m->created_at ? $m->created_at->format('d/m/Y') : '-');
+                        $assetName = $this->normalizeAssetType($m->item_name);
+                        $dispName = $m->dispatcher ? $m->dispatcher->name : '-';
+                        if (strlen($dispName) > 18) $dispName = substr($dispName, 0, 16) . '..';
+                        $note = $m->custom_note ?: '-';
+                        if (strlen($note) > 34) $note = substr($note, 0, 32) . '..';
+
+                        $fpdf->Cell(22, 5.5, $mDate, 1, 0, 'C');
+                        $fpdf->Cell(32, 5.5, utf8_decode($assetName), 1, 0, 'L');
+                        $fpdf->Cell(34, 5.5, utf8_decode($m->custom_label), 1, 0, 'C');
+                        $fpdf->Cell(14, 5.5, number_format($m->quantity, 0), 1, 0, 'C');
+                        $fpdf->Cell(32, 5.5, utf8_decode($dispName), 1, 0, 'L');
+                        $fpdf->Cell(56, 5.5, utf8_decode($note), 1, 1, 'L');
+                    }
+                }
+
+                // Resumen de saldos finales
+                $fpdf->SetFillColor(240, 245, 250);
+                $fpdf->SetFont('Montserrat', 'B', 7.5);
+                $fpdf->SetTextColor(2, 93, 166);
+                $saldoLabel = $isPlanta ? 'STOCK DISPONIBLE EN ALMACÉN' : 'SALDO EN CUSTODIA DEL CLIENTE';
+
+                if ($assetFilter) {
+                    $filtVal = $clientRow->assets[$assetFilter]['saldo_final'] ?? 0;
+                    $summaryStr = "{$saldoLabel}:  {$assetFilter}: {$filtVal}  |  TOTAL: {$clientRow->total_assets}";
+                } else {
+                    $exVal = $clientRow->assets['Exhibidores']['saldo_final'] ?? 0;
+                    $cgVal = $clientRow->assets['Congeladores']['saldo_final'] ?? 0;
+                    $moVal = $clientRow->assets['Mostradores']['saldo_final'] ?? 0;
+                    $coVal = $clientRow->assets['Cooler']['saldo_final'] ?? 0;
+                    $biVal = $clientRow->assets['Bidones']['saldo_final'] ?? 0;
+                    $summaryStr = "{$saldoLabel}:  Exhibidores: {$exVal}  |  Congeladores: {$cgVal}  |  Mostradores: {$moVal}  |  Cooler: {$coVal}  |  Bidones: {$biVal}  |  TOTAL: {$clientRow->total_assets}";
+                }
+                $fpdf->Cell(190, 6, utf8_decode($summaryStr), 1, 1, 'R', true);
+
+                $fpdf->Ln(4);
+            }
+        }
+
+        // Pie de página
+        $fpdf->SetFont('Montserrat', '', 8);
+        $fpdf->SetTextColor(100, 100, 100);
+        $fpdf->Cell(190, 5, utf8_decode('Generado el: ' . now()->format('d/m/Y H:i') . ' | Subuz ERP'), 0, 1, 'R');
+
+        $filename = "Detallado_Activos_Clientes_" . now()->format('dmY_Hi') . ".pdf";
+        if (ob_get_level() > 0) ob_end_clean();
+        return response($fpdf->Output('S', $filename), 200)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="' . $filename . '"');
     }
 }

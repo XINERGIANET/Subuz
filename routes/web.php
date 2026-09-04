@@ -237,5 +237,13 @@ Route::middleware('auth')->group(function () {
 	Route::get('inventories/history/{itemType}/{itemId?}', [InventoryController::class, 'history'])->name('inventories.history');
 	Route::post('inventories/supplies', [InventoryController::class, 'storeSupply'])->name('inventories.supplies.store');
 	Route::post('inventories/toggle-dispatcher-permission', [InventoryController::class, 'toggleDispatcherPermission'])->name('inventories.toggle_dispatcher_permission');
+
+	// Control de Activos y Bidones por Cliente (y Planta)
+	Route::post('inventories/client-assets/movement', [InventoryController::class, 'storeClientAssetMovement'])->name('inventories.client_assets.movement');
+	Route::post('inventories/client-assets/initial-balance', [InventoryController::class, 'storeClientAssetInitialBalance'])->name('inventories.client_assets.initial_balance');
+	Route::get('inventories/client-assets/history/{clientId}', [InventoryController::class, 'clientAssetHistory'])->name('inventories.client_assets.history');
+	Route::delete('inventories/client-assets/movement/{movement}', [InventoryController::class, 'destroyClientAssetMovement'])->name('inventories.client_assets.destroy');
+	Route::get('inventories/client-assets/report-summary-pdf', [InventoryController::class, 'clientAssetsSummaryPdf'])->name('inventories.client_assets.summary_pdf');
+	Route::get('inventories/client-assets/report-detailed-pdf', [InventoryController::class, 'clientAssetsDetailedPdf'])->name('inventories.client_assets.detailed_pdf');
 });
 

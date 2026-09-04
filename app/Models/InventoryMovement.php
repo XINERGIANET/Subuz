@@ -19,6 +19,11 @@ class InventoryMovement extends Model
         'user_id',
         'client_id',
         'dispatcher_id',
+        'date',
+    ];
+
+    protected $casts = [
+        'date' => 'date',
     ];
 
     public function user()
