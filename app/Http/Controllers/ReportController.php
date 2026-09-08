@@ -9,6 +9,7 @@ use App\Mail\ReportLiquidation;
 use App\Models\Client;
 use App\Models\Sale;
 use App\Models\Cashbox;
+use App\Models\User;
 
 class ReportController extends Controller
 {
@@ -610,6 +611,7 @@ class ReportController extends Controller
         $clientsTotals = $matrix['clients_totals'];
         $clientAssetTypes = InventoryController::$clientAssetTypes;
         $clients = Client::orderBy('name', 'asc')->get();
+        $dispatchers = User::where('role', 'despachador')->orderBy('name', 'asc')->get();
 
         $grandTotal = 0;
         foreach ($clientAssetTypes as $asset) {
@@ -624,6 +626,7 @@ class ReportController extends Controller
             'grandTotal',
             'clientAssetTypes',
             'clients',
+            'dispatchers',
             'startDate',
             'endDate',
             'clientId',
