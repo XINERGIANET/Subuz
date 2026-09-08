@@ -33,6 +33,17 @@
             </div>
         </a>
     </div>
+    <div class="col-md-4 mt-3 mt-md-0">
+        <a href="{{ route('reports.client_assets') }}" class="card border-0 shadow-sm text-decoration-none transition-hover">
+            <div class="card-body text-center p-4">
+                <div class="mb-3">
+                    <i class="fas fa-users fa-3x text-info"></i>
+                </div>
+                <h5 class="card-title text-dark">Clientes y Activos</h5>
+                <p class="card-text text-muted small">Verificar cartera de clientes, activos prestados y depuración.</p>
+            </div>
+        </a>
+    </div>
 </div>
 
 <style>

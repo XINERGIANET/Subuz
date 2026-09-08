@@ -207,6 +207,8 @@ Route::middleware('auth')->group(function () {
 		Route::post('jerry-can-report/return', [SaleController::class, 'returnJerryCans'])->name('reports.returnJerryCans');
 		Route::post('jerry-can-report/buy', [SaleController::class, 'buyJerryCans'])->name('reports.buyJerryCans');
 		Route::get('jerry-can-report/pdf', [SaleController::class, 'jerryCanReportPdf'])->name('reports.jerryCanPdf');
+
+		Route::get('reports/client-assets', [ReportController::class, 'clientAssets'])->name('reports.client_assets');
 	});
 
 	Route::middleware('role:admin|despachador|asistente')->group(function () {

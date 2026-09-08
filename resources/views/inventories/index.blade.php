@@ -669,7 +669,7 @@
                                 <th class="text-center" style="width: 110px;">COOLER</th>
                                 <th class="text-center" style="width: 120px;">BIDONES</th>
                                 <th class="text-center" style="width: 120px;">TOTAL ACTIVOS</th>
-                                <th class="text-end" style="width: 190px;">ACCIONES</th>
+                                <th class="text-end" style="width: 250px;">ACCIONES</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -758,6 +758,20 @@
                                            title="Descargar Ficha PDF">
                                             <i class="ti ti-file-text"></i>
                                         </a>
+                                        @if(!$row->is_planta && (auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente')))
+                                        <button class="btn btn-outline-azure" 
+                                                title="Editar Cliente" 
+                                                onclick="openEditClientModal({{ $row->client_id }})">
+                                            <i class="ti ti-pencil"></i>
+                                        </button>
+                                        @endif
+                                        @if(!$row->is_planta && (auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente')))
+                                        <button class="btn btn-outline-danger" 
+                                                title="Eliminar / Depurar Cliente" 
+                                                onclick="deleteClientRecord({{ $row->client_id }}, '{{ addslashes($row->client_name) }}')">
+                                            <i class="ti ti-trash"></i>
+                                        </button>
+                                        @endif
                                     </div>
                                 </td>
                             </tr>
@@ -1310,6 +1324,80 @@
     </div>
 </div>
 @endif
+
+<!-- Modal: Editar Cliente -->
+<div class="modal fade" id="modalEditClientFromAssets" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content shadow" id="formEditClientFromAssets">
+            @csrf
+            <input type="hidden" id="edit_client_id" name="id">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold text-primary">
+                    <i class="ti ti-edit me-1"></i> Editar Cliente
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">RUC o DNI</label>
+                        <input type="text" class="form-control form-control-sm" name="document" id="edit_client_document">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold required">Nombre Comercial</label>
+                        <input type="text" class="form-control form-control-sm" name="name" id="edit_client_name" required>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label small fw-bold">Razón Social</label>
+                        <input type="text" class="form-control form-control-sm" name="business_name" id="edit_client_business_name">
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label small fw-bold required">Dirección</label>
+                        <input type="text" class="form-control form-control-sm" name="address" id="edit_client_address" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold required">Distrito</label>
+                        <select class="form-select form-select-sm" name="district" id="edit_client_district" required>
+                            <option value="">Seleccionar</option>
+                            <option value="Chiclayo">Chiclayo</option>
+                            <option value="Jose Leonardo Ortiz">Jose Leonardo Ortiz</option>
+                            <option value="Lambayeque">Lambayeque</option>
+                            <option value="Pimentel">Pimentel</option>
+                            <option value="La Victoria">La Victoria</option>
+                            <option value="Reque">Reque</option>
+                            <option value="Puerto Eten">Puerto Eten</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Teléfono</label>
+                        <input type="text" class="form-control form-control-sm" name="phone" id="edit_client_phone">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Teléfono 2</label>
+                        <input type="text" class="form-control form-control-sm" name="phone_2" id="edit_client_phone_2">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Correo Electrónico</label>
+                        <input type="email" class="form-control form-control-sm" name="email" id="edit_client_email">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold required">Tipo de Cliente</label>
+                        <select class="form-select form-select-sm" name="type" id="edit_client_type" required>
+                            <option value="Contado">Contado</option>
+                            <option value="Credito">Crédito</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-link link-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-sm btn-primary" id="btnSaveEditClient">
+                    <i class="ti ti-device-floppy me-1"></i> Guardar Cambios
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 
 @endsection
 
@@ -2059,5 +2147,107 @@
             });
         });
     });
+
+    // Abrir Modal de Edición de Cliente
+    function openEditClientModal(clientId) {
+        let form = document.getElementById('formEditClientFromAssets');
+        if (form) form.reset();
+        document.getElementById('edit_client_id').value = clientId;
+
+        fetch(`{{ url('clients') }}/${clientId}/edit`, {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data) {
+                document.getElementById('edit_client_document').value = data.document || '';
+                document.getElementById('edit_client_name').value = data.name || '';
+                document.getElementById('edit_client_business_name').value = data.business_name || '';
+                document.getElementById('edit_client_address').value = data.address || '';
+                document.getElementById('edit_client_district').value = data.district || '';
+                document.getElementById('edit_client_phone').value = data.phone || '';
+                document.getElementById('edit_client_phone_2').value = data.phone_2 || '';
+                document.getElementById('edit_client_email').value = data.email || '';
+                document.getElementById('edit_client_type').value = data.type || 'Contado';
+
+                let modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEditClientFromAssets'));
+                modal.show();
+            } else {
+                alert('No se pudieron obtener los datos del cliente.');
+            }
+        })
+        .catch(err => {
+            alert('Error al conectar para cargar datos del cliente.');
+        });
+    }
+
+    // Submit Edición de Cliente
+    let formEditClient = document.getElementById('formEditClientFromAssets');
+    if (formEditClient) {
+        formEditClient.addEventListener('submit', function(e) {
+            e.preventDefault();
+            let btn = document.getElementById('btnSaveEditClient');
+            let originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Guardando...';
+
+            let clientId = document.getElementById('edit_client_id').value;
+            let formData = new FormData(this);
+            formData.append('_method', 'PATCH');
+
+            fetch(`{{ url('clients') }}/${clientId}`, {
+                method: 'POST',
+                body: formData,
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status) {
+                    let modal = bootstrap.Modal.getInstance(document.getElementById('modalEditClientFromAssets'));
+                    if (modal) modal.hide();
+                    let url = new URL(window.location.href);
+                    url.searchParams.set('tab', 'client-assets');
+                    window.location.href = url.toString();
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    alert(data.error || 'Ocurrió un error al actualizar el cliente.');
+                }
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                alert('Error al procesar la actualización del cliente.');
+            });
+        });
+    }
+
+    // Eliminar / Depurar Cliente
+    function deleteClientRecord(clientId, clientName) {
+        if (!confirm(`¿Está seguro de eliminar o depurar al cliente "${clientName}"?\n\nEsta acción eliminará el registro del cliente del sistema.`)) {
+            return;
+        }
+
+        fetch(`{{ url('clients') }}/${clientId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status) {
+                let url = new URL(window.location.href);
+                url.searchParams.set('tab', 'client-assets');
+                window.location.href = url.toString();
+            } else {
+                alert(data.error || 'No se pudo eliminar el cliente. Verifique que no tenga ventas o registros vinculados.');
+            }
+        })
+        .catch(err => {
+            alert('Error de conexión al intentar eliminar el cliente.');
+        });
+    }
 </script>
 @endsection

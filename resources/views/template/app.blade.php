@@ -295,6 +295,9 @@
 												<a class="dropdown-item" href="{{ route('reports.jerryCan') }}">
 													<i class="ti ti-package icon me-2"></i> Reporte de Bidones
 												</a>
+												<a class="dropdown-item" href="{{ route('reports.client_assets') }}">
+													<i class="ti ti-users icon me-2"></i> Clientes y Activos
+												</a>
 											</div>
 										</div>
 									</div>

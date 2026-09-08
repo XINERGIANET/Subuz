@@ -594,5 +594,41 @@ class ReportController extends Controller
 
         $fpdf->Output('I', $filename);
     }
+
+    public function clientAssets(Request $request)
+    {
+        $startDate = $request->start_date;
+        $endDate = $request->end_date;
+        $clientId = $request->client_id;
+        $assetFilter = $request->asset_type;
+
+        $inventoryCtrl = new InventoryController();
+        $matrix = $inventoryCtrl->getClientAssetsMatrix($startDate, $endDate, $clientId, $assetFilter);
+
+        // Excluir la fila de Planta para mostrar únicamente clientes
+        $clientRows = $matrix['rows']->filter(fn($r) => !$r->is_planta)->values();
+        $clientsTotals = $matrix['clients_totals'];
+        $clientAssetTypes = InventoryController::$clientAssetTypes;
+        $clients = Client::orderBy('name', 'asc')->get();
+
+        $grandTotal = 0;
+        foreach ($clientAssetTypes as $asset) {
+            if (!$assetFilter || $assetFilter === $asset) {
+                $grandTotal += ($clientsTotals[$asset] ?? 0);
+            }
+        }
+
+        return view('reports.client_assets', compact(
+            'clientRows',
+            'clientsTotals',
+            'grandTotal',
+            'clientAssetTypes',
+            'clients',
+            'startDate',
+            'endDate',
+            'clientId',
+            'assetFilter'
+        ));
+    }
 }
 
