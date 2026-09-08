@@ -1290,7 +1290,7 @@ class InventoryController extends Controller
                     'notes' => $m->notes ?: '-',
                     'dispatcher_name' => $m->dispatcher ? $m->dispatcher->name : '-',
                     'user_name' => $m->user ? $m->user->name : 'Sistema',
-                    'can_delete' => (auth()->check() && auth()->user()->hasRole('admin')),
+                    'can_delete' => (auth()->check() && (auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente'))),
                 ];
             });
         }
@@ -1306,7 +1306,7 @@ class InventoryController extends Controller
 
     public function destroyClientAssetMovement(Request $request, $movementId)
     {
-        if (!auth()->user()->hasRole('admin')) {
+        if (!auth()->user()->hasRole('admin') && !auth()->user()->hasRole('asistente')) {
             return response()->json(['status' => false, 'error' => 'No autorizado para eliminar movimientos.'], 403);
         }
 
@@ -1318,6 +1318,164 @@ class InventoryController extends Controller
         $movement->delete();
 
         return response()->json(['status' => true, 'message' => 'Movimiento eliminado correctamente.']);
+    }
+
+    public function resetClientAssets(Request $request, $clientId)
+    {
+        if (!auth()->user()->hasRole('admin') && !auth()->user()->hasRole('asistente')) {
+            return response()->json(['status' => false, 'error' => 'No autorizado para depurar activos.'], 403);
+        }
+
+        $client = Client::find($clientId);
+        if (!$client) {
+            return response()->json(['status' => false, 'error' => 'Cliente no encontrado.'], 404);
+        }
+
+        // Depurar/eliminar todos los movimientos de activos vinculados a este cliente
+        InventoryMovement::where('client_id', $clientId)
+            ->where(function ($q) {
+                $q->where('item_type', 'client_asset')
+                  ->orWhereIn('item_name', self::$clientAssetTypes);
+            })
+            ->delete();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Todos los activos del cliente han sido depurados y restablecidos a 0 exitosamente.'
+        ]);
+    }
+
+    public function clearClientAsset(Request $request, $clientId)
+    {
+        if (!auth()->user()->hasRole('admin') && !auth()->user()->hasRole('asistente')) {
+            return response()->json(['status' => false, 'error' => 'No autorizado para depurar activos.'], 403);
+        }
+
+        $assetType = $request->asset_type;
+        if (!in_array($assetType, self::$clientAssetTypes)) {
+            return response()->json(['status' => false, 'error' => 'Tipo de activo no válido.'], 422);
+        }
+
+        $client = Client::find($clientId);
+        if (!$client) {
+            return response()->json(['status' => false, 'error' => 'Cliente no encontrado.'], 404);
+        }
+
+        // Depurar los movimientos del cliente para este tipo de activo específico
+        $normAsset = $this->normalizeAssetType($assetType);
+        $movements = InventoryMovement::where('client_id', $clientId)->get();
+        foreach ($movements as $m) {
+            if ($this->normalizeAssetType($m->item_name) === $normAsset) {
+                $m->delete();
+            }
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => "Los registros de {$assetType} para este cliente han sido depurados exitosamente."
+        ]);
+    }
+
+    public function getClientAssetsBalances($clientId)
+    {
+        $client = Client::findOrFail($clientId);
+        $matrix = $this->getClientAssetsMatrix(null, null, $clientId, null);
+        $row = $matrix['rows']->firstWhere('client_id', $clientId);
+
+        $balances = [];
+        foreach (self::$clientAssetTypes as $type) {
+            $balances[$type] = $row ? ($row->assets[$type]['saldo_final'] ?? 0) : 0;
+        }
+
+        return response()->json([
+            'status' => true,
+            'client_name' => $client->name,
+            'client_document' => $client->document,
+            'balances' => $balances
+        ]);
+    }
+
+    public function updateClientAssetsBalances(Request $request, $clientId)
+    {
+        if (!auth()->user()->hasRole('admin') && !auth()->user()->hasRole('asistente')) {
+            return response()->json(['status' => false, 'error' => 'No autorizado para editar activos.'], 403);
+        }
+
+        $client = Client::findOrFail($clientId);
+        $balances = $request->input('balances', []);
+        $date = $request->input('date', now()->toDateString());
+        $notes = $request->input('notes', 'Ajuste de saldo de activos de cliente');
+
+        foreach (self::$clientAssetTypes as $assetType) {
+            if (array_key_exists($assetType, $balances)) {
+                $qty = floatval($balances[$assetType]);
+                if ($qty < 0) $qty = 0;
+
+                // Actualizar o crear saldo inicial para este activo del cliente
+                InventoryMovement::where('item_type', 'client_asset')
+                    ->where('client_id', $clientId)
+                    ->where('item_name', $assetType)
+                    ->where('movement_type', 'initial_balance')
+                    ->delete();
+
+                // Si se desea fijar el saldo total actual a $qty, se registra el saldo inicial
+                // y si existen otros movimientos que distorsionan, registramos como base inicial
+                // Para consistencia con la auditoría de activos:
+                // Eliminamos movimientos previos de este activo para este cliente para que el nuevo valor sea exactamente el saldo activo
+                // o recalculamos el saldo inicial necesario:
+                $normAsset = $this->normalizeAssetType($assetType);
+                $movements = InventoryMovement::where('client_id', $clientId)->get();
+                $deliveries = 0;
+                $returns = 0;
+                foreach ($movements as $m) {
+                    if ($this->normalizeAssetType($m->item_name) === $normAsset) {
+                        if (in_array($m->movement_type, ['income', 'delivery'])) $deliveries += floatval($m->quantity);
+                        if (in_array($m->movement_type, ['outcome', 'return', 'withdrawal'])) $returns += floatval($m->quantity);
+                    }
+                }
+
+                // SaldoFinal = BaseInitial + Deliveries - Returns => BaseInitial = SaldoFinal - Deliveries + Returns
+                // O si se audita físicamente todo: fijar BaseInitial directamente
+                // Si BaseInitial calculada es >= 0, la guardamos; de lo contrario reiniciamos historial de ese activo y seteamos saldo inicial = $qty
+                $computedInitial = $qty - $deliveries + $returns;
+                if ($computedInitial >= 0) {
+                    InventoryMovement::create([
+                        'item_type' => 'client_asset',
+                        'item_id' => null,
+                        'item_name' => $assetType,
+                        'client_id' => $clientId,
+                        'movement_type' => 'initial_balance',
+                        'quantity' => $computedInitial,
+                        'date' => $date,
+                        'notes' => $notes,
+                        'user_id' => auth()->id(),
+                    ]);
+                } else {
+                    // Limpiamos los movimientos antiguos de este activo y seteamos el nuevo valor limpio
+                    foreach ($movements as $m) {
+                        if ($this->normalizeAssetType($m->item_name) === $normAsset) {
+                            $m->delete();
+                        }
+                    }
+                    InventoryMovement::create([
+                        'item_type' => 'client_asset',
+                        'item_id' => null,
+                        'item_name' => $assetType,
+                        'client_id' => $clientId,
+                        'movement_type' => 'initial_balance',
+                        'quantity' => $qty,
+                        'date' => $date,
+                        'notes' => $notes . ' (Ajuste auditado)',
+                        'user_id' => auth()->id(),
+                    ]);
+                }
+            }
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Activos en custodia del cliente actualizados correctamente.'
+        ]);
     }
 
     public function clientAssetsSummaryPdf(Request $request)

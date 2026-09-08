@@ -245,6 +245,9 @@ Route::middleware('auth')->group(function () {
 	Route::post('inventories/client-assets/initial-balance', [InventoryController::class, 'storeClientAssetInitialBalance'])->name('inventories.client_assets.initial_balance');
 	Route::get('inventories/client-assets/history/{clientId}', [InventoryController::class, 'clientAssetHistory'])->name('inventories.client_assets.history');
 	Route::delete('inventories/client-assets/movement/{movement}', [InventoryController::class, 'destroyClientAssetMovement'])->name('inventories.client_assets.destroy');
+	Route::delete('inventories/client-assets/reset-all/{clientId}', [InventoryController::class, 'resetClientAssets'])->name('inventories.client_assets.reset_all');
+	Route::get('inventories/client-assets/balances/{clientId}', [InventoryController::class, 'getClientAssetsBalances'])->name('inventories.client_assets.balances');
+	Route::post('inventories/client-assets/update-balances/{clientId}', [InventoryController::class, 'updateClientAssetsBalances'])->name('inventories.client_assets.update_balances');
 	Route::get('inventories/client-assets/report-summary-pdf', [InventoryController::class, 'clientAssetsSummaryPdf'])->name('inventories.client_assets.summary_pdf');
 	Route::get('inventories/client-assets/report-detailed-pdf', [InventoryController::class, 'clientAssetsDetailedPdf'])->name('inventories.client_assets.detailed_pdf');
 });
