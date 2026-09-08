@@ -60,6 +60,24 @@
     .table-hover tbody tr:hover {
         background-color: #f8fafc !important;
     }
+    .btn-edit-corporate {
+        color: #0284c7 !important;
+        border-color: #bae6fd !important;
+        background-color: #f0f9ff !important;
+    }
+    .btn-edit-corporate:hover {
+        background-color: #0284c7 !important;
+        color: #ffffff !important;
+    }
+    .btn-delete-corporate {
+        color: #e11d48 !important;
+        border-color: #fecdd3 !important;
+        background-color: #fff1f2 !important;
+    }
+    .btn-delete-corporate:hover {
+        background-color: #e11d48 !important;
+        color: #ffffff !important;
+    }
 </style>
 @endsection
 
@@ -236,7 +254,7 @@
                         <th class="text-center" style="width: 100px;">COOLER</th>
                         <th class="text-center" style="width: 110px;">BIDONES</th>
                         <th class="text-center" style="width: 110px;">TOTAL</th>
-                        <th class="text-end" style="width: 170px;">ACCIONES</th>
+                        <th class="text-end" style="width: 230px;">ACCIONES</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -300,18 +318,32 @@
                             @endif
                         </td>
                         <td class="text-end align-middle">
-                            <div class="btn-list justify-content-end">
+                            <div class="btn-list justify-content-end flex-nowrap">
                                 <a href="{{ route('inventories.client_assets.detailed_pdf', ['client_id' => $row->client_id] + request()->query()) }}" 
                                    target="_blank" 
-                                   class="btn btn-sm btn-outline-danger" 
+                                   class="btn btn-sm btn-outline-danger px-2" 
                                    title="Exportar Reporte en PDF">
-                                    <i class="ti ti-file-text me-1"></i> PDF
+                                    <i class="ti ti-file-text"></i> PDF
                                 </a>
-                                <button class="btn btn-sm btn-outline-primary" 
+                                <button class="btn btn-sm btn-outline-primary px-2" 
                                         title="Ver Historial de Movimientos" 
                                         onclick="showClientHistory({{ $row->client_id }}, '{{ addslashes($row->client_name) }}', '{{ $row->client_document }}')">
-                                    <i class="ti ti-history me-1"></i> Kardex
+                                    <i class="ti ti-history"></i> Kardex
                                 </button>
+                                @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('asistente'))
+                                <button class="btn btn-sm btn-edit-corporate px-2" 
+                                        title="Editar Datos del Cliente" 
+                                        onclick="openEditClientModal({{ $row->client_id }})">
+                                    <i class="ti ti-pencil"></i>
+                                </button>
+                                @endif
+                                @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('asistente'))
+                                <button class="btn btn-sm btn-delete-corporate px-2" 
+                                        title="Eliminar / Depurar Cliente" 
+                                        onclick="deleteClientRecord({{ $row->client_id }}, '{{ addslashes($row->client_name) }}')">
+                                    <i class="ti ti-trash"></i>
+                                </button>
+                                @endif
                             </div>
                         </td>
                     </tr>
@@ -388,6 +420,85 @@
     </div>
 </div>
 
+<!-- Modal: Editar Cliente -->
+<div class="modal fade" id="modalEditClientFromReport" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content shadow" id="formEditClientFromReport">
+            @csrf
+            <input type="hidden" id="edit_client_id" name="id">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold text-primary">
+                    <i class="ti ti-edit me-1"></i> Editar Datos del Cliente
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">RUC o DNI</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control form-control-sm" name="document" id="edit_client_document">
+                            <button class="btn btn-outline-primary" type="button" id="btnSearchEditDoc" title="Buscar en RENIEC/SUNAT">
+                                <i class="ti ti-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold required">Nombre Comercial</label>
+                        <input type="text" class="form-control form-control-sm" name="name" id="edit_client_name" required>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label small fw-bold">Razón Social</label>
+                        <input type="text" class="form-control form-control-sm" name="business_name" id="edit_client_business_name">
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label small fw-bold required">Dirección</label>
+                        <input type="text" class="form-control form-control-sm" name="address" id="edit_client_address" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold required">Distrito</label>
+                        <select class="form-select form-select-sm" name="district" id="edit_client_district" required>
+                            <option value="">Seleccionar</option>
+                            <option value="Chiclayo">Chiclayo</option>
+                            <option value="Jose Leonardo Ortiz">Jose Leonardo Ortiz</option>
+                            <option value="Lambayeque">Lambayeque</option>
+                            <option value="Pimentel">Pimentel</option>
+                            <option value="La Victoria">La Victoria</option>
+                            <option value="Reque">Reque</option>
+                            <option value="Puerto Eten">Puerto Eten</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Teléfono</label>
+                        <input type="text" class="form-control form-control-sm" name="phone" id="edit_client_phone">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Teléfono 2</label>
+                        <input type="text" class="form-control form-control-sm" name="phone_2" id="edit_client_phone_2">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Correo Electrónico</label>
+                        <input type="email" class="form-control form-control-sm" name="email" id="edit_client_email">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold required">Tipo de Cliente</label>
+                        <select class="form-select form-select-sm" name="type" id="edit_client_type" required>
+                            <option value="Contado">Contado</option>
+                            <option value="Credito">Crédito</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-link link-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-sm btn-primary" id="btnSaveEditClient">
+                    <i class="ti ti-device-floppy me-1"></i> Guardar Cambios
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 @endsection
 
 @section('scripts')
@@ -400,7 +511,57 @@
             allowClear: true,
             width: '100%'
         });
+
+        // Búsqueda RENIEC/SUNAT en modal de edición
+        $('#btnSearchEditDoc').click(function() {
+            let doc = $('#edit_client_document').val().trim();
+            if (doc.length === 8) {
+                queryDoc(doc, 'reniec');
+            } else if (doc.length === 11) {
+                queryDoc(doc, 'ruc');
+            } else {
+                if (typeof ToastError !== 'undefined') {
+                    ToastError.fire({ text: 'El documento debe tener 8 (DNI) o 11 (RUC) dígitos.' });
+                } else {
+                    alert('El documento debe tener 8 (DNI) u 11 (RUC) dígitos.');
+                }
+            }
+        });
     });
+
+    function queryDoc(docNumber, type) {
+        let url = type === 'reniec' ? '/api/reniec?dni=' + docNumber : '/api/ruc?ruc=' + docNumber;
+        let btn = $('#btnSearchEditDoc');
+        let originalIcon = btn.html();
+        btn.html('<span class="spinner-border spinner-border-sm"></span>').prop('disabled', true);
+
+        $.ajax({
+            url: url,
+            method: 'GET',
+            success: function(data) {
+                btn.html(originalIcon).prop('disabled', false);
+                if (data.status) {
+                    if (type === 'reniec') {
+                        $('#edit_client_name').val(data.nombre_completo);
+                        if (typeof ToastMessage !== 'undefined') ToastMessage.fire({ text: 'DNI encontrado' });
+                    } else {
+                        $('#edit_client_name').val(data.trade_name || data.legal_name);
+                        $('#edit_client_business_name').val(data.legal_name);
+                        $('#edit_client_address').val(data.address);
+                        if (typeof ToastMessage !== 'undefined') ToastMessage.fire({ text: 'RUC encontrado' });
+                    }
+                } else {
+                    if (typeof ToastError !== 'undefined') ToastError.fire({ text: data.message || 'No se encontró información' });
+                    else alert(data.message || 'No se encontró información');
+                }
+            },
+            error: function(err) {
+                btn.html(originalIcon).prop('disabled', false);
+                if (typeof ToastError !== 'undefined') ToastError.fire({ text: 'Error al consultar documento' });
+                else alert('Error al consultar documento');
+            }
+        });
+    }
 
     // Filtro instantáneo de texto
     function filterTable() {
@@ -465,6 +626,137 @@
         .catch(err => {
             tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">Error de conexión.</td></tr>`;
         });
+    }
+
+    // Abrir Modal de Edición de Cliente
+    function openEditClientModal(clientId) {
+        let form = document.getElementById('formEditClientFromReport');
+        if (form) form.reset();
+        document.getElementById('edit_client_id').value = clientId;
+
+        fetch(`{{ url('clients') }}/${clientId}/edit`, {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data) {
+                document.getElementById('edit_client_document').value = data.document || '';
+                document.getElementById('edit_client_name').value = data.name || '';
+                document.getElementById('edit_client_business_name').value = data.business_name || '';
+                document.getElementById('edit_client_address').value = data.address || '';
+                document.getElementById('edit_client_district').value = data.district || '';
+                document.getElementById('edit_client_phone').value = data.phone || '';
+                document.getElementById('edit_client_phone_2').value = data.phone_2 || '';
+                document.getElementById('edit_client_email').value = data.email || '';
+                document.getElementById('edit_client_type').value = data.type || 'Contado';
+
+                let modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEditClientFromReport'));
+                modal.show();
+            } else {
+                if (typeof ToastError !== 'undefined') ToastError.fire({ text: 'No se pudieron obtener los datos del cliente.' });
+                else alert('No se pudieron obtener los datos del cliente.');
+            }
+        })
+        .catch(err => {
+            if (typeof ToastError !== 'undefined') ToastError.fire({ text: 'Error al conectar para cargar datos del cliente.' });
+            else alert('Error al conectar para cargar datos del cliente.');
+        });
+    }
+
+    // Submit Edición de Cliente
+    let formEditClient = document.getElementById('formEditClientFromReport');
+    if (formEditClient) {
+        formEditClient.addEventListener('submit', function(e) {
+            e.preventDefault();
+            let btn = document.getElementById('btnSaveEditClient');
+            let originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Guardando...';
+
+            let clientId = document.getElementById('edit_client_id').value;
+            let formData = new FormData(this);
+            formData.append('_method', 'PATCH');
+
+            fetch(`{{ url('clients') }}/${clientId}`, {
+                method: 'POST',
+                body: formData,
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status) {
+                    let modal = bootstrap.Modal.getInstance(document.getElementById('modalEditClientFromReport'));
+                    if (modal) modal.hide();
+                    if (typeof ToastMessage !== 'undefined') {
+                        ToastMessage.fire({ text: 'Cliente actualizado correctamente' })
+                            .then(() => location.reload());
+                    } else {
+                        location.reload();
+                    }
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    if (typeof ToastError !== 'undefined') ToastError.fire({ text: data.error || 'Error al actualizar' });
+                    else alert(data.error || 'Ocurrió un error al actualizar el cliente.');
+                }
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                if (typeof ToastError !== 'undefined') ToastError.fire({ text: 'Error al procesar la solicitud' });
+                else alert('Error al procesar la actualización del cliente.');
+            });
+        });
+    }
+
+    // Eliminar / Depurar Cliente
+    function deleteClientRecord(clientId, clientName) {
+        const executeDelete = () => {
+            fetch(`{{ url('clients') }}/${clientId}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status) {
+                    if (typeof ToastMessage !== 'undefined') {
+                        ToastMessage.fire({ text: 'Cliente eliminado correctamente' })
+                            .then(() => location.reload());
+                    } else {
+                        location.reload();
+                    }
+                } else {
+                    if (typeof ToastError !== 'undefined') {
+                        ToastError.fire({ text: data.error || 'No se pudo eliminar el cliente. Verifique que no tenga ventas vinculadas.' });
+                    } else {
+                        alert(data.error || 'No se pudo eliminar el cliente. Verifique que no tenga ventas vinculadas.');
+                    }
+                }
+            })
+            .catch(err => {
+                if (typeof ToastError !== 'undefined') ToastError.fire({ text: 'Error de conexión al eliminar cliente.' });
+                else alert('Error de conexión al intentar eliminar el cliente.');
+            });
+        };
+
+        if (typeof ToastConfirm !== 'undefined') {
+            ToastConfirm.fire({
+                title: '¿Depurar Cliente?',
+                text: `¿Está seguro de eliminar o depurar al cliente "${clientName}"?`,
+                icon: 'warning'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    executeDelete();
+                }
+            });
+        } else {
+            if (confirm(`¿Está seguro de eliminar o depurar al cliente "${clientName}"?\n\nEsta acción eliminará el registro del cliente del sistema.`)) {
+                executeDelete();
+            }
+        }
     }
 </script>
 @endsection

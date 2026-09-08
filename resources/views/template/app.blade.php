@@ -272,7 +272,7 @@
 									</a>
 								</li>
 							@endif
-							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('viewer'))
+							@if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('seller') || auth()->user()->hasRole('viewer') || auth()->user()->hasRole('asistente'))
 								<li class="nav-item dropdown">
 									<a class="nav-link dropdown-toggle" href="#navbar-reports" data-bs-toggle="dropdown"
 										data-bs-auto-close="false" role="button" aria-expanded="false">
