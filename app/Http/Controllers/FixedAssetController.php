@@ -122,24 +122,70 @@ class FixedAssetController extends Controller
             'name' => 'required|string|max:255',
             'expense_subcategory_id' => 'required|exists:expense_subcategories,id',
             'purchase_cost' => 'nullable|numeric',
+            'client_id' => 'nullable|exists:clients,id',
+            'assignment_type' => 'nullable|in:prestado,alquilado',
+            'assigned_date' => 'nullable|date',
+            'amount' => 'nullable|numeric|min:0',
         ]);
 
         try {
             DB::transaction(function() use ($request) {
                 $subcategory = ExpenseSubcategory::findOrFail($request->expense_subcategory_id);
+                $assignToClient = !empty($request->client_id);
                 
                 $asset = FixedAsset::create([
                     'name' => $request->name,
                     'category' => $subcategory->name,
                     'internal_code' => $request->internal_code,
                     'serial_number' => $request->serial_number,
-                    'status' => 'available',
+                    'status' => $assignToClient ? 'assigned' : 'available',
+                    'current_client_id' => $assignToClient ? $request->client_id : null,
                     'purchase_date' => $request->purchase_date,
                     'purchase_cost' => $request->purchase_cost,
                     'payment_method_id' => $request->payment_method_id,
                     'voucher_number' => $request->voucher_number,
                     'notes' => $request->notes,
                 ]);
+
+                // Si se solicita entrega inmediata al cliente
+                if ($assignToClient) {
+                    $assignment = FixedAssetAssignment::create([
+                        'fixed_asset_id' => $asset->id,
+                        'client_id' => $request->client_id,
+                        'assignment_type' => $request->assignment_type ?: 'prestado',
+                        'amount' => $request->assignment_type === 'alquilado' ? $request->amount : null,
+                        'assigned_date' => $request->assigned_date ?: ($request->purchase_date ?: now()->format('Y-m-d')),
+                        'payment_frequency' => $request->payment_frequency,
+                        'rental_mode' => $request->rental_mode ?: 'indefinite',
+                        'total_installments' => ($request->rental_mode === 'fixed') ? $request->total_installments : null,
+                        'notes' => $request->assignment_notes ?: 'Entrega asignada desde el registro inicial',
+                    ]);
+
+                    if ($request->assignment_type === 'alquilado' && $request->amount > 0) {
+                        $date = \Carbon\Carbon::parse($assignment->assigned_date);
+                        $count = $request->rental_mode === 'fixed' ? ($request->total_installments ?: 12) : 12;
+
+                        for ($i = 1; $i <= $count; $i++) {
+                            if ($request->payment_frequency === 'diario') {
+                                $date->addDay();
+                            } elseif ($request->payment_frequency === 'semanal') {
+                                $date->addWeek();
+                            } elseif ($request->payment_frequency === 'quincenal') {
+                                $date->addDays(15);
+                            } else {
+                                $date->addMonth();
+                            }
+
+                            \App\Models\FixedAssetInstallment::create([
+                                'fixed_asset_assignment_id' => $assignment->id,
+                                'installment_number' => $i,
+                                'due_date' => $date->format('Y-m-d'),
+                                'amount' => $request->amount,
+                                'status' => 'pending'
+                            ]);
+                        }
+                    }
+                }
 
                 if ($request->purchase_cost > 0 && $request->payment_method_id) {
                     Expense::create([
@@ -151,12 +197,12 @@ class FixedAssetController extends Controller
                         'receipt_number' => $request->voucher_number,
                         'expense_category_id' => $subcategory->expense_category_id,
                         'expense_subcategory_id' => $subcategory->id,
-                        'user_id' => auth()->id() ?? 1 // fallback if auth is null in certain CLI cases
+                        'user_id' => auth()->id() ?? 1
                     ]);
                 }
             });
             
-            return redirect()->back()->with('success', 'Activo fijo registrado correctamente.');
+            return redirect()->back()->with('success', 'Activo fijo registrado correctamente' . ($request->boolean('assign_to_client') ? ' y asignado al cliente.' : '.'));
         } catch (\Exception $e) {
             return back()->with('error', 'Error al registrar el activo fijo: ' . $e->getMessage());
         }
@@ -312,6 +358,74 @@ class FixedAssetController extends Controller
         }
 
         return back()->with('success', 'Cuota cobrada exitosamente.');
+    }
+
+    public function registerDirectIncome(Request $request, FixedAsset $fixedAsset)
+    {
+        $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+            'payment_method_id' => 'required|exists:payment_methods,id',
+            'description' => 'nullable|string'
+        ]);
+
+        $cashbox = \App\Models\Cashbox::whereNull('closed_at')->latest('id')->first();
+        if (!$cashbox) {
+            return back()->with('error', 'Debe abrir una caja antes de registrar un ingreso.');
+        }
+
+        $activeAssignment = $fixedAsset->assignments()->whereNull('returned_date')->latest()->first();
+        $nextNumber = 1;
+        if ($activeAssignment) {
+            $lastInstallment = $activeAssignment->installments()->latest('installment_number')->first();
+            $nextNumber = $lastInstallment ? ($lastInstallment->installment_number + 1) : 1;
+        }
+
+        $clientName = $fixedAsset->client ? $fixedAsset->client->name : 'Cliente';
+        $note = 'Pago / Cobro de Activo: ' . $fixedAsset->name . ' (' . $clientName . ')';
+        if ($request->description) {
+            $note .= ' - ' . $request->description;
+        }
+
+        $movement = \App\Models\CashboxMovement::create([
+            'cashbox_id' => $cashbox->id,
+            'user_id' => auth()->id() ?? 1,
+            'payment_method_id' => $request->payment_method_id,
+            'type' => 'income',
+            'amount' => $request->amount,
+            'date' => now()->format('Y-m-d H:i:s'),
+            'note' => $note
+        ]);
+
+        if ($activeAssignment) {
+            \App\Models\FixedAssetInstallment::create([
+                'fixed_asset_assignment_id' => $activeAssignment->id,
+                'installment_number' => $nextNumber,
+                'due_date' => now()->format('Y-m-d'),
+                'amount' => $request->amount,
+                'status' => 'paid',
+                'paid_date' => now()->format('Y-m-d'),
+                'cashbox_movement_id' => $movement->id
+            ]);
+        }
+
+        return back()->with('success', 'Pago registrado y cobrado exitosamente en caja.');
+    }
+
+    public function updateInstallmentAmount(Request $request, \App\Models\FixedAssetInstallment $installment)
+    {
+        $request->validate([
+            'amount' => 'required|numeric|min:0.01'
+        ]);
+
+        if ($installment->status === 'paid') {
+            return back()->with('error', 'No se puede editar el monto de una cuota que ya fue pagada.');
+        }
+
+        $installment->update([
+            'amount' => $request->amount
+        ]);
+
+        return back()->with('success', 'Monto de la cuota actualizado correctamente.');
     }
 
     public function updateStatus(Request $request, FixedAsset $fixedAsset)

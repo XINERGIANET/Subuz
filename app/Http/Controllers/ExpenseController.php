@@ -19,9 +19,14 @@ use Codedge\Fpdf\Fpdf\Fpdf;
 class ExpenseController extends Controller
 {
     public function index(Request $request){
-        $query = Expense::when($request->month, function($query, $month){
+        // Si no se especifica ningún filtro de fecha, cargar por defecto el mes y año en curso
+        $hasDateFilter = $request->filled('month') || $request->filled('year') || $request->filled('from_date') || $request->filled('to_date');
+        $currentMonth = $request->filled('month') ? $request->month : ($hasDateFilter ? null : now()->month);
+        $currentYear = $request->filled('year') ? $request->year : ($hasDateFilter ? null : now()->year);
+
+        $query = Expense::when($currentMonth, function($query, $month){
             return $query->whereMonth(DB::raw('COALESCE(real_date, date)'), $month);
-        })->when($request->year, function($query, $year){
+        })->when($currentYear, function($query, $year){
             return $query->whereYear(DB::raw('COALESCE(real_date, date)'), $year);
         })->when($request->from_date, function($query, $from){
             return $query->whereDate(DB::raw('COALESCE(real_date, date)'), '>=', $from);
@@ -63,7 +68,7 @@ class ExpenseController extends Controller
         $stockProducts = \App\Models\Product::orderBy('name')->get();
         $stockSupplies = \App\Models\Supply::orderBy('name')->get();
 
-        return view('expenses.index', compact('expenses', 'payment_methods', 'total_expenses', 'descriptions', 'categories', 'financeCategoryId', 'financeLoans', 'stockProducts', 'stockSupplies'));
+        return view('expenses.index', compact('expenses', 'payment_methods', 'total_expenses', 'descriptions', 'categories', 'financeCategoryId', 'financeLoans', 'stockProducts', 'stockSupplies', 'currentMonth', 'currentYear'));
     }
 
     public function indicators(Request $request){
@@ -200,6 +205,31 @@ class ExpenseController extends Controller
 
         $categories = ExpenseCategory::orderBy('name')->get();
 
+        // Comparativa Mensual Histórica (Últimos 12 meses)
+        $historyStartDate = now()->subMonths(11)->startOfMonth();
+        $historyEndDate = now()->endOfMonth();
+        $historicalExpenses = Expense::whereDate(DB::raw('COALESCE(real_date, date)'), '>=', $historyStartDate->toDateString())
+            ->whereDate(DB::raw('COALESCE(real_date, date)'), '<=', $historyEndDate->toDateString())
+            ->when($categoryId, function($query, $categoryId){
+                return $query->where('expense_category_id', $categoryId);
+            })
+            ->get();
+
+        $historicalMonthlyTotals = $historicalExpenses->groupBy(function($expense){
+            $d = $expense->real_date ? Carbon::parse($expense->real_date) : $expense->date;
+            return $d->format('Y-m');
+        })->map(function($items){
+            return round((float) $items->sum('amount'), 2);
+        });
+
+        $monthlyComparisonLabels = [];
+        $monthlyComparisonData = [];
+        for ($cursor = $historyStartDate->copy(); $cursor->lte($historyEndDate); $cursor->addMonth()) {
+            $cKey = $cursor->format('Y-m');
+            $monthlyComparisonLabels[] = $monthNames[(int) $cursor->format('n')] . ' ' . $cursor->format('Y');
+            $monthlyComparisonData[] = $historicalMonthlyTotals->get($cKey, 0);
+        }
+
         return view('expenses.indicators', compact(
             'startDate',
             'endDate',
@@ -215,7 +245,9 @@ class ExpenseController extends Controller
             'subcategorySummary',
             'evolutionLabels',
             'evolutionData',
-            'evolutionLabel'
+            'evolutionLabel',
+            'monthlyComparisonLabels',
+            'monthlyComparisonData'
         ));
     }
 
@@ -236,6 +268,17 @@ class ExpenseController extends Controller
         }
 
         $date = now()->format('Y-m-d H:i:s');
+
+        // Validación de Cierre Mensual:
+        $effectiveDate = $request->real_date ?: now()->toDateString();
+        if ($this->isClosedMonth($effectiveDate)) {
+            if (!auth()->user()->hasRole('admin')) {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'El periodo de gastos para este mes se encuentra cerrado. Solo administración puede realizar registros de meses anteriores.'
+                ]);
+            }
+        }
 
         if (auth()->check() && auth()->user()->hasRole('despachador')) {
             $category = ExpenseCategory::find($request->expense_category_id);
@@ -344,6 +387,18 @@ class ExpenseController extends Controller
             ]);
         }
 
+        // Validación de Cierre Mensual:
+        $originalExpenseDate = $expense->real_date ?: $expense->date->toDateString();
+        $newExpenseDate = $request->real_date ?: $originalExpenseDate;
+        if ($this->isClosedMonth($originalExpenseDate) || $this->isClosedMonth($newExpenseDate)) {
+            if (!auth()->user()->hasRole('admin')) {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'El periodo de gastos para este mes se encuentra cerrado. Solo administración puede modificar registros de meses anteriores.'
+                ]);
+            }
+        }
+
         DB::transaction(function() use ($request, $expense){
             $originalUserId = $expense->user_id;
 
@@ -374,6 +429,17 @@ class ExpenseController extends Controller
     }
 
     public function destroy(Request $request, Expense $expense){
+        // Validación de Cierre Mensual:
+        $expenseDate = $expense->real_date ?: $expense->date->toDateString();
+        if ($this->isClosedMonth($expenseDate)) {
+            if (!auth()->user()->hasRole('admin')) {
+                return response()->json([
+                    'status' => false,
+                    'error' => 'El periodo de gastos para este mes se encuentra cerrado. Solo administración puede eliminar registros de meses anteriores.'
+                ]);
+            }
+        }
+
         $expenses = Expense::where('description', $expense->description)
             ->where('date', $expense->date)
             ->get();
@@ -715,6 +781,29 @@ class ExpenseController extends Controller
                 'status' => false,
                 'error' => 'Ocurrió un error al registrar la compra de stock: ' . $e->getMessage()
             ]);
+        }
+    }
+
+    /**
+     * Determina si una fecha pertenece a un periodo mensual ya cerrado (mes anterior al actual).
+     *
+     * @param string|\Carbon\Carbon|null $dateString
+     * @return bool
+     */
+    private function isClosedMonth($dateString)
+    {
+        if (empty($dateString)) {
+            return false;
+        }
+
+        try {
+            $parsedDate = Carbon::parse($dateString);
+            $currentMonthStart = now()->startOfMonth();
+            
+            // Si el inicio del mes de la fecha es anterior al inicio del mes en curso, está cerrado
+            return $parsedDate->startOfMonth()->lt($currentMonthStart);
+        } catch (\Exception $e) {
+            return false;
         }
     }
 }

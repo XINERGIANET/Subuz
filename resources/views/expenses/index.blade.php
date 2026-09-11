@@ -44,7 +44,13 @@
                             </div>
                         </div>
                         <div class="col text-truncate">
-                            <div class="text-uppercase text-muted small fw-bold">Total Gastos del Periodo</div>
+                            <div class="text-uppercase text-muted small fw-bold">
+                                @if(!request()->filled('month') && !request()->filled('year') && !request()->filled('from_date') && !request()->filled('to_date'))
+                                    Total Gastos del Mes en Curso ({{ [1=>'Enero', 2=>'Febrero', 3=>'Marzo', 4=>'Abril', 5=>'Mayo', 6=>'Junio', 7=>'Julio', 8=>'Agosto', 9=>'Septiembre', 10=>'Octubre', 11=>'Noviembre', 12=>'Diciembre'][$currentMonth ?? now()->month] }} {{ $currentYear ?? now()->year }})
+                                @else
+                                    Total Gastos del Periodo
+                                @endif
+                            </div>
                             <div class="h2 mb-0 fw-bold text-danger">S/{{ number_format($total_expenses, 2) }}</div>
                         </div>
                     </div>
@@ -108,9 +114,10 @@
                                     'Noviembre',
                                     'Diciembre',
                                 ];
+                                $selectedMonth = request()->filled('month') ? request()->month : ($currentMonth ?? '');
                             @endphp
                             @foreach ($names as $index => $name)
-                                <option value="{{ $index + 1 }}" @if (request()->month == $index + 1) selected @endif>
+                                <option value="{{ $index + 1 }}" @if ($selectedMonth == $index + 1) selected @endif>
                                     {{ $name }}</option>
                             @endforeach
                         </select>
@@ -119,8 +126,11 @@
                         <label class="form-label small fw-medium text-muted text-uppercase mb-1">Año</label>
                         <select class="form-select text-dark" name="year">
                             <option value="">Seleccionar año</option>
+                            @php
+                                $selectedYear = request()->filled('year') ? request()->year : ($currentYear ?? '');
+                            @endphp
                             @for ($i = 2023; $i <= 2030; $i++)
-                                <option value="{{ $i }}" @if (request()->year == $i) selected @endif>
+                                <option value="{{ $i }}" @if ($selectedYear == $i) selected @endif>
                                     {{ $i }}</option>
                             @endfor
                         </select>
@@ -229,13 +239,16 @@
                             <td class="text-center text-muted">{{ $first->date->format('d/m/Y') }}</td>
                             <td class="text-end">
                                 @if (auth()->user()->hasRole('admin'))
+                                    @php
+                                        $effectiveDateStr = $first->real_date ? date('Y-m-d', strtotime($first->real_date)) : $first->date->format('Y-m-d');
+                                    @endphp
                                     <div class="d-flex justify-content-end gap-2">
                                         <button class="btn btn-icon btn-edit-corporate btn-edit"
-                                            data-id="{{ $first->id }}" data-bs-toggle="tooltip" title="Editar">
+                                            data-id="{{ $first->id }}" data-date="{{ $effectiveDateStr }}" data-bs-toggle="tooltip" title="Editar">
                                             <i class="ti ti-pencil fs-2"></i>
                                         </button>
                                         <button class="btn btn-icon btn-delete-corporate btn-delete"
-                                            data-id="{{ $first->id }}" data-bs-toggle="tooltip" title="Eliminar">
+                                            data-id="{{ $first->id }}" data-date="{{ $effectiveDateStr }}" data-bs-toggle="tooltip" title="Eliminar">
                                             <i class="ti ti-trash fs-2"></i>
                                         </button>
                                     </div>
@@ -1035,65 +1048,129 @@
 
         });
 
+        // Helper para comprobar si una fecha pertenece a un mes anterior al actual
+        function isDateInClosedMonth(dateStr) {
+            if (!dateStr) return false;
+            var parts = dateStr.split('-');
+            if (parts.length < 2) return false;
+            var expYear = parseInt(parts[0], 10);
+            var expMonth = parseInt(parts[1], 10);
+            var now = new Date();
+            var curYear = now.getFullYear();
+            var curMonth = now.getMonth() + 1; // 1-indexed
+
+            if (expYear < curYear) return true;
+            if (expYear === curYear && expMonth < curMonth) return true;
+            return false;
+        }
+
         $('#editForm').submit(function(e) {
             e.preventDefault();
 
             var id = $('#editId').val();
+            var realDate = $('#editRealDate').val();
+            var formSerialized = $(this).serialize();
 
-            $.ajax({
-                url: '{{ route('expenses.index') }}' + '/' + id + '',
-                method: 'PATCH',
-                data: $(this).serialize(),
-                success: function(data) {
-                    if (data.status) {
-                        $('#editModal').modal('hide');
-                        $('#editForm')[0].reset();
+            var executeUpdate = function() {
+                $.ajax({
+                    url: '{{ route('expenses.index') }}' + '/' + id + '',
+                    method: 'PATCH',
+                    data: formSerialized,
+                    success: function(data) {
+                        if (data.status) {
+                            $('#editModal').modal('hide');
+                            $('#editForm')[0].reset();
 
-                        ToastMessage.fire({
-                                text: 'Registro actualizado'
-                            })
-                            .then(() => location.reload());
-                    } else {
+                            ToastMessage.fire({
+                                    text: 'Registro actualizado'
+                                })
+                                .then(() => location.reload());
+                        } else {
+                            ToastError.fire({
+                                text: data.error ? data.error : 'Ocurrió un error'
+                            });
+                        }
+                    },
+                    error: function(err) {
                         ToastError.fire({
-                            text: data.error ? data.error : 'Ocurrió un error'
+                            text: 'Ocurrió un error'
                         });
                     }
-                },
-                error: function(err) {
-                    ToastError.fire({
-                        text: 'Ocurrió un error'
-                    });
-                }
-            });
+                });
+            };
 
+            // Si la fecha corresponde a un mes anterior (periodo cerrado), alertar al administrador
+            if (isDateInClosedMonth(realDate)) {
+                Swal.fire({
+                    title: '⚠️ Periodo Mensual Cerrado',
+                    html: `El gasto tiene fecha <b>${realDate}</b> que pertenece a un <b>mes cerrado</b>.<br>Modificarlo alterará los reportes contables históricos de ese periodo.<br><br>¿Desea proceder con autorización administrativa?`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, aplicar cambio',
+                    cancelButtonText: 'Cancelar',
+                    confirmButtonColor: '#d33',
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        executeUpdate();
+                    }
+                });
+            } else {
+                executeUpdate();
+            }
         });
 
         $(document).on('click', '.btn-delete', function() {
 
             var id = $(this).data('id');
+            var dateStr = $(this).data('date');
 
-            ToastConfirm.fire({
-                text: '¿Estás seguro que deseas borrar el registro?',
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    $.ajax({
-                        url: '{{ route('expenses.index') }}' + '/' + id,
-                        method: 'DELETE',
-                        success: function(data) {
+            var executeDelete = function() {
+                $.ajax({
+                    url: '{{ route('expenses.index') }}' + '/' + id,
+                    method: 'DELETE',
+                    success: function(data) {
+                        if (data.status) {
                             ToastMessage.fire({
                                     text: 'Registro eliminado'
                                 })
                                 .then(() => location.reload());
-                        },
-                        error: function(err) {
+                        } else {
                             ToastError.fire({
-                                text: 'Ocurrió un error'
+                                text: data.error ? data.error : 'Ocurrió un error'
                             });
                         }
-                    });
-                }
-            });
+                    },
+                    error: function(err) {
+                        ToastError.fire({
+                            text: 'Ocurrió un error al eliminar'
+                        });
+                    }
+                });
+            };
 
+            if (isDateInClosedMonth(dateStr)) {
+                Swal.fire({
+                    title: '⚠️ Eliminar Gasto en Periodo Cerrado',
+                    html: `Este gasto corresponde a un <b>mes cerrado (${dateStr})</b>.<br>Eliminarlo modificará el balance histórico ya liquidado.<br><br>¿Confirma la eliminación con privilegios de Administrador?`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, eliminar gasto',
+                    cancelButtonText: 'Cancelar',
+                    confirmButtonColor: '#d33',
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        executeDelete();
+                    }
+                });
+            } else {
+                ToastConfirm.fire({
+                    text: '¿Estás seguro que deseas borrar el registro?',
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        executeDelete();
+                    }
+                });
+            }
         });
 
 

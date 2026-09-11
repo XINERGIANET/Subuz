@@ -397,6 +397,27 @@
                     </div>
                 </div>
             </div>
+
+            <div class="col-12">
+                <div class="card chart-card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                            <div>
+                                <h3 class="card-title mb-1 fw-bold text-primary">
+                                    <i class="ti ti-chart-bar me-1"></i> Comparativa de Gastos Mensuales (Cierres por Mes)
+                                </h3>
+                                <div class="chart-subtitle small text-muted">
+                                    Historial acumulado mes a mes de los últimos 12 meses para control de cierres
+                                </div>
+                            </div>
+                            <span class="badge bg-primary-lt px-3 py-1 fw-bold fs-6">Últimos 12 meses</span>
+                        </div>
+                        <div class="chart-shell" style="height: 320px;">
+                            <canvas id="monthlyComparisonChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="text-center text-muted small mt-4">
@@ -415,6 +436,8 @@
             const evolutionLabels = @json($evolutionLabels);
             const evolutionData = @json($evolutionData);
             const evolutionLabel = @json($evolutionLabel);
+            const monthlyComparisonLabels = @json($monthlyComparisonLabels ?? []);
+            const monthlyComparisonData = @json($monthlyComparisonData ?? []);
             const gridColor = 'rgba(148, 163, 184, 0.22)';
             const textColor = '#475569';
             const moneyFormatter = new Intl.NumberFormat('es-PE', {
@@ -582,6 +605,53 @@
                     }
                 }
             });
+
+            if (document.getElementById('monthlyComparisonChart') && monthlyComparisonLabels.length > 0) {
+                new Chart(document.getElementById('monthlyComparisonChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: monthlyComparisonLabels,
+                        datasets: [{
+                            label: 'Total Gastos (S/)',
+                            data: monthlyComparisonData,
+                            backgroundColor: 'rgba(70, 95, 255, 0.75)',
+                            borderColor: '#465fff',
+                            borderWidth: 1.5,
+                            borderRadius: 6,
+                            maxBarThickness: 38
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: { boxWidth: 14, color: textColor }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `Gasto del mes: ${money(context.parsed.y)}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { display: false },
+                                ticks: { color: textColor }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: gridColor },
+                                ticks: { color: textColor, callback: compactMoney }
+                            }
+                        }
+                    }
+                });
+            }
         });
     </script>
 @endsection

@@ -227,7 +227,8 @@ Route::get('fixed-assets', [FixedAssetController::class, 'index'])->name('fixed-
 Route::post('fixed-assets', [FixedAssetController::class, 'store'])->name('fixed-assets.store')->middleware('auth');
 Route::post('fixed-assets/{fixedAsset}/assign', [FixedAssetController::class, 'assign'])->name('fixed-assets.assign')->middleware('auth');
 Route::post('/fixed-assets/{fixedAsset}/return', [FixedAssetController::class, 'returnAsset'])->name('fixed-assets.return')->middleware('auth');
-Route::post('/fixed-assets/{fixedAsset}/status', [FixedAssetController::class, 'updateStatus'])->name('fixed-assets.updateStatus')->middleware('auth');
+Route::post('/fixed-assets/{fixedAsset}/direct-income', [FixedAssetController::class, 'registerDirectIncome'])->name('fixed-assets.directIncome')->middleware('auth');
+Route::put('/fixed-assets/installments/{installment}', [FixedAssetController::class, 'updateInstallmentAmount'])->name('fixed-assets.updateInstallmentAmount')->middleware('auth');
 Route::post('/fixed-assets/{installment}/income', [FixedAssetController::class, 'registerIncome'])->name('fixed-assets.registerIncome')->middleware('auth');
 Route::post('/fixed-assets/{id}/expense', [FixedAssetController::class, 'registerExpense'])->name('fixed-assets.registerExpense')->middleware('auth');
 Route::get('/fixed-assets/category/{id}', [FixedAssetController::class, 'category'])->name('fixed-assets.category')->middleware('auth');

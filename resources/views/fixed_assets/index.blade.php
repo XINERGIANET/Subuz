@@ -260,6 +260,60 @@
                             <input type="text" class="form-control" name="voucher_number" placeholder="Factura o Boleta">
                         </div>
                     </div>
+
+                    <hr>
+                    <div class="p-3 bg-light rounded-3 border">
+                        <div class="mb-2">
+                            <label class="form-label fw-bold text-primary mb-1">
+                                <i class="ti ti-user-plus me-1"></i> Asignar a Cliente (Opcional)
+                            </label>
+                            <div class="text-muted small">Selecciona el cliente si este activo se entregará de inmediato (ej: comodato/préstamo).</div>
+                        </div>
+
+                        <div class="mt-3">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Cliente Destino</label>
+                                <select class="form-select ts-select" name="client_id" id="immediateClientIdIndex" style="width: 100%">
+                                    <option value="">-- Sin asignar (Permanece en Almacén) --</option>
+                                    @foreach($clients as $client)
+                                        <option value="{{ $client->id }}">{{ $client->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">Condición de Entrega</label>
+                                    <select class="form-select" name="assignment_type" id="immediateAssignmentTypeIndex" onchange="document.getElementById('rental_amount_box_index').style.display = this.value === 'alquilado' ? 'block' : 'none';">
+                                        <option value="prestado" selected>Prestado (Comodato / Gratuito)</option>
+                                        <option value="alquilado">Alquilado (Con Cobro / Cuotas)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">Fecha de Entrega</label>
+                                    <input type="date" class="form-control" name="assigned_date" value="{{ date('Y-m-d') }}">
+                                </div>
+                            </div>
+
+                            <div id="rental_amount_box_index" style="display: none;" class="p-3 bg-white border rounded-2 mb-2">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold text-success"><i class="ti ti-cash me-1"></i> Costo / Cuota de Alquiler (S/)</label>
+                                        <input type="number" step="0.01" class="form-control fw-bold" name="amount" placeholder="Ej: 50.00">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">Frecuencia de Pago</label>
+                                        <select class="form-select" name="payment_frequency">
+                                            <option value="mensual" selected>Mensual</option>
+                                            <option value="quincenal">Quincenal</option>
+                                            <option value="semanal">Semanal</option>
+                                            <option value="diario">Diario</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn me-auto" data-bs-dismiss="modal">Cancelar</button>
@@ -318,6 +372,26 @@
                     });
                 }
             });
+        });
+
+        // Prevención de doble clic y spinner de carga en formularios modales
+        $('form').on('submit', function() {
+            var $form = $(this);
+            // Ignorar el form ajax de subcategoria para no interferir con su propio handler
+            if ($form.closest('#createSubcategoryModal').length) {
+                return;
+            }
+            var $btn = $form.find('button[type="submit"]');
+            if ($btn.length && !$btn.prop('disabled')) {
+                var btnHtml = $btn.html();
+                $btn.prop('disabled', true);
+                $btn.html('<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Guardando...');
+                
+                setTimeout(function() {
+                    $btn.prop('disabled', false);
+                    $btn.html(btnHtml);
+                }, 8000);
+            }
         });
 
         // Handle subcategory creation via AJAX
@@ -389,6 +463,26 @@
             // Reset fields
             document.querySelector('#' + targetId + ' select[name="payment_method_id"]').value = '';
             document.querySelector('#' + targetId + ' input[name="voucher_number"]').value = '';
+        }
+    }
+
+    function toggleImmediateAssign(checkbox, containerId) {
+        const container = document.getElementById(containerId);
+        const clientSelect = document.getElementById('immediateClientIdIndex');
+        if (checkbox.checked) {
+            container.style.display = 'block';
+            if (clientSelect) {
+                clientSelect.required = true;
+                $(clientSelect).select2({
+                    dropdownParent: $('#createAssetModal'),
+                    width: '100%'
+                });
+            }
+        } else {
+            container.style.display = 'none';
+            if (clientSelect) {
+                clientSelect.required = false;
+            }
         }
     }
 </script>

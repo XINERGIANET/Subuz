@@ -789,7 +789,7 @@ class InventoryController extends Controller
         return ucfirst($name ?: 'Otro');
     }
 
-    public function getClientAssetsMatrix($startDate = null, $endDate = null, $clientIdFilter = null, $assetFilter = null)
+    public function getClientAssetsMatrix($startDate = null, $endDate = null, $clientIdFilter = null, $assetFilter = null, $hideZeroBalances = false)
     {
         // 1. Obtener o asegurar el cliente PLANTA
         $plantaClient = Client::whereRaw("LOWER(TRIM(name)) = 'planta (sede principal)'")
@@ -989,6 +989,21 @@ class InventoryController extends Controller
                     || ($assetsBreakdown[$assetFilter]['salidas'] != 0)
                     || ($assetsBreakdown[$assetFilter]['saldo_inicial'] != 0);
                 if (!$hasAssetActivity) {
+                    continue;
+                }
+            }
+
+            // Si se activó la opción de ocultar saldos en 0 y no es planta:
+            if ($hideZeroBalances && !$isPlanta && $clientTotal == 0) {
+                // Verificar si hubo movimientos en el periodo
+                $hasPeriodActivity = false;
+                foreach (self::$clientAssetTypes as $ast) {
+                    if (($assetsBreakdown[$ast]['ingresos'] ?? 0) != 0 || ($assetsBreakdown[$ast]['salidas'] ?? 0) != 0) {
+                        $hasPeriodActivity = true;
+                        break;
+                    }
+                }
+                if (!$hasPeriodActivity) {
                     continue;
                 }
             }
@@ -1331,13 +1346,8 @@ class InventoryController extends Controller
             return response()->json(['status' => false, 'error' => 'Cliente no encontrado.'], 404);
         }
 
-        // Depurar/eliminar todos los movimientos de activos vinculados a este cliente
-        InventoryMovement::where('client_id', $clientId)
-            ->where(function ($q) {
-                $q->where('item_type', 'client_asset')
-                  ->orWhereIn('item_name', self::$clientAssetTypes);
-            })
-            ->delete();
+        // Depurar/eliminar absolutamente todos los movimientos de inventario vinculados a este cliente
+        InventoryMovement::where('client_id', $clientId)->delete();
 
         return response()->json([
             'status' => true,

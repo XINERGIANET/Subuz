@@ -602,9 +602,10 @@ class ReportController extends Controller
         $endDate = $request->end_date;
         $clientId = $request->client_id;
         $assetFilter = $request->asset_type;
+        $hideZeroBalances = $request->has('hide_zero_balances') ? (bool)$request->hide_zero_balances : false;
 
         $inventoryCtrl = new InventoryController();
-        $matrix = $inventoryCtrl->getClientAssetsMatrix($startDate, $endDate, $clientId, $assetFilter);
+        $matrix = $inventoryCtrl->getClientAssetsMatrix($startDate, $endDate, $clientId, $assetFilter, $hideZeroBalances);
 
         // Excluir la fila de Planta para mostrar únicamente clientes
         $clientRows = $matrix['rows']->filter(fn($r) => !$r->is_planta)->values();
@@ -630,7 +631,8 @@ class ReportController extends Controller
             'startDate',
             'endDate',
             'clientId',
-            'assetFilter'
+            'assetFilter',
+            'hideZeroBalances'
         ));
     }
 }

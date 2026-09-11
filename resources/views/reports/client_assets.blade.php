@@ -78,6 +78,22 @@
         background-color: #e11d48 !important;
         color: #ffffff !important;
     }
+
+    /* Columna de Acciones Fija (Sticky) */
+    .sticky-actions-col {
+        position: sticky !important;
+        right: 0 !important;
+        background-color: #ffffff !important;
+        z-index: 5 !important;
+        box-shadow: -3px 0 6px rgba(0, 0, 0, 0.06) !important;
+    }
+    thead .sticky-actions-col {
+        background-color: var(--brand-color, #244BB3) !important;
+        z-index: 6 !important;
+    }
+    .table-hover tbody tr:hover .sticky-actions-col {
+        background-color: #f1f5f9 !important;
+    }
 </style>
 @endsection
 
@@ -233,15 +249,23 @@
                 <div class="col-md-2 col-sm-6">
                     <input type="date" class="form-control form-control-sm" name="start_date" value="{{ $startDate }}" placeholder="Fecha Desde">
                 </div>
-                <div class="col-md-2 col-12 d-flex gap-1">
+                <div class="col-md-2 col-12 d-flex align-items-center gap-1">
                     <button type="submit" class="btn btn-sm btn-primary">
                         <i class="ti ti-filter me-1"></i> Filtrar
                     </button>
-                    @if($startDate || $endDate || $clientId || $assetFilter)
-                        <a href="{{ route('reports.client_assets') }}" class="btn btn-sm btn-outline-secondary">
-                            <i class="ti ti-x me-1"></i> Limpiar
+                    @if($startDate || $endDate || $clientId || $assetFilter || $hideZeroBalances)
+                        <a href="{{ route('reports.client_assets') }}" class="btn btn-sm btn-outline-secondary" title="Restablecer">
+                            <i class="ti ti-x"></i> Limpiar
                         </a>
                     @endif
+                </div>
+                <div class="col-12 mt-1">
+                    <label class="form-check form-check-inline form-switch mb-0 cursor-pointer">
+                        <input class="form-check-input" type="checkbox" name="hide_zero_balances" value="1" {{ !empty($hideZeroBalances) ? 'checked' : '' }} onchange="this.form.submit()">
+                        <span class="form-check-label small text-muted fw-semibold">
+                            <i class="ti ti-eye-off me-1 text-primary"></i> Ocultar clientes con saldo 0 (Solo clientes con activos activos)
+                        </span>
+                    </label>
                 </div>
             </form>
         </div>
@@ -262,7 +286,7 @@
                         <th class="text-center" style="width: 100px;">COOLER</th>
                         <th class="text-center" style="width: 110px;">BIDONES</th>
                         <th class="text-center" style="width: 110px;">TOTAL</th>
-                        <th class="text-end" style="width: 250px;">ACCIONES</th>
+                        <th class="text-end sticky-actions-col" style="width: 250px;">ACCIONES</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -327,7 +351,7 @@
                                 <span class="text-muted">-</span>
                             @endif
                         </td>
-                        <td class="text-end align-middle">
+                        <td class="text-end align-middle sticky-actions-col">
                             <div class="btn-list justify-content-end flex-nowrap">
                                 <button class="btn btn-sm btn-outline-primary px-2" 
                                         title="Ver Kardex / Historial de Activos y Eliminar Movimientos" 
@@ -650,10 +674,17 @@
                     </div>
                 </div>
             </div>
-            <div class="modal-footer py-2 bg-light d-flex justify-content-between">
-                <button type="button" class="btn btn-outline-danger btn-sm" id="btnPurgeAllFromEditModal">
-                    <i class="ti ti-trash me-1"></i> Depurar Todos a 0
-                </button>
+            <div class="modal-footer py-2 bg-light d-flex justify-content-between flex-wrap gap-2">
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="btnPurgeAllFromEditModal" title="Restablecer todos los saldos de equipos y bidones a 0">
+                        <i class="ti ti-eraser me-1"></i> Depurar Activos a 0
+                    </button>
+                    @if(auth()->user()->hasRole('admin'))
+                    <button type="button" class="btn btn-danger btn-sm" id="btnDeleteClientFromEditModal" title="Eliminar cliente por completo del sistema">
+                        <i class="ti ti-trash me-1"></i> Eliminar Cliente (BD)
+                    </button>
+                    @endif
+                </div>
                 <div class="d-flex gap-2">
                     <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                     <button type="submit" class="btn btn-sm btn-primary" id="btnSaveEditAssets">
@@ -1045,6 +1076,62 @@
         btnPurgeAllFromModal.addEventListener('click', function() {
             if (!currentEditAssetsClientId) return;
             resetClientAssetsRecord(currentEditAssetsClientId, currentEditAssetsClientName);
+        });
+    }
+
+    // Botón Eliminar Cliente de BD desde el modal de edición
+    let btnDeleteClientFromModal = document.getElementById('btnDeleteClientFromEditModal');
+    if (btnDeleteClientFromModal) {
+        btnDeleteClientFromModal.addEventListener('click', function() {
+            if (!currentEditAssetsClientId) return;
+            let clientId = currentEditAssetsClientId;
+            let clientName = currentEditAssetsClientName;
+
+            const executeClientDelete = () => {
+                fetch(`{{ url('clients') }}/${clientId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status) {
+                        let modal = bootstrap.Modal.getInstance(document.getElementById('modalEditClientAssets'));
+                        if (modal) modal.hide();
+                        if (typeof ToastMessage !== 'undefined') {
+                            ToastMessage.fire({ text: `Cliente "${clientName}" eliminado exitosamente de la base de datos.` })
+                                .then(() => location.href = "{{ route('reports.client_assets') }}");
+                        } else {
+                            location.href = "{{ route('reports.client_assets') }}";
+                        }
+                    } else {
+                        if (typeof ToastError !== 'undefined') ToastError.fire({ text: data.error || 'No se pudo eliminar el cliente (puede tener ventas asociadas).' });
+                        else alert(data.error || 'No se pudo eliminar el cliente.');
+                    }
+                })
+                .catch(err => {
+                    if (typeof ToastError !== 'undefined') ToastError.fire({ text: 'Error de comunicación al eliminar el cliente.' });
+                    else alert('Error de comunicación al eliminar el cliente.');
+                });
+            };
+
+            if (typeof ToastConfirm !== 'undefined') {
+                ToastConfirm.fire({
+                    title: '¿Eliminar Cliente de la BD?',
+                    text: `¿Está seguro de eliminar definitivamente a "${clientName}" del sistema? Esta acción es irreversible.`,
+                    icon: 'warning'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        executeClientDelete();
+                    }
+                });
+            } else {
+                if (confirm(`¿Está seguro de eliminar definitivamente a "${clientName}" de la base de datos?`)) {
+                    executeClientDelete();
+                }
+            }
         });
     }
 
